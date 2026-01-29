@@ -76,8 +76,8 @@ users:
     shell: /bin/bash
 
 write_files:
-  - path: /home/paulo/.ssh/id_rsa
-    owner: paulo:paulo
+  - path: /root/.ssh/id_rsa
+    owner: root:root
     permissions: 0o600
     defer: true
     encoding: base64
@@ -85,8 +85,15 @@ write_files:
       $(base64 -w0 < ~/.ssh/id_ed25519)
 
 # do some package management
-package_upgrade: none
-repo_upgrade: none
+package_update: true
+package_upgrade: false
+
+packages:
+  - git
+
+runcmd:
+  - [ sh, -c, "ssh-keyscan github.com >> /root/.ssh/known_hosts" ]
+  - [ sh, -c, "git clone git@github.com:Paulo-Rogerio/cka.git /root/cka" ]
 EOF
 }
 
