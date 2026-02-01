@@ -98,11 +98,9 @@ runcmd:
 $(
     for ip in "${!members[@]}"; 
     do
-      IFS='|' read -ra _members <<< "${members[$ip]}"
-      
-      for host in "${_members[@]}"; 
+      for name in "${members[$ip]}"; 
       do
-        printf "    ${ip} %s.k8s.local %s\n" "${host}" "${host}"
+        printf "    ${ip} %s.k8s.local %s\n" "${name}" "${name}"
       done
     done
 )
@@ -119,7 +117,7 @@ while read temp;
 do
   name=$(awk '{print $1}' <<< ${temp})
   ip=$(awk '{print $4}' <<< ${temp})
-  members["${ip}"]+="${name}|"
+  members["${ip}"]+="${name}"
 done < hosts.txt
 
 while read temp;
@@ -129,5 +127,9 @@ do
   export vcpu=$(awk '{print $3}' <<< ${temp})
   export ip=$(awk '{print $4}' <<< ${temp})
   export image=$(awk '{print $5}' <<< ${temp})
+
+  echo "Install Vm: ${name}" 
+  echo
   install
+  
 done < hosts.txt
