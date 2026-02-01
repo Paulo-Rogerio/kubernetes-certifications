@@ -139,6 +139,7 @@ do
     echo "Install Vm: ${name}"
     echo
     install
+    echo
 
   fi
 done < hosts.txt
