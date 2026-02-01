@@ -2,4 +2,4 @@
 
 source /root/etcdctl.env
 
-etcdctl member add etcd4 --peer-urls=https://etcd4:2380
+etcdctl member add master03 --peer-urls=https://master03:2380

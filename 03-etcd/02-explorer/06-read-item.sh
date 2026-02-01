@@ -3,11 +3,11 @@
 source /root/etcdctl.env
 
 echo "---------"
-etcdctl --endpoints=https://localhost:2379 get chave1 --prefix
+etcdctl get chave1 --prefix
 
 echo "---------"
-etcdctl --endpoints=https://localhost:2379 get chave2 --prefix
+etcdctl get chave2 --prefix
 
 echo "---------"
-etcdctl --endpoints=https://localhost:2379 get chave3 --prefix
+etcdctl get chave3 --prefix
 echo "---------"
