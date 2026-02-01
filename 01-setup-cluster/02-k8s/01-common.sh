@@ -91,27 +91,28 @@ EOF
 sysctl --system
 
 echo "======================================================"
+echo " Install Kubernetes "
+echo "======================================================"
+echo
+echo "apt-get install -y kubelet kubectl kubeadm"
+apt-get install -y kubelet kubectl kubeadm
+apt-mark hold kubelet kubeadm kubectl
+
+echo "======================================================"
 echo " Configure Containerd "
 echo "======================================================"
 echo
 # Listar as imagens usadas
 # kubeadm config images list --kubernetes-version v1.34.0
-#
+imagem_pause=$(kubeadm config images list --kubernetes-version v${KUBERNETES_SHORT_VERSION}.0 | grep 'pause' | awk -F/ '{print $NF}')
+
+echo "containerd config default > /etc/containerd/config.toml"
 mkdir -p /etc/containerd
 containerd config default > /etc/containerd/config.toml
-sed -i 's/pause:3.8/pause:3.10.1/' /etc/containerd/config.toml
+sed -i "s/pause:3.8/${imagem_pause}/" /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
-
 systemctl enable containerd --now
 systemctl restart containerd 
-
-echo "======================================================"
-echo " Install Kubernetes "
-echo "======================================================"
-echo
-
-apt-get install -y kubelet kubectl kubeadm
-apt-mark hold kubelet kubeadm kubectl
 
 echo "======================================================"
 echo " Start Kubelet "
@@ -120,6 +121,7 @@ echo
 #
 # Se tem mais de uma Interface , deve-se anunciar ao Kubelet qual IP respondera as requisicoes
 #
+echo "systemctl restart kubelet"
 sed -i "/Environment=/a Environment="KUBELET_EXTRA_ARGS=--node-ip=${IP_CONTROL_PLANE}"" /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
 systemctl daemon-reload
 systemctl restart kubelet
