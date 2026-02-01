@@ -109,27 +109,36 @@ EOF
 }
 
 #==================================
-# Call
+# Increse Members
 #==================================
 declare -A members=()
 
 while read temp;
 do
-  name=$(awk '{print $1}' <<< ${temp})
-  ip=$(awk '{print $4}' <<< ${temp})
-  members["${ip}"]+="${name}"
+  if [[ ! $temp =~ ^# ]]
+  then
+    name=$(awk '{print $1}' <<< ${temp})
+    ip=$(awk '{print $4}' <<< ${temp})
+    members["${ip}"]+="${name}"
+  fi
 done < hosts.txt
 
+#==================================
+# Install
+#==================================
 while read temp;
 do
-  export name=$(awk '{print $1}' <<< ${temp})
-  export ram=$(awk '{print $2}' <<< ${temp})
-  export vcpu=$(awk '{print $3}' <<< ${temp})
-  export ip=$(awk '{print $4}' <<< ${temp})
-  export image=$(awk '{print $5}' <<< ${temp})
+  if [[ ! $temp =~ ^# ]]
+  then
+    export name=$(awk '{print $1}' <<< ${temp})
+    export ram=$(awk '{print $2}' <<< ${temp})
+    export vcpu=$(awk '{print $3}' <<< ${temp})
+    export ip=$(awk '{print $4}' <<< ${temp})
+    export image=$(awk '{print $5}' <<< ${temp})
 
-  echo "Install Vm: ${name}"
-  echo
-  install
+    echo "Install Vm: ${name}"
+    echo
+    install
 
+  fi
 done < hosts.txt

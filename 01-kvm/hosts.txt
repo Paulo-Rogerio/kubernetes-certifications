@@ -1,2 +1,7 @@
-master01  3072  4  10.100.100.10  jammy-server-cloudimg-amd64.img
-worker01  3072  4  10.100.100.20  jammy-server-cloudimg-amd64.img
+# master01  3072  4  10.100.100.10  jammy-server-cloudimg-amd64.img
+# worker01  3072  4  10.100.100.20  jammy-server-cloudimg-amd64.img
+#
+# ETCD
+master01  2048  4  10.100.100.10  jammy-server-cloudimg-amd64.img
+master02  2048  4  10.100.100.20  jammy-server-cloudimg-amd64.img
+master03  2048  4  10.100.100.30  jammy-server-cloudimg-amd64.img
