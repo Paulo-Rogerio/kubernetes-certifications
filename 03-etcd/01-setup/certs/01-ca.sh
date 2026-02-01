@@ -9,7 +9,7 @@ echo "======================================================"
 echo " Gerando CA                                           "
 echo "======================================================"
 
-cat > certs/ca-config.json <<EOF
+cat > ca-config.json <<EOF
 {
     "signing": {
         "default": {
@@ -25,7 +25,7 @@ cat > certs/ca-config.json <<EOF
 }
 EOF
 
-cat > certs/ca-csr.json <<EOF
+cat > ca-csr.json <<EOF
 {
   "CN": "etcd",
   "key": {
@@ -44,16 +44,14 @@ cat > certs/ca-csr.json <<EOF
 }
 EOF
 
-cd certs
 cfssl gencert -initca ca-csr.json | cfssljson -bare ca
-cd -
 
 # Gerando Certiciados ETCD
 echo "======================================================"
 echo " Gerando Certificados ETCD                            "
 echo "======================================================"
 
-cat > certs/etcd-csr.json <<EOF
+cat > etcd-csr.json <<EOF
 {
   "CN": "etcd",
   "hosts": [
@@ -79,12 +77,9 @@ cat > certs/etcd-csr.json <<EOF
 }
 EOF
 
-cd certs
 cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=etcd etcd-csr.json | cfssljson -bare etcd
 rm -f ca-config.json ca-csr.json etcd-csr.json
 
 cp ca.pem /etc/kubernetes/pki/etcd/ca.crt
 cp etcd.pem /etc/kubernetes/pki/etcd/etcd.crt
 cp etcd-key.pem /etc/kubernetes/pki/etcd/etcd.key
-
-cd -
