@@ -7,6 +7,8 @@ echo
 
 sh /root/join-cluster/join.sh
 
+bash
+
 function check_pod_running(){
     todo=true
     while ${todo};
