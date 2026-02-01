@@ -4,11 +4,11 @@ cd $(dirname $0)
 
 while read temp;
 do
-  if [[ ! $temp =~ ^# ]]
+  if [[ ! ${temp} =~ ^# ]]
   then
     node=$(awk '{print $1}' <<< ${temp})
     sudo virsh stop ${node}
-    echo "Started $node"
+    echo "Stopped ${node}"
     echo "--------------"
   fi
 done < hosts.txt 
