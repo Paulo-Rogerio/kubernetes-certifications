@@ -22,6 +22,7 @@ helm repo update
 helm upgrade \
   --install \
   --namespace kube-system \
-  --create-namespace metrics-server metrics-server/metrics-server
+  --create-namespace metrics-server metrics-server/metrics-server \
+  --set args={--kubelet-insecure-tls,--kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP}
 
 check_pod_running
