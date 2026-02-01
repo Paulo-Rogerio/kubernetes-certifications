@@ -1,7 +1,8 @@
-# master00  3072  4  10.100.100.10  jammy-server-cloudimg-amd64.img
-# worker01  3072  4  10.100.100.20  jammy-server-cloudimg-amd64.img
+# K8S
+master00  3072  4  10.100.100.10  jammy-server-cloudimg-amd64.img
+worker01  3072  4  10.100.100.20  jammy-server-cloudimg-amd64.img
 #
 # ETCD
-master00  2048  4  10.100.100.10  jammy-server-cloudimg-amd64.img
-master01  2048  4  10.100.100.11  jammy-server-cloudimg-amd64.img
-master02  2048  4  10.100.100.12  jammy-server-cloudimg-amd64.img
+# master00  2048  4  10.100.100.10  jammy-server-cloudimg-amd64.img
+# master01  2048  4  10.100.100.11  jammy-server-cloudimg-amd64.img
+# master02  2048  4  10.100.100.12  jammy-server-cloudimg-amd64.img
