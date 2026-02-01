@@ -59,9 +59,9 @@ cat > certs/etcd-csr.json <<EOF
   "hosts": [
     "localhost",
     "127.0.0.1",
+    "master00",
     "master01",
-    "master02",
-    "master03"
+    "master02"
   ],
   "key": {
     "algo": "rsa",
@@ -82,4 +82,9 @@ EOF
 cd certs
 cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=etcd etcd-csr.json | cfssljson -bare etcd
 rm -f ca-config.json ca-csr.json etcd-csr.json
+
+cp ca.pem /etc/kubernetes/pki/etcd/ca.crt
+cp etcd.pem /etc/kubernetes/pki/etcd/etcd.crt
+cp etcd-key.pem /etc/kubernetes/pki/etcd/etcd.key
+
 cd -
