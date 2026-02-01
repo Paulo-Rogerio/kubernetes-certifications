@@ -19,11 +19,11 @@ function install()
     --import \
     --noautoconsole
 
-  rm -f network.yml  
+  rm -f network.yml
   rm -f user-data.yml
 }
 
-function network() 
+function network()
 {
   cat > network.yml <<EOF
 network:
@@ -34,15 +34,15 @@ network:
       dhcp4: false
       addresses:
         - ${ip}/24
-      gateway4: 10.100.100.1 
+      gateway4: 10.100.100.1
       nameservers:
-        addresses: [8.8.8.8, 1.1.1.1]        
+        addresses: [8.8.8.8, 1.1.1.1]
 EOF
 }
 
 function userdata()
 {
-  cat > user-data.yml <<EOF  
+  cat > user-data.yml <<EOF
 #cloud-config
 
 disable_root: 0
@@ -96,9 +96,9 @@ runcmd:
   - |
     cat <<'EOF' >> /etc/hosts
 $(
-    for ip in "${!members[@]}"; 
+    for ip in "${!members[@]}";
     do
-      for name in "${members[$ip]}"; 
+      for name in "${members[$ip]}";
       do
         printf "    ${ip} %s.k8s.local %s\n" "${name}" "${name}"
       done
@@ -128,8 +128,8 @@ do
   export ip=$(awk '{print $4}' <<< ${temp})
   export image=$(awk '{print $5}' <<< ${temp})
 
-  echo "Install Vm: ${name}" 
+  echo "Install Vm: ${name}"
   echo
   install
-  
+
 done < hosts.txt

@@ -7,9 +7,8 @@ do
   if [[ ! ${temp} =~ ^# ]]
   then
     node=$(awk '{print $1}' <<< ${temp})
-    sudo virsh stop ${node}
-    echo "Stopped ${node}"
+    sudo virsh start ${node}
+    echo "Started ${node}"
     echo "--------------"
   fi
-done < hosts.txt 
-
+done < hosts.txt

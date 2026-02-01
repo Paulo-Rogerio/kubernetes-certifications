@@ -112,7 +112,7 @@ containerd config default > /etc/containerd/config.toml
 sed -i "s/pause:3.8/${imagem_pause}/" /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 systemctl enable containerd --now
-systemctl restart containerd 
+systemctl restart containerd
 
 echo "======================================================"
 echo " Start Kubelet "

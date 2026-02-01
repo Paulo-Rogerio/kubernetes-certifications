@@ -23,7 +23,7 @@ kubeadm init \
   --apiserver-cert-extra-sans=${IP_CONTROL_PLANE} \
   --pod-network-cidr=${POD_CIDR} \
   --service-cidr=${SERVICE_CIDR} \
-  --node-name ${NODENAME} 
+  --node-name ${NODENAME}
 
 mkdir -p /home/vagrant/.kube
 mkdir -p /root/.kube
@@ -31,5 +31,5 @@ cp -i /etc/kubernetes/admin.conf /root/.kube/config
 
 mkdir -p ${JOIN_FILE}
 touch ${JOIN_FILE}/join.sh
-chmod +x ${JOIN_FILE}/join.sh       
+chmod +x ${JOIN_FILE}/join.sh
 echo "$(kubeadm token create --print-join-command)" > ${JOIN_FILE}/join.sh

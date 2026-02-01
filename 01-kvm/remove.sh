@@ -11,7 +11,7 @@ do
     sudo virsh undefine ${node} --remove-all-storage
     echo "--------------"
   fi
-done < hosts.txt 
+done < hosts.txt
 
 sudo virsh net-destroy --network cka-net
 sudo virsh net-undefine --network cka-net
