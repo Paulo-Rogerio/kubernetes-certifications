@@ -25,7 +25,6 @@ kubeadm init \
   --service-cidr=${SERVICE_CIDR} \
   --node-name ${NODENAME}
 
-mkdir -p /home/vagrant/.kube
 mkdir -p /root/.kube
 cp -i /etc/kubernetes/admin.conf /root/.kube/config
 
