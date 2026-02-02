@@ -59,7 +59,11 @@ cat > etcd-csr.json <<EOF
     "127.0.0.1",
     "master00",
     "master01",
-    "master02"
+    "master02",
+    "master03",
+    "master04",
+    "master05",
+    "master06"
   ],
   "key": {
     "algo": "rsa",
