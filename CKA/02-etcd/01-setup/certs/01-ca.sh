@@ -2,8 +2,6 @@
 
 cd $(dirname $0)
 
-mkdir -p /etc/kubernetes/pki/etcd
-
 # Gerando CA
 echo "======================================================"
 echo " Gerando CA                                           "
@@ -83,6 +81,7 @@ EOF
 cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=etcd etcd-csr.json | cfssljson -bare etcd
 rm -f ca-config.json ca-csr.json etcd-csr.json
 
+mkdir -p /etc/kubernetes/pki/etcd
 cp ca.pem /etc/kubernetes/pki/etcd/ca.crt
 cp etcd.pem /etc/kubernetes/pki/etcd/etcd.crt
 cp etcd-key.pem /etc/kubernetes/pki/etcd/etcd.key

@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
 
-sh certs/01-ca.sh
-sh certs/02-check.sh
+if [[ $(hostname -s) == "master01" ]]
+then
+  sh certs/01-ca.sh
+  sh certs/02-check.sh
+else
+  mkdir -p /etc/kubernetes/pki/etcd
+  scp root@master01:/etc/kubernetes/pki/etcd/ca.crt /etc/kubernetes/pki/etcd
+  scp root@master01:/etc/kubernetes/pki/etcd/etcd.crt /etc/kubernetes/pki/etcd
+  scp root@master01:/etc/kubernetes/pki/etcd/etcd.key /etc/kubernetes/pki/etcd
+fi
