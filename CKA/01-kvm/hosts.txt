@@ -1,0 +1,4 @@
+# Estudos K8S
+master01  2048  3  10.100.100.11  jammy-server-cloudimg-amd64.img
+master02  2048  3  10.100.100.12  jammy-server-cloudimg-amd64.img
+worker01  2048  3  10.100.100.20  jammy-server-cloudimg-amd64.img

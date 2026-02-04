@@ -5,14 +5,6 @@ cd $(dirname $0)
 NAME=$(hostname -s)
 NODE=$(ip -4 addr show enp1s0 | awk '/inet /{print $2}' | cut -d/ -f1)
 
-mkdir -p /etc/kubernetes/pki/etcd
-scp root@master00:/etc/kubernetes/pki/etcd/ca.crt /etc/kubernetes/pki/etcd
-scp root@master00:/etc/kubernetes/pki/etcd/etcd.crt /etc/kubernetes/pki/etcd
-scp root@master00:/etc/kubernetes/pki/etcd/etcd.key /etc/kubernetes/pki/etcd
-
-mkdir -p /var/lib/etcd
-chmod 700 /var/lib/etcd
-
 nohup /usr/local/bin/etcd \
   --name ${NAME} \
   --client-cert-auth \
@@ -30,5 +22,5 @@ nohup /usr/local/bin/etcd \
   --advertise-client-urls https://${NODE}:2379 \
   --listen-client-urls https://${NODE}:2379,https://127.0.0.1:2379 \
   --initial-cluster-token estudos-etcd \
-  --initial-cluster master00=https://master00:2380,master01=https://master01:2380,master02=https://master02:2380,master03=https://master03:2380 \
+  --initial-cluster master01=https://master01:2380,master02=https://master02:2380,master03=https://master03:2380 \
   --initial-cluster-state existing > /var/log/etcd.log 2>&1 &

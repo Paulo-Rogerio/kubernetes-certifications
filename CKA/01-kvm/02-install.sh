@@ -92,7 +92,7 @@ packages:
 
 runcmd:
   - [ sh, -c, "ssh-keyscan github.com >> /root/.ssh/known_hosts" ]
-  - [ sh, -c, "git clone git@github.com:Paulo-Rogerio/cka.git /root/cka" ]
+  - [ sh, -c, "git clone git@github.com:Paulo-Rogerio/kubestronaut-certification.git /root/kubestronaut-certification" ]
   - |
     cat <<'EOF' >> /etc/hosts
 $(
