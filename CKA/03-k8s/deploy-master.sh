@@ -2,11 +2,10 @@
 
 cd $(dirname $0)
 
-source ./01-upgrade.sh
-source ./02-common.sh
-source ./master/03-init.sh
-source ./master/04-network.sh
-source ./master/05-taint.sh
-source ./master/06-metallb.sh
-source ./master/07-metrics-server.sh
+source ./01-common.sh
+source ./master/02-init.sh
+source ./master/03-network.sh
+source ./master/04-taint.sh
+source ./master/05-metallb.sh
+source ./master/06-metrics-server.sh
 bash
