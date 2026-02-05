@@ -2,7 +2,7 @@
 
 export DEBIAN_FRONTEND=noninteractive
 
-apt install -y tzdata curl bash openssl jq
+apt install -y tzdata curl bash openssl jq tree
 
 export ETCD_VERSION=$(curl -sSL https://api.github.com/repos/etcd-io/etcd/releases/latest | jq -r .tag_name)
 export DOWNLOAD_URL="https://github.com/etcd-io/etcd/releases/download"

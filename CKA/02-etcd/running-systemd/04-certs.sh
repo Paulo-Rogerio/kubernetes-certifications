@@ -9,4 +9,6 @@ else
   scp root@master01:/etc/kubernetes/pki/etcd/ca.crt /etc/kubernetes/pki/etcd
   scp root@master01:/etc/kubernetes/pki/etcd/etcd.crt /etc/kubernetes/pki/etcd
   scp root@master01:/etc/kubernetes/pki/etcd/etcd.key /etc/kubernetes/pki/etcd
+  ln -svf /etc/kubernetes/pki/etcd/etcd.crt /etc/kubernetes/pki/etcd/peer.crt
+  ln -svf /etc/kubernetes/pki/etcd/etcd.key /etc/kubernetes/pki/etcd/peer.key
 fi

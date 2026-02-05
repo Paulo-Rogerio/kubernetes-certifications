@@ -85,3 +85,6 @@ mkdir -p /etc/kubernetes/pki/etcd
 cp ca.pem /etc/kubernetes/pki/etcd/ca.crt
 cp etcd.pem /etc/kubernetes/pki/etcd/etcd.crt
 cp etcd-key.pem /etc/kubernetes/pki/etcd/etcd.key
+
+ln -svf /etc/kubernetes/pki/etcd/etcd.crt /etc/kubernetes/pki/etcd/peer.crt
+ln -svf /etc/kubernetes/pki/etcd/etcd.key /etc/kubernetes/pki/etcd/peer.key
