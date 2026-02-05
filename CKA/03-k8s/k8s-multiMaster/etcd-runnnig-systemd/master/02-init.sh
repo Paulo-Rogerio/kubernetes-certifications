@@ -21,7 +21,7 @@ echo "======================================================"
 echo
 
 #============================================================
-# Single Node - Control Plane
+# Single Node - ETCD Pod
 # kubeadm init \
 #   --apiserver-advertise-address=${IP_CONTROL_PLANE} \
 #   --apiserver-cert-extra-sans=${IP_CONTROL_PLANE} \
