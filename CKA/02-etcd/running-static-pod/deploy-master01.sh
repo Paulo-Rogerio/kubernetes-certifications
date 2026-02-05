@@ -10,3 +10,7 @@ source ./05-kubelet.sh
 source ./06-ca.sh
 source ./07-certificates.sh
 source ./08-start-master01.sh
+
+echo "Aguarde Start Static Pod..."
+sleep 20
+crictl ps

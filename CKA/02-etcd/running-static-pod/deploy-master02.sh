@@ -8,3 +8,7 @@ source ./03-etcdctl.sh
 source ./04-kubeadmcfg.sh
 source ./05-kubelet.sh
 source ./09-start-master02.sh
+
+echo "Aguarde Start Static Pod..."
+sleep 20
+crictl ps
