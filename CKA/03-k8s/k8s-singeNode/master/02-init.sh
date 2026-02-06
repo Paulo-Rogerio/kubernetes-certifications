@@ -30,6 +30,11 @@ kubeadm init \
 mkdir -p /root/.kube
 cp -i /etc/kubernetes/admin.conf /root/.kube/config
 
+echo "======================================================"
+echo " Generate Script Join Member "
+echo "======================================================"
+echo
+
 mkdir -p ${JOIN_FILE}
 touch ${JOIN_FILE}/join.sh
 chmod +x ${JOIN_FILE}/join.sh
