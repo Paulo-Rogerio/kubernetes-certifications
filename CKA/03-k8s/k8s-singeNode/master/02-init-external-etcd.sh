@@ -4,7 +4,7 @@ set -eo pipefail
 
 export POD_CIDR="10.244.0.0/16"
 export SERVICE_CIDR="10.96.0.0/12"
-export IP_CONTROL_PLANE="10.100.100.10"
+export IP_CONTROL_PLANE="10.100.100.11"
 export NODENAME=$(hostname -s)
 export JOIN_FILE="/root/join-cluster"
 export KUBERNETES_VERSION="1.34.3"
