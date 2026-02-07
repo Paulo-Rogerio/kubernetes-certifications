@@ -41,14 +41,6 @@ apiServer:
 networking:
   podSubnet: ${POD_CIDR}
   serviceSubnet: ${SERVICE_CIDR}
-etcd:
-  external:
-    endpoints:
-      - https://master01:2379
-      - https://master02:2379
-    caFile: /etc/kubernetes/pki/etcd/ca.crt
-    certFile: /etc/kubernetes/pki/apiserver-etcd-client.crt
-    keyFile: /etc/kubernetes/pki/apiserver-etcd-client.key
 EOF
 
 kubeadm init --config kubeadm-config.yaml --upload-certs
