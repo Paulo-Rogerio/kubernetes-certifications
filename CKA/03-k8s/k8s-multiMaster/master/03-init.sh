@@ -87,16 +87,46 @@ discovery:
       - "sha256:${HASH}"
 
 controlPlane:
-  certificateKey: "${CERT_KEY}"
+  certificateKey: "${CERT}"
 
 nodeRegistration:
   name: ${NODENAME}
 EOF
 
   kubeadm join --config kubeadm-config.yaml
-
+  rm -f kubeadm-config.yaml
   mkdir -p /root/.kube
   cp -i /etc/kubernetes/admin.conf /root/.kube/config
+
+}
+
+
+function _worker() {
+  echo "======================================================"
+  echo " Deploy Cluster Worker 01                             "
+  echo "======================================================"
+  echo
+
+  scp -r root@master01:/root/join-cluster /root
+  source /root/join-cluster/join.env
+
+  cat > kubeadm-config.yaml <<EOF
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: JoinConfiguration
+
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: "${IP_CONTROL_PLANE}:6443"
+    token: "${TOKEN}"
+    caCertHashes:
+      - "sha256:${HASH}"
+
+nodeRegistration:
+  name: ${NODENAME}
+EOF
+
+  kubeadm join --config kubeadm-config.yaml
+  rm -f kubeadm-config.yaml
 
 }
 
@@ -117,9 +147,3 @@ then
 else
   _worker
 fi
-
-
-# mkdir -p ${JOIN_FILE}
-# touch ${JOIN_FILE}/join.sh
-# chmod +x ${JOIN_FILE}/join.sh
-# echo "$(kubeadm token create --print-join-command)" > ${JOIN_FILE}/join.sh
