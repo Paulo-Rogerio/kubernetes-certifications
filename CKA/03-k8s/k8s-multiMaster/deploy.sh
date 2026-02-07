@@ -4,9 +4,9 @@ cd $(dirname $0)
 
 source ./01-common.sh
 
-[[ $(hostname -s) == "master01" ]] && source ./master/02-vip.sh
+[[ $(hostname -s) == "master01" ]] && source ./master/vip.sh
 
-source ./master/03-init.sh
+source ./02-init.sh
 source ../deployments/01-cni.sh
 
 [[ $(hostname -s) == "master01" ]] && source ../deployments/02-taint.sh
