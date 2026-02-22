@@ -1,6 +1,9 @@
-# 🚀 Learn ETCD
+# 🚀 Deploy ETCD
 
 - [Deploy](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/02-etcd/etcd-deploy.md)
+
+# 🚀 Learn ETCD
+
 - [Manager Data](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/02-etcd/etcd-data.md)
 - [Add New Member](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/02-etcd/etcd-new-members.md)
 - [Backup Cluster](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/02-etcd/etcd-backup.md)

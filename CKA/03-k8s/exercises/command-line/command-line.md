@@ -298,6 +298,35 @@ spec:
 EOF
 ```
 
+# 🚀 Create Object - Multi Containers
+
+
+```bash
+
+# Criar multiplos containers no mesmo Pod.
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: multicontainers
+  name: multicontainers
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+  - image: alpine
+    name: debug
+    command:
+      - "sleep"
+      - "9999"
+EOF
+
+# Logs
+k logs multicontainers
+```
+
 # 🚀 Create Object - Namespace
 
 ```bash
