@@ -325,6 +325,13 @@ EOF
 
 # Logs
 k logs multicontainers
+
+k logs multicontainers -c nginx
+k logs multicontainers -c debug
+
+# Acessando container debug
+k exec -it multicontainers -c debug -- sh
+ps fax
 ```
 
 # 🚀 Create Object - Namespace
