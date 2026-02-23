@@ -300,7 +300,6 @@ EOF
 
 # 🚀 Create Object - Multi Containers
 
-
 ```bash
 
 # Criar multiplos containers no mesmo Pod.
@@ -320,7 +319,7 @@ spec:
     name: debug
     command:
       - "sleep"
-      - "9999"
+      - "99999"
 EOF
 
 # Logs
@@ -332,6 +331,47 @@ k logs multicontainers -c debug
 # Acessando container debug
 k exec -it multicontainers -c debug -- sh
 ps fax
+```
+
+# 🚀 Create Object - Acessando Pod Sem Kubectl Via Nsenter
+
+```bash
+# Onde está rodando o deploy?
+k get pods -o wide
+
+# Acessando um Pod sem kubectl , para isso conecte-se via ssh ao worker onde o Pod está rodando
+# e use o crictl, esse cara sai da abstração dos pods.
+
+crictl ps | grep multicontainers
+dfa92a11e4461       a40c03cbb81c5       2 minutes ago       Running             debug               0                   73cd0774bbfec       multicontainers         default
+84cdb66aba237       5cdef4ac3335f       2 minutes ago       Running             nginx               0                   73cd0774bbfec       multicontainers         default
+
+# Instalar o pacote jq
+apt update && apt install jq
+crictl ps | grep multicontainers
+
+# Retorno
+dfa92a11e4461       a40c03cbb81c5       22 hours ago        Running             debug               0                   73cd0774bbfec       multicontainers         default
+84cdb66aba237       5cdef4ac3335f       22 hours ago        Running             nginx               0                   73cd0774bbfec       multicontainers         default
+
+# Acessando diretamente o container
+crictl exec -it dfa92a11e4461 sh
+
+# Outra forma de acessar esse pod é usando ( nsenter )
+# nsenter ( Namespace Enter => Se digitado sozinho entre no prompt do primeiro container da lista )
+# Network namespace => Rodar o comando dentro da network namespace desse processo
+nsenter --help
+
+# Acessando o Pod que roda o processo do sleep dentro da perpectiva do Pod, na mesma network namespace
+#
+# Busque pela coluna ContainerID
+crictl inspect dfa92a11e4461 | jq -r '.info.pid'
+148192
+
+# **** OBS.: **** Se NAO PASSAR O "-n" ( perpectiva do container , usando a network namespace ), o comando usara
+# a perpectiva  do host ( network do host ) e não conseguirá chegar no serviço
+nsenter -t 148192 -n ls /
+nsenter -t 148192 -n curl localhost
 ```
 
 # 🚀 Create Object - Namespace
