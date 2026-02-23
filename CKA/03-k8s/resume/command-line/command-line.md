@@ -371,6 +371,66 @@ nsenter -t 148192 -n ls /
 nsenter -t 148192 -n curl localhost
 ```
 
+# 🚀 Create Object - Pod Lifecycle
+
+```bash
+
+# https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
+
+#Um Pod recebe um prazo para terminar graciosamente, que é de 30 segundos por padrão. Ou seja a aplicação deve subir nesse intervalo de tempo e sair com status code 0 .
+
+# Apos esse 30 segundos o kubelet envia um sinal de sigkill para aplicaçao , e mata o processo na hora.
+
+# Podemos manipular esse ciclo de vida, configurar um yaml para sempre que receber um sigterm, seja realizado uma ação com um pouco mais do padrao 30 segundos
+
+# Ex:
+kubectl get pods nginx -o wide
+nginx   1/1     Running   0          42h   10.244.1.12   worker01   <none>           <none>
+
+# Subir outro deploy com lifecycle
+# Ao ser encerrado, antes de encerrar esse pod ira enviar um curl para Nginx
+# Podia ser uma notificação no slack informando que Pod foi reciclado.
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: pod-lifecycle
+  name: pod-lifecycle
+spec:
+  terminationGracePeriodSeconds: 40
+  containers:
+  - image: nginx
+    name: pod-lifecycle
+    command:
+      - "sleep"
+      - "9999"
+    lifecycle:
+       preStop:
+          exec:
+            command:
+              - sh
+              - -c
+              - curl 10.244.1.12
+EOF
+
+# Monitore os Logs
+k logs nginx -f
+
+# Ao matar o Pod ( pod-lifecycle ) devo receber um curl nos logs acima.
+kubectl delete pod pod-lifecycle -n default
+
+# Deve-se receber uma notificação no logs do pod Nginx
+10.244.1.16 - - [23/Feb/2026:14:27:47 +0000] "GET / HTTP/1.1" 200 615 "-" "curl/8.14.1" "-"
+
+
+# Se o commando (curl / script ) demorar mais que 30 secundos para executar , posso ajustar isso definindo
+# terminationGracePeriodSeconds: 60 com um valor que satisfaça minha necessidade.
+
+```
+
+
 # 🚀 Create Object - Namespace
 
 ```bash
