@@ -339,18 +339,15 @@ ps fax
 # Onde está rodando o deploy?
 k get pods -o wide
 
-# Acessando um Pod sem kubectl , para isso conecte-se via ssh ao worker onde o Pod está rodando
-# e use o crictl, esse cara sai da abstração dos pods.
-
-crictl ps | grep multicontainers
-dfa92a11e4461       a40c03cbb81c5       2 minutes ago       Running             debug               0                   73cd0774bbfec       multicontainers         default
-84cdb66aba237       5cdef4ac3335f       2 minutes ago       Running             nginx               0                   73cd0774bbfec       multicontainers         default
 
 # Instalar o pacote jq
 apt update && apt install jq
 crictl ps | grep multicontainers
 
-# Retorno
+# Acessando um Pod sem kubectl , para isso conecte-se via ssh ao worker onde o Pod está rodando
+# e use o crictl, esse cara sai da abstração dos pods.
+crictl ps | grep multicontainers
+
 dfa92a11e4461       a40c03cbb81c5       22 hours ago        Running             debug               0                   73cd0774bbfec       multicontainers         default
 84cdb66aba237       5cdef4ac3335f       22 hours ago        Running             nginx               0                   73cd0774bbfec       multicontainers         default
 
