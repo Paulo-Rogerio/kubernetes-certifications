@@ -455,6 +455,8 @@ k neat <<< $(k create ns familia --dry-run=client -o yaml)
 # 🚀 Create Object - Deployment
 
 ```bash
+# Deployment   => Aplicação stateless ( Aplicação escaláveis )
+
 k create deployment --image=nginx nginx-paulo
 
 k neat <<< $(k get deployment nginx-paulo -o yaml)

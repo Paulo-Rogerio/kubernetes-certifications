@@ -20,3 +20,5 @@
 
 - [Resume - Command Line](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/03-k8s/resume/command-line/command-line.md)
 - [Resume - Dicas](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/03-k8s/resume/tips/tips.md)
+
+# 🚀 Simulated
