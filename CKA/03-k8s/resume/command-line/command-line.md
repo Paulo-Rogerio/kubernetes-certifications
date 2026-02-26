@@ -377,7 +377,7 @@ nsenter -t 148192 -n curl localhost
 
 # https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
 
-#Um Pod recebe um prazo para terminar graciosamente, que é de 30 segundos por padrão. Ou seja a aplicação deve subir nesse intervalo de tempo e sair com status code 0 .
+# Um Pod recebe um prazo para terminar graciosamente, que é de 30 segundos por padrão. Ou seja a aplicação deve subir nesse intervalo de tempo e sair com status code 0 .
 
 # Apos esse 30 segundos o kubelet envia um sinal de sigkill para aplicaçao , e mata o processo na hora.
 
@@ -468,7 +468,189 @@ k delete deployment nginx-paulo
 
 # Isso aqui é mais limpo
 k neat <<< $(k create deployment --image=nginx nginx-paulo --replicas=2 --dry-run=client -o yaml)
-k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | k apply -f
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-paulo
+  name: nginx-paulo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-paulo
+  template:
+    metadata:
+      labels:
+        app: nginx-paulo
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+
+k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | k apply -f -
+```
+
+# 🚀 Create Object - ReplicaSet / MatchLabels
+
+```bash
+# É um objeto no Cluster, responsável por garantir um número específico de Pods esteja rodando sempre em execução.
+
+# Recuperar o manifesto
+k neat <<< $(k get deployment nginx-paulo -o yaml)
+
+k get rs
+NAME                    DESIRED   CURRENT   READY   AGE
+nginx-paulo-78455bbb4   1         1         1       12m
+
+# Substituir Imagem, forca a troca do replicaset.
+k neat <<< $(k get deployment nginx-paulo -o yaml) | sed 's/image: nginx/image: httpd/' | k apply -f -
+
+k get rs
+NAME                     DESIRED   CURRENT   READY   AGE
+nginx-paulo-78455bbb4    0         0         0       14m
+nginx-paulo-7bd98bdb44   1         1         1       26s
+
+# Os replicaset zerados é mantido para fins de restore.
+# Quem cria os replicaset são os Deployments
+#
+# Como o ReplicaSet sabe onde deve deployar?
+# R: As label tem o proposito de nortear o replicaset para que ele identifique qual Pod ele irá gerenciar.
+# Ela tambem é usada para direcionar que um pod possa deployar em determinado worker.
+# O deployment gerencia os Pods vinculados a uma determinada label, isso por conta do matchLabels.
+#
+# Label escopo deployment
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-paulo
+    environment: development
+  name: nginx-paulo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-paulo
+  template:
+    metadata:
+      labels:
+        app: nginx-paulo
+    spec:
+      containers:
+      - image: httpd
+        name: nginx
+
+# Mostrar as labels apenas para escopo do deployment
+k get deployment --show-labels
+NAME          READY   UP-TO-DATE   AVAILABLE   AGE   LABELS
+nginx-paulo   1/1     1            1           27m   app=nginx-paulo,environment=development
+
+k get pods --show-labels
+NAME                           READY   STATUS    RESTARTS   AGE   LABELS
+nginx-paulo-7bd98bdb44-p9qk8   1/1     Running   0          15m   app=nginx-paulo,pod-template-hash=7bd98bdb44
+
+Se eu quiser add label para pod tenho que fazer isso abaixo do objeto spec
+
+# Definir Labels no escopo do Pod
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-paulo
+    environment: development
+  name: nginx-paulo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-paulo
+  template:
+    metadata:
+      labels:
+        app: nginx-paulo
+        environment: development
+    spec:
+      containers:
+      - image: httpd
+        name: nginx
+
+# Filtrando por label
+k get pod -l app=nginx-paulo
+k get pod -n kube-system -l k8s-app=kube-dns
+```
+
+# 🚀 Create Object - ReplicaSet Rollout
+
+```bash
+
+# Quais sao meus replicaset?
+k get rs
+NAME                     DESIRED   CURRENT   READY   AGE
+nginx-paulo-78455bbb4    0         0         0       38m
+nginx-paulo-7bd98bdb44   1         1         1       24m
+
+# Histórico Rollout
+k rollout history deployment/nginx-paulo
+deployment.apps/nginx-paulo
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+
+# Caso queira acompanhar em tempo real um rollout
+watch kubectl rollout status deployment/nginx-paulo
+
+# Fazendo undo para voltar para versao anterior
+k rollout undo deployment/nginx-paulo --to-revision=1
+deployment.apps/nginx-paulo rolled back
+
+# Check novamente Histórico Rollout
+k rollout history deployment/nginx-paulo
+deployment.apps/nginx-paulo
+REVISION  CHANGE-CAUSE
+2         <none>
+3         <none>
+
+# Quais sao meus replicaset?
+k get rs
+NAME                     DESIRED   CURRENT   READY   AGE
+nginx-paulo-78455bbb4    1         1         1       42m
+nginx-paulo-7bd98bdb44   0         0         0       28m
+
+# Checando que voltou para imagem nginx.
+k get pods nginx-paulo-78455bbb4-pssgv -o yaml | grep image:
+
+# Como ver o conteúdo de uma revision?
+k rollout history deployment/nginx-paulo --revision=2
+
+deployment.apps/nginx-paulo with revision #2
+Pod Template:
+  Labels:	app=nginx-paulo
+	pod-template-hash=7bd98bdb44
+  Containers:
+   nginx:
+    Image:	httpd
+    Port:	<none>
+    Host Port:	<none>
+    Environment:	<none>
+    Mounts:	<none>
+  Volumes:	<none>
+  Node-Selectors:	<none>
+  Tolerations:	<none>
+
+# Como saber qual revision está em execução
+
+k get rs
+NAME                     DESIRED   CURRENT   READY   AGE
+nginx-paulo-78455bbb4    0         0         0       38m
+nginx-paulo-7bd98bdb44   1         1         1       24m
+
+k get rs nginx-paulo-78455bbb4 -o yaml | grep deployment.kubernetes.io/revision
+  deployment.kubernetes.io/revision: "3"
+  deployment.kubernetes.io/revision-history: "1"
 ```
 
 # 🚀 Create Object - Statefullset
@@ -478,6 +660,20 @@ Statefullset => Aplicação statefull ( A escalada tem que ser mais caltelosa ,
 cada pod tem seu volume, escala na ordem certa Ex: Banco de Dados )
 
 Daemonset    => 1 Pod em cada Node ( Geralmente coletrores de logs )
+```
+
+# 🚀 Explorando Documentação - Kubectl
+
+```bash
+k explain deployment
+
+k explain deployment.metadata
+
+k explain deployment.spec
+
+k explain deployment.spec.template
+
+k explain deployment.spec.template.spec.containers
 ```
 
 # 🚀 Estratégias Deployment
