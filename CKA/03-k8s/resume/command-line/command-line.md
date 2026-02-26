@@ -492,7 +492,148 @@ spec:
 k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | k apply -f -
 ```
 
-# 🚀 Create Object - ReplicaSet / MatchLabels
+# 🚀 Create Object - Scale Deployment
+
+```bash
+k scale --help
+k scale deployment nginx-paulo --replicas 10
+```
+
+# 🚀 Create Object - Request Limits
+
+```bash
+# Memoria => Limits   ( Hard ) => 1G
+#         => Requests ( Soft ) => 200M
+
+# CPU     => Limits   ( Hard )
+#         => Requests ( Soft )
+
+# Soft limit => É o limite que o sistema realmente aplica no momento.
+# Um processo pode abrir 1024 descriptors
+ulimit -n
+1024
+
+ulimit -n 4096
+4096
+
+# Hard Limit => É o teto máximo que o Soft pode alcancar.
+
+# Um processo pode 1.048.576 arquivos/sockets simultaneos
+# Esse É o teto máximo que o Soft pode alcancar
+ulimit -Hn
+1048576
+
+# ==========================================================================
+# É o recurso disponível no Worker ( Onde irá receber a carga de trabalho )
+# Request é usado sempre quando um pod é colocado dentro de um node.
+# Ele é levado em conta na escolha de onde será colocado o pod.
+# Kube-schedules é quem decide em qual worker meu pod vai rodar, ele avalia os recursos.
+# ==========================================================================
+#
+# Quando defino quantidade de Request, e esse numero que o scheduler levaria em conta para determinar em qual worker o pod
+# vai trabalhar. Definido em 200M por ex, caso o worker tenha 500MB ele colocaria , pois ta dentro do valor que woker pode suportar.
+
+# Manifest Request: 1 cpu / 4 GB Ram
+k apply -f manifesto.yaml
+
+# O scheduler só vai agendar esse Pod em um node que tenha pelo menos 0.1 CPU e 64 MB de Ram disponível
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-paulo
+  name: nginx-paulo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-paulo
+  template:
+    metadata:
+      labels:
+        app: nginx-paulo
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        resources:
+          requests:
+            cpu: 0.1
+            memory: 64
+
+# Como ler a capacidade do Node?
+k get nodes
+k describe node <node-name>
+k top nodes
+```
+
+# 🚀 Create Object - Resources Limits
+
+```bash
+
+k explain
+k explain deployment.spec
+k explain deployment.spec.template
+k explain deployment.spec.template.spec
+k explain deployment.spec.template.spec.containers
+k explain deployment.spec.template.spec.containers.resources
+k explain deployment.spec.template.spec.containers.resources.requests
+
+# Cgroup => Limites de recursos dos containers
+#
+# Cgroups (Control Groups) são um recurso do kernel Linux que permitem:
+# - Limitar CPU
+# - Limitar memória
+# - Limitar I/O
+# - Controlar número de processos
+# - Medir consumo
+# - Containers (Docker, containerd, CRI-O) usam cgroups para aplicar esses limites.
+
+# Nomeclatura manifestos Yaml
+# 100m ( 10 % da cpu ) mili-cpu / mili-core
+# 0.1  ( 10% da cpu )
+# Memoria é informada em M/G ex: 500M
+
+# Se o container ultrapassar 64MB definido
+# 👉 O kernel executa OOM Killer
+# 👉 O container morre
+
+# Mas não definir limit?
+# 👉 O container pode consumir toda memória do node
+# 👉 Pode causar OOM global
+# 👉 Pode matar outros pods
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-paulo
+  name: nginx-paulo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-paulo
+  template:
+    metadata:
+      labels:
+        app: nginx-paulo
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64M
+          limits:
+            cpu: 1
+            memory: 512M
+
+```
+
+# 🚀 Create Object - ReplicaSet
 
 ```bash
 # É um objeto no Cluster, responsável por garantir um número específico de Pods esteja rodando sempre em execução.
@@ -653,13 +794,65 @@ k get rs nginx-paulo-78455bbb4 -o yaml | grep deployment.kubernetes.io/revision
   deployment.kubernetes.io/revision-history: "1"
 ```
 
-# 🚀 Create Object - Statefullset
+# 🚀 Create Object - Rollout maxSurge / maxUnavailable
 
 ```bash
-Statefullset => Aplicação statefull ( A escalada tem que ser mais caltelosa ,
-cada pod tem seu volume, escala na ordem certa Ex: Banco de Dados )
+# Por padrao o rollout sobe 25% dos pods ( nova release ) e a medida que esse pods ficam health,
+# ele vai matando proporcionalmente a mesma quantidade ( 25% ) do replicaset antigo.
 
-Daemonset    => 1 Pod em cada Node ( Geralmente coletrores de logs )
+# Resumo:
+# Comeca 25% dos pods novos
+# Termina 25% dos pods velhos
+
+# Imagine que temos 100 Pod rodando, ele iria nesse cenário subir 25% a mais ou seja, eu teria 125 Pod rodando.
+# E quando esses novos pods estirem health ai sim ele mataria os 25 Pods antigos.
+
+# Suponhamos que queira personalizar esse rollout quando uma nova release entrar no ar, e ter a seguinte característica:
+
+# O que preciso ter em mente é:
+
+# maxSurge => Numero maximo de pods que podem ser agendados para rollout acima do desejado, ou seja, se desejado e 100
+# essa opçao subiriria 100 novos pods.
+# Sendo:
+# 100 Pods ( replicaset velho ) + 100 Pods ( replicaset novo) = 200 Pods
+
+# maxUnavailable => Numero de pods que podem ficar indisponiveis durant um rollout.
+# Se definido para 0 , ele não derruba nenhum pod até que os novos fiquem heath.
+
+# Objeto que trata a estrategia de deploy ( Documentação )
+k explain deployment.spec.strategy
+k explain deployment.spec.strategy.rollingUpdate
+
+
+# Boa estratégia
+# Não derruba nenhum pod enquanto algum do novo replicaset fique heath
+# Faz 1 a 1 ( replace )
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-paulo
+    environment: development
+  name: nginx-paulo
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 10%
+      maxUnavailable: 0
+  replicas: 5
+  selector:
+    matchLabels:
+      app: nginx-paulo
+  template:
+    metadata:
+      labels:
+        app: nginx-paulo
+        environment: development
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
 ```
 
 # 🚀 Explorando Documentação - Kubectl
@@ -676,7 +869,16 @@ k explain deployment.spec.template
 k explain deployment.spec.template.spec.containers
 ```
 
-# 🚀 Estratégias Deployment
+# 🚀 Create Object - Statefullset
+
+```bash
+Statefullset => Aplicação statefull ( A escalada tem que ser mais caltelosa ,
+cada pod tem seu volume, escala na ordem certa Ex: Banco de Dados )
+
+Daemonset    => 1 Pod em cada Node ( Geralmente coletrores de logs )
+```
+
+# 🚀 Estratégias Deploy
 
 ```bash
 Deployment   => Aplicação stateless ( Aplicação escaláveis )
