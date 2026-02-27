@@ -792,6 +792,9 @@ nginx-paulo-7bd98bdb44   1         1         1       24m
 k get rs nginx-paulo-78455bbb4 -o yaml | grep deployment.kubernetes.io/revision
   deployment.kubernetes.io/revision: "3"
   deployment.kubernetes.io/revision-history: "1"
+
+# Reiniciar todos os Pods do Deployment nginx-paulo
+k rollout restart deployment/nginx-paulo
 ```
 
 # 🚀 Create Object - Rollout maxSurge / maxUnavailable
@@ -869,6 +872,236 @@ k explain deployment.spec.template
 k explain deployment.spec.template.spec.containers
 ```
 
+# 🚀 Create Object - Liveness / Readness Probes
+
+```bash
+#=================================================
+# Ready => Pronto para receber o trafego.
+#=================================================
+#
+# O Ready garante que uma consulta get em alguma rota "/health" responda com status code 200 para comecar a receber trafego, então o Pod é transacionado para 1/1. Isso acontece no startup do pod.
+
+#=================================================
+# Live => Garante que a aplicação ainda está viva.
+#=================================================
+#
+# O Live garantir que a applicação continue viva live, monitora essa rota "/health" durante o tempo de vida do pod.
+# Se a app travar por algum motivo e esse cara que transaciona o pod para 0/1.
+# Nesse momento o pod é reiniciado para voltar ficar 1/1
+
+
+k explain deployment.spec.template.spec.containers
+
+k explain deployment.spec.template.spec.containers.readinessProbe
+
+k explain deployment.spec.template.spec.containers.readinessProbe.httpGet
+
+k explain deployment.spec.template.spec.containers.livenessProbe
+
+# Simulando Cenario - Readness
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-paulo
+    environment: development
+  name: nginx-paulo
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 10%
+      maxUnavailable: 0
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-paulo
+  template:
+    metadata:
+      labels:
+        app: nginx-paulo
+        environment: development
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        readinessProbe:
+          httpGet:
+            path: "/health"
+            port: 80
+EOF
+
+# Apesar de estar Running o pod nao ficará disponivel até que esteja 1/1
+# Porque ele ficará assim 0/1?
+# Essa rota /health não é uma rota válida, entao esse pod Jamais ficará 1/1
+#
+k get pods
+NAME                           READY   STATUS    RESTARTS   AGE
+nginx-paulo-5fd456976b-fffr6   0/1     Running   0          8s
+
+k describe pod nginx-paulo-5fd456976b-fffr6 | grep -A 20 "Events"
+Events:
+  Type     Reason     Age                   From               Message
+  ----     ------     ----                  ----               -------
+  Normal   Scheduled  4m49s                 default-scheduler  Successfully assigned default/nginx-paulo-5fd456976b-fffr6 to worker01
+  Normal   Pulling    4m48s                 kubelet            Pulling image "nginx"
+  Normal   Pulled     4m47s                 kubelet            Successfully pulled image "nginx" in 1.292s (1.292s including waiting). Image size: 62944796 bytes.
+  Normal   Created    4m47s                 kubelet            Created container: nginx
+  Normal   Started    4m47s                 kubelet            Started container nginx
+  Warning  Unhealthy  74s (x25 over 4m47s)  kubelet            Readiness probe failed: HTTP probe failed with statuscode: 404
+
+
+# A correção é ajustar o path para "/"
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-paulo
+    environment: development
+  name: nginx-paulo
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 10%
+      maxUnavailable: 0
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-paulo
+  template:
+    metadata:
+      labels:
+        app: nginx-paulo
+        environment: development
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        readinessProbe:
+          httpGet:
+            path: "/"
+            port: 80
+        livenessProbe:
+          httpGet:
+            path: "/"
+            port: 80
+EOF
+
+k get pods
+NAME                           READY   STATUS    RESTARTS   AGE
+nginx-paulo-699b6ff548-sprc2   1/1     Running   0          59s
+
+# PARA simular o livesproble vamos remover o arquivo html do nginx para gerar error.
+k exec -it nginx-paulo-699b6ff548-sprc2 -- bash -c "rm -f /usr/share/nginx/html/index.html"
+
+# O pod receberá erro no log, e liveness vai tentar 3x e apos isso ele ira reiniciar o Pod.
+k get pods -w
+nginx-paulo-699b6ff548-sprc2   0/1     Running   1 (2s ago)   2m3s
+
+# Boas práticas
+
+k explain deployment.spec.template.spec.containers
+k explain deployment.spec.template.spec.containers.env
+
+https://12factor.net/
+```
+
+# 🚀 Create Object - Daemonset
+
+```bash
+# Daemonset => 1 Pod em cada Node ( Geralmente coletores de logs )
+# Daemonset não se define o numero de replicas.
+# Daemonset será igual ao numero de nodes de um cluster.
+# Daemonset não passa pelo kube-scheduler
+
+# Caso de usos:
+# Coletor de Logs => precisa rodar a nivel de host.
+# CNI             => Roda a nivel do host
+# Patch           => Aplicar um determinado patch
+
+# Para logs geralmente é montado a pasta /var/log do host dentro do DaemonSet ( pod )
+
+kubectl get nodes --show-labels | tr ',' '\n'
+
+NAME       STATUS   ROLES           AGE     VERSION   LABELS
+master01   Ready    control-plane   6d12h   v1.34.4   beta.kubernetes.io/arch=amd64
+beta.kubernetes.io/os=linux
+kubernetes.io/arch=amd64
+kubernetes.io/hostname=master01
+kubernetes.io/os=linux
+node-role.kubernetes.io/control-plane=
+node.kubernetes.io/exclude-from-external-load-balancers=
+worker01   Ready    worker          6d12h   v1.34.4   beta.kubernetes.io/arch=amd64
+beta.kubernetes.io/os=linux
+kubernetes.io/arch=amd64
+kubernetes.io/hostname=worker01
+kubernetes.io/os=linux
+node-role.kubernetes.io/worker=
+
+# O label mostra dessa forma ( kubernetes.io/hostname=worker01 ),
+# mas na declaração do yaml definimos assim ( kubernetes.io/hostname: "worker01" )
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: nginx-paulo
+    environment: development
+  name: nginx-paulo
+spec:
+  selector:
+    matchLabels:
+      app: nginx-paulo
+  template:
+    metadata:
+      labels:
+        app: nginx-paulo
+        environment: development
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+      nodeSelector:
+        kubernetes.io/hostname: "worker01"
+EOF
+
+k get pods
+NAME                READY   STATUS    RESTARTS   AGE
+nginx-paulo-sr6q2   1/1     Running   0          31s
+
+k get daemonset
+NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                     AGE
+nginx-paulo   1         1         1       1            1           kubernetes.io/hostname=worker01   57s
+
+
+# Rodar em Um node especifico.
+k patch daemonset nginx-paulo -p '
+spec:
+  template:
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+'
+daemonset.apps/nginx-paulo patched
+
+
+# Manteve os 2 Node Selector, isso acontece o K8s não substitui, ele faz merge ( apenda ). NodeSelector é um AND e não um OR.
+k get daemonset
+NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                                                     AGE
+nginx-paulo   1         1         1       1            1           kubernetes.io/hostname=worker01,node-role.kubernetes.io/worker=   2m22s
+
+
+# Deixar apenas 1 Node Selector
+k edit daemonsets nginx-paulo
+
+# OBS.: Apesar de ser um daemonset o troubleshouting é igual ao um Pod
+```
+
+
 # 🚀 Create Object - Statefullset
 
 ```bash
@@ -876,6 +1109,24 @@ Statefullset => Aplicação statefull ( A escalada tem que ser mais caltelosa ,
 cada pod tem seu volume, escala na ordem certa Ex: Banco de Dados )
 
 Daemonset    => 1 Pod em cada Node ( Geralmente coletrores de logs )
+```
+
+# 🚀 Create Object - Affinity
+
+```bash
+
+kubectl patch daemonset xxx -p '
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/worker
+                operator: Exists
+'
 ```
 
 # 🚀 Estratégias Deploy
