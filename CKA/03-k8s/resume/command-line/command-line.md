@@ -456,6 +456,8 @@ k neat <<< $(k create ns familia --dry-run=client -o yaml)
 
 ```bash
 # Deployment   => Aplicação stateless ( Aplicação escaláveis )
+# Staless, nao depende de um estado.
+# Statless é a capacidade da aplicação ser escalavel.
 
 k create deployment --image=nginx nginx-paulo
 
@@ -525,8 +527,9 @@ ulimit -Hn
 
 # ==========================================================================
 # É o recurso disponível no Worker ( Onde irá receber a carga de trabalho )
+# Obs.:
 # Request é usado sempre quando um pod é colocado dentro de um node.
-# Ele é levado em conta na escolha de onde será colocado o pod.
+# Ele é levado em conta na escolha do node onde será colocado o pod.
 # Kube-schedules é quem decide em qual worker meu pod vai rodar, ele avalia os recursos.
 # ==========================================================================
 #
@@ -536,7 +539,7 @@ ulimit -Hn
 # Manifest Request: 1 cpu / 4 GB Ram
 k apply -f manifesto.yaml
 
-# O scheduler só vai agendar esse Pod em um node que tenha pelo menos 0.1 CPU e 64 MB de Ram disponível
+# O scheduler só vai agendar esse Pod em um node que tenha pelo menos 1 CPU e 4 GB de Ram disponível
 
 apiVersion: apps/v1
 kind: Deployment
@@ -559,13 +562,20 @@ spec:
         name: nginx
         resources:
           requests:
-            cpu: 0.1
-            memory: 64
+            cpu: 1
+            memory: 4G
 
 # Como ler a capacidade do Node?
 k get nodes
 k describe node <node-name>
 k top nodes
+
+# CPU:
+# É informada em numero quantidade vcpu ou em porcentagem
+# 100m ( 10 % da cpu ) milicpu ou milicore
+# 0.1  ( 10% da cpu  )
+# Memoria:
+# É informada em M/G ex: 500M
 ```
 
 # 🚀 Create Object - Resources Limits
@@ -876,13 +886,13 @@ k explain deployment.spec.template.spec.containers
 
 ```bash
 #=================================================
-# Ready => Pronto para receber o trafego.
+# ReadinessProbe => Pronto para receber o trafego.
 #=================================================
 #
 # O Ready garante que uma consulta get em alguma rota "/health" responda com status code 200 para comecar a receber trafego, então o Pod é transacionado para 1/1. Isso acontece no startup do pod.
 
 #=================================================
-# Live => Garante que a aplicação ainda está viva.
+# LivenessProbe => Garante que a aplicação ainda está viva.
 #=================================================
 #
 # O Live garantir que a applicação continue viva live, monitora essa rota "/health" durante o tempo de vida do pod.
@@ -1012,15 +1022,18 @@ https://12factor.net/
 # 🚀 Create Object - Daemonset
 
 ```bash
+#=====================================================================
+# Características:
 # Daemonset => 1 Pod em cada Node ( Geralmente coletores de logs )
-# Daemonset não se define o numero de replicas.
+# Daemonset não se define o numero de replicas no manifestos.
 # Daemonset será igual ao numero de nodes de um cluster.
 # Daemonset não passa pelo kube-scheduler
-
+#
 # Caso de usos:
 # Coletor de Logs => precisa rodar a nivel de host.
 # CNI             => Roda a nivel do host
 # Patch           => Aplicar um determinado patch
+#=====================================================================
 
 # Para logs geralmente é montado a pasta /var/log do host dentro do DaemonSet ( pod )
 
@@ -1089,7 +1102,9 @@ spec:
 daemonset.apps/nginx-paulo patched
 
 
-# Manteve os 2 Node Selector, isso acontece o K8s não substitui, ele faz merge ( apenda ). NodeSelector é um AND e não um OR.
+# Mesmo aplicando o patch o k8s manteve as 2 roles declaradas "Node Selector",
+# isso acontece porque o K8s não substitui, ele faz merge ( apenda ). NodeSelector é um AND e não um OR.
+#
 k get daemonset
 NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                                                     AGE
 nginx-paulo   1         1         1       1            1           kubernetes.io/hostname=worker01,node-role.kubernetes.io/worker=   2m22s
@@ -1098,22 +1113,370 @@ nginx-paulo   1         1         1       1            1           kubernetes.io
 # Deixar apenas 1 Node Selector
 k edit daemonsets nginx-paulo
 
-# OBS.: Apesar de ser um daemonset o troubleshouting é igual ao um Pod
-```
+# OBS.:
+# Daemonset o troubleshouting é igual ao um Pod.
+# Daemonset não possui subcomandos de Create. Não possui gerenciador Direto
+# Pode-se cria-lo como um deployment, mas deve-se remover replicas e altera o Kind para DaemonSet
+#
+# Isso irá deployar em todos os Nodes
+k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | sed 's/Deployment/DaemonSet/;/replicas:/d' | k apply -f -
 
+# Como não foi explicitado em qual node rodar, foi exchedulado o pod nos 2 nodes.
+k get ds
+NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+nginx-paulo   2         2         2       2            2           <none>          3s
+
+
+# Rodar em Um node especifico ( Patch ).
+k patch daemonset nginx-paulo -p '
+spec:
+  template:
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+'
+daemonset.apps/nginx-paulo patched
+
+# Apos aplicado o patch
+k get ds
+NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                     AGE
+nginx-paulo   1         1         1       1            1           node-role.kubernetes.io/worker=   88s
+
+k explain daemonset --recursive | less
+k explain daemonset.spec
+```
 
 # 🚀 Create Object - Statefullset
 
 ```bash
-Statefullset => Aplicação statefull ( A escalada tem que ser mais caltelosa ,
-cada pod tem seu volume, escala na ordem certa Ex: Banco de Dados )
+# StateFull => Depende totalmente do estado
+# Ex: Uma aplicação que autentica usuarios, e determinado usuário logado tem uma seção conectado em um pod,
+# ao ser redirecionado a outro pod, essa sessão autenticada, pode não funcionar.
+#
+# Redis para armazenar a sessão do usuario resolveria essa treta.
+#
+# A aplicação depende totalmente de estado.
+# Quanto mais a app usa/depende do sistema de arquivos, mais statefull ela é.
+#
+# A tendencia e adequar a aplicação para que ela não dependa desses estados e que possa ser maleável.
+#
+# OBS.:
+# Statefullset => A escalada tem que ser mais caltelosa ,cada pod tem seu volume, escala na ordem certa Ex: Banco de Dados )
+# Statefullset => É gerido pelo kube-scheduler
+# Statefullset => É um deployment controlado. Ele sempre segue a ordem de subir um e matar um. Sempre um por um.
+# Ex: jenkins, vault
+#
+# Como identificar um statefullset fazendo um ( k get pods )?
+# Geralmente o nome do pod tem um prefixo ex: jenkins-0
+# Os nomes são sempre previsíveis, se meu deployment chama nginx, os Pods terão nomes: ( nginx-0, nginx-1 )
+#
+# Statefullset => Cada Pod com seu respectivo PVC
+# Mesmo que o Pod ( nginx-2 ) morra, quando ele subir novamente, somente ele irá acessar esse dados.
+# nginx-1 => pvc do nginx-1
+# nginx-2 => pvc do nginx-2
+# nginx-3 => pvc do nginx-3
+#
+#============================================================
+# Um detalhe importante é quando exponho um statefullset, diferentemente de um deploymente que cria-se um service,
+# esse cara trabalha diferente, ele cria um Headless Service ( Diferente de um Service comum não tem IP ),
+# esse cara é um resolvedor de nomes que conhece todas as replicas ( nginx-1, nginx-2, nginx-3 ), ele não tem IP.
+# Esse DNS retorna todos os IPs dos statefull ( nginx-1, nginx-2, nginx-3 ) e o cliente que requisitou escolhe em qual ele quer se conectar.
+#============================================================
 
-Daemonset    => 1 Pod em cada Node ( Geralmente coletrores de logs )
+# Instalar Local-Path
+# https://github.com/rancher/local-path-provisioner/tree/master/deploy/chart/local-path-provisioner
+
+git clone https://github.com/rancher/local-path-provisioner.git
+cd local-path-provisioner
+helm install local-path-storage --create-namespace --namespace local-path-storage ./deploy/chart/local-path-provisioner/
+helm list -A
+
+# Listar StorageClass
+k get sc -A
+
+# Check Se StorageClass e default
+k describe sc -n local-path-storage local-path
+
+k edit sc -n local-path-storage local-path
+storageclass.kubernetes.io/is-default-class: true
+
+# Doc
+# https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/
+
+# Explicando Construção YAML de um PVC
+k explain statefulsets.spec
+k explain statefulsets.spec.volumeClaimTemplates
+k explain statefulsets.spec.volumeClaimTemplates.spec
+k explain statefulsets.spec.volumeClaimTemplates.metadata
+
+# Modo de acesso ( Link )
+k explain statefulsets.spec.volumeClaimTemplates.spec.accessModes
+
+# Recursos Computacionais ( Link )
+k explain statefulsets.spec.volumeClaimTemplates.spec.resources
+
+#===================================================
+# OBS.: O próprio StatefulSet cria automaticamente os PVCs a partir de volumeClaimTemplates
+#===================================================
+
+# Ex:
+volumeClaimTemplates:
+- metadata:
+    name: nginx-html
+  spec:
+    accessModes: [ "ReadWriteOnce" ]
+    resources:
+      requests:
+        storage: 1G
+
+
+# Agora dentro do spec eu preciso definir como será montado dentro do container
+
+k explain statefulsets.spec.template.spec.containers
+k explain statefulsets.spec.template.spec.containers.volumeMounts
+
+spec:
+  containers:
+  - image: nginx
+    name: nginx
+    volumeMounts:
+    - name: nginx-html
+      mountPath: "/usr/share/nginx/html"
+
+# OBS.:
+# StatefulSet o troubleshouting é igual ao um Pod.
+# StatefulSet não possui subcomandos de Create. Não possui gerenciador Direto
+# Pode-se cria-lo como um deployment, mas deve-se remover replicas e altera o Kind para StatefulSet
+#
+# Veja o guia sobre ( Affinity )
+k taint nodes master01 node-role.kubernetes.io/control-plane=:NoSchedule
+k describe node master01 | grep Taint
+#
+# Gerando os manifestos
+k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | sed 's/Deployment/StatefulSet/'
+
+k neat <<< $(k create service clusterip nginx --clusterip="None" --dry-run=client -o yaml)
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  clusterIP: None
+  ports:
+  - name: nginx
+    port: 80
+  selector:
+    app: nginx
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  serviceName: "nginx"
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        volumeMounts:
+        - name: nginx-html
+          mountPath: "/usr/share/nginx/html"
+  volumeClaimTemplates:
+  - metadata:
+      name: nginx-html
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1G
+EOF
+
+NAME      READY   STATUS    RESTARTS   AGE
+nginx-0   1/1     Running   0          92s
+nginx-1   1/1     Running   0          86s
+
+# No kind o path fica armazendo no seguinte lugar (ls /var/local-path-provisioner/)
+#
+ssh root@worker01 ls /opt/local-path-provisioner
+pvc-5e022a02-521f-4f6b-906b-870992018639_default_nginx-html-nginx-0
+pvc-e7a97210-ef2c-488b-979a-9ae4bf75ecdd_default_nginx-html-nginx-1
+
+# Observe que não tem Ip atrelado ao service.
+# Ele apenas cria registros DNS individuais para cada Pod
+# nginx-0.nginx.default.svc.cluster.local
+# nginx-1.nginx.default.svc.cluster.local
+
+k get svc nginx
+NAME    TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+nginx   ClusterIP   None         <none>        80/TCP    4d4h
+
+# Alimente o ponto de montagem Nginx-0
+kubectl exec -it nginx-0 -- bash -c "echo 'abacate' > /usr/share/nginx/html/index.html"
+
+# k port-forward pod/<pod-name> <Minha-Porta>:<Porta-App>
+k port-forward pod/nginx-0 8181:80
+
+# Em outro terminal ao fazer um curl sempre obterá a resposta "abacate", pois o forward foi a nivel do Pod.
+
+# Alimente o ponto de montagem Nginx-1
+kubectl exec -it nginx-1 -- bash -c "echo 'morango' > /usr/share/nginx/html/index.html"
+
+k port-forward svc/nginx 8181:80
+
+kubectl exec -it nginx-1 -- bash -c "echo 'abacate' > /usr/share/nginx/html/index.html"
+
+# Nome dos containers
+for i in 0 1; do kubectl exec "nginx-$i" -- sh -c 'hostname'; done
+
+kubectl run -i --tty --image busybox dns-test --restart=Never --rm
+
+# ping -c 2 nginx-1.nginx
+PING nginx-1.nginx (10.244.1.52): 56 data bytes
+64 bytes from 10.244.1.52: seq=0 ttl=64 time=0.138 ms
+64 bytes from 10.244.1.52: seq=1 ttl=64 time=0.194 ms
+
+# ping -c 2 nginx-0.nginx
+PING nginx-0.nginx (10.244.1.50): 56 data bytes
+64 bytes from 10.244.1.50: seq=0 ttl=64 time=0.110 ms
+64 bytes from 10.244.1.50: seq=1 ttl=64 time=0.179 ms
+
+nslookup nginx-0.nginx.default.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+Name:	nginx-0.nginx.default.svc.cluster.local
+Address: 10.244.1.50
+
+
+nslookup nginx-1.nginx.default.svc.cluster.local
+Server:		10.96.0.10
+Address:	10.96.0.10:53
+
+Name:	nginx-1.nginx.default.svc.cluster.local
+Address: 10.244.1.52
+
+#=============================================================================
+# Caso não crie os PVC antes de criar a regra do Taint, o que aconteceria?
+
+kgp
+NAME      READY   STATUS    RESTARTS   AGE
+nginx-0   1/1     Running   0          4m19s
+nginx-1   0/1     Pending   0          4m16s
+
+k describe pod nginx-1
+Events:
+  Type     Reason            Age    From               Message
+  ----     ------            ----   ----               -------
+  Warning  FailedScheduling  3m57s  default-scheduler  0/2 nodes are available: 1 node(s) didn't match PersistentVolume's node affinity, 1 node(s) had untolerated taint(s). no new claims to deallocate, preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+
+# Possiveis Problemas...
+# PVC accessModes: [ "ReadWriteOnce" ], não possui node afinity explicito no manifesto,
+# entao o PVC poderia facilmente montar 2 volumes distintos no mesmo worker.
+
+k get pvc
+k describe pvc nginx-html-nginx-1
+k get pv
+k describe pv pvc-003a61ee-f231-474a-9902-9300cf230553
+
+# PVC zuado....
+# Problema foi que tem uma regra de afinidade para o PV, mas temos um taint que bloqueia schedule no control-plane
+k describe pv pvc-003a61ee-f231-474a-9902-9300cf230553
+Name:              pvc-003a61ee-f231-474a-9902-9300cf230553
+Labels:            <none>
+Annotations:       local.path.provisioner/selected-node: master01
+                   pv.kubernetes.io/provisioned-by: cluster.local/local-path-storage-local-path-provisioner
+Finalizers:        [kubernetes.io/pv-protection]
+StorageClass:      local-path
+Status:            Bound
+Claim:             default/nginx-html-nginx-1
+Reclaim Policy:    Delete
+Access Modes:      RWO
+VolumeMode:        Filesystem
+Capacity:          1G
+Node Affinity:
+  Required Terms:
+    Term 0:        kubernetes.io/hostname in [master01]
+Message:
+Source:
+    Type:          HostPath (bare host directory volume)
+    Path:          /opt/local-path-provisioner/pvc-003a61ee-f231-474a-9902-9300cf230553_default_nginx-html-nginx-1
+    HostPathType:  DirectoryOrCreate
+Events:            <none>
+#=============================================================================
 ```
+
+# 🚀 Create Object - External Name
+
+```bash
+```
+
 
 # 🚀 Create Object - Affinity
 
 ```bash
+
+| Tipo             | Comportamento           |
+| ---------------- | ----------------------- |
+| NoSchedule       | Não agenda novos Pods   |
+| PreferNoSchedule | Evita, mas pode agendar |
+| NoExecute        | Remove Pods já rodando  |
+
+# Ensure no workloads are scheduled on control-plane nodes.
+# Garantindo que nenhum pod sera schedulado nos control-plane.
+# A menos que ele tenha toleration correspondente.
+
+k taint nodes master01 node-role.kubernetes.io/control-plane=:NoSchedule
+k describe node master01 | grep Taint
+
+# O que o toleration?
+# Isso declarado no manifesto garante que o Pod possa ser schedulado no control-plane por ex,
+# mesmo que tenha um taint
+
+tolerations:
+- key: "node-role.kubernetes.io/control-plane"
+  operator: "Exists"
+  effect: "NoSchedule"
+
+
+# E se meu taint for "NoExecute" ?
+# O efeito NoExecute faz duas coisas:
+# Impede que novos Pods sejam agendados
+# Remove Pods que já estão rodando e não toleram o taint
+
+# 👉 O Pod:
+
+# Pode ser agendado
+# Não será removido
+# Fica rodando indefinidamente
+
+| Taint      | Sem toleration      | Com toleration     | Com tolerationSeconds      |
+| ---------- | ------------------- | ------------------ | -------------------------- |
+| NoSchedule | Não agenda          | Agenda             | Agenda                     |
+| NoExecute  | Não agenda + remove | Agenda + permanece | Agenda + remove após tempo |
+
+
+
+
+# Definir no manifesto os workloads que pode-se usar.
+# Como os workers tem label de worker, entao os pods só serão agendados nos worker.
+nodeSelector:
+  node-role.kubernetes.io/worker: ""
+
+
 
 kubectl patch daemonset xxx -p '
 spec:
