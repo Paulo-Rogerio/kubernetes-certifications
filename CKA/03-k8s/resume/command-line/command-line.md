@@ -1369,8 +1369,31 @@ Address:	10.96.0.10:53
 Name:	nginx-1.nginx.default.svc.cluster.local
 Address: 10.244.1.52
 
+kubectl run -it --image nginx dns-test --rm -- bash
+
+root@dns-test:/# curl nginx-0.nginx
+bacate
+root@dns-test:/# curl nginx-1.nginx
+morango
+
+# Observer que o serviço faz round-robin entre os 2 statefulset
+#
+root@dns-test:/# apt update && apt -y install iputils-ping
+
+root@dns-test:/# ping -c 2 nginx
+PING nginx.default.svc.cluster.local (10.244.1.57) 56(84) bytes of data.
+64 bytes from nginx-1.nginx.default.svc.cluster.local (10.244.1.57): icmp_seq=1 ttl=64 time=0.093 ms
+64 bytes from nginx-1.nginx.default.svc.cluster.local (10.244.1.57): icmp_seq=2 ttl=64 time=0.203 ms
+
+root@dns-test:/# ping -c 2 nginx
+PING nginx.default.svc.cluster.local (10.244.1.56) 56(84) bytes of data.
+64 bytes from nginx-0.nginx.default.svc.cluster.local (10.244.1.56): icmp_seq=1 ttl=64 time=0.139 ms
+64 bytes from nginx-0.nginx.default.svc.cluster.local (10.244.1.56): icmp_seq=2 ttl=64 time=0.218 ms
+
+
 #=============================================================================
 # Caso não crie os PVC antes de criar a regra do Taint, o que aconteceria?
+#=============================================================================
 
 kgp
 NAME      READY   STATUS    RESTARTS   AGE
@@ -1419,9 +1442,255 @@ Events:            <none>
 #=============================================================================
 ```
 
-# 🚀 Create Object - External Name
+# 🚀 Create Object - PDB -PodDisruptionBudget
 
 ```bash
+# É um objeto do cluster que garanti que um POD nunca fique indisponível
+# Mais usado com statefulset
+
+k api-resources | grep disrup
+poddisruptionbudgets                pdb          policy/v1                         true         PodDisruptionBudget
+
+# Com esse recurso consigo dizer ao k8s que dos 100% dos meus pods quero 90% sempre disponível.
+# Ou quantas replicas indisponível eu posso tolerar, Ex: se tenho 3 replicas , tolero a perca de 2 no máximo.
+#
+# Isso é uma proteção contra o node ser drenado
+#
+# Doc:
+https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+
+k explain poddisruptionbudget
+k explain poddisruptionbudget.spec
+
+# maxUnavailable => Maximo que aceito como não disponível
+# minAvailable   => Minimo que tem que está disponível
+
+# Listar se tenho PBD habilitado
+k get pdb
+
+# Checar as labels do meus pod
+k get pod --show-labels
+NAME      READY   STATUS    RESTARTS      AGE   LABELS
+nginx-0   1/1     Running   1 (27m ago)   47h   app=nginx,apps.kubernetes.io/pod-index=0,controller-revision-hash=nginx-6cb5bc47cd,statefulset.kubernetes.io/pod-name=nginx-0
+nginx-1   1/1     Running   1 (27m ago)   47h   app=nginx,apps.kubernetes.io/pod-index=1,controller-revision-hash=nginx-6cb5bc47cd,statefulset.kubernetes.io/pod-name=nginx-1
+
+#=======================================================================
+# DESSA FORMA EU NAO ESTOU INFERINDO QUE NENHUM POD FIQUE INDISPONIVEL.
+#=======================================================================
+cat <<EOF | k apply -f -
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nginx-pdb
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: nginx
+EOF
+
+k get pdb
+NAME        MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+nginx-pdb   N/A             0                 0                     6s
+
+# Esse cara aplica o cordon ( Marca o node para nao aceitar novos pods )
+# Depois comeca dar o evict ( Pegar todos os pods rodando nesse worker e jogar para outro node )
+# O pod (statefulset) nao conseguiu ser migrado devido a regra de pdb
+k drain worker01 --ignore-daemonsets --delete-emptydir-data
+node/worker01 cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-flannel/kube-flannel-ds-zzgvm, kube-system/kube-proxy-fg27m, metallb-system/metallb-speaker-rhs68
+evicting pod local-path-storage/local-path-storage-local-path-provisioner-f555d4fc6-l4n2q
+evicting pod default/nginx-1
+evicting pod default/nginx-0
+
+# O Node foi marcado para nao receber nenhum schedule
+k get nodes
+NAME       STATUS                     ROLES           AGE   VERSION
+master01   Ready                      control-plane   12d   v1.34.4
+worker01   Ready,SchedulingDisabled   worker          12d   v1.34.4
+
+# Pods ainda rodando
+k get pods
+NAME      READY   STATUS    RESTARTS      AGE
+nginx-0   1/1     Running   1 (38m ago)   2d
+nginx-1   1/1     Running   1 (38m ago)   2d
+
+# Para resolver eu devo deleta o PDB
+k delete pdb nginx-pdb
+
+# Agora sim consigo fazer o drain
+k drain worker01 --ignore-daemonsets --delete-emptydir-data
+node/worker01 already cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-system/kindnet-6vxfh, kube-system/kube-proxy-jrxg8, metallb-system/metallb-speaker-9vkng
+evicting pod default/nginx-1
+pod/nginx-1 evicted
+node/worker01 drained
+
+# Apos concluir o processo, garanta que o node possa receber agendamentos de Pod
+k uncordon worker01
+node/worker01 uncordoned
+
+k get nodes
+NAME       STATUS   ROLES           AGE   VERSION
+master01   Ready    control-plane   12d   v1.34.4
+worker01   Ready    worker          12d   v1.34.4
+```
+
+# 🚀 Create Object - Jobs
+
+```bash
+# Batch Jobs ( Executa 1x só )
+# Job => Executa um Pod => Durante a execução seu status e Running => Após finalizado transita para Completed => Tchau
+#
+# Se eu precisar executar isso todo os dias?
+# CronJob => Cria o Job => Cria o Pod ( Running ) => Após finalizado transita para Completed
+#
+# Exemplo
+# https://github.com/mateusmuller/elasticsearch-delete-indices-7-days
+
+
+k get cronjob -A
+k get job -A
+
+# Sempre é mantido os 3 ultimas execuçoes de cronjobs ( k get pods )
+
+# Doc
+https://kubernetes.io/docs/concepts/workloads/controllers/job/
+
+k api-resources | grep jobs
+k explain
+k explain jobs.spec
+k explain jobs.spec.ttlSecondsAfterFinished
+k explain jobs.spec.template
+k explain jobs.spec.template.spec.restartPolicy
+
+# Manifesto
+k neat <<< $(k create job my-job --image=alpine --dry-run=client -o yaml)
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: my-job
+spec:
+  template:
+    spec:
+      containers:
+      - image: alpine
+        name: my-job
+      restartPolicy: Never
+
+#============================================================================================
+# Job é imultável, uma vez criado nao consigo aplicar o manifesto para sobrepor seu conteudo.
+# E necessário deletar o conteudo antigo.
+#
+#============================================================================================
+
+cat > Dockerfile <<EOF
+FROM alpine
+WORKDIR /app
+RUN apk update && \
+  apk add bash
+COPY script.sh .
+RUN chmod +x script.sh
+CMD [ "sh","script.sh" ]
+EOF
+
+cat > script.sh <<EOF
+for _ in {1..10}; do echo "$(date +%Y-%m-%d-%H:%M:%S) - Output..." && sleep 1; done
+EOF
+
+docker login
+docker build -t prgs/alpine-jobs:latest .
+docker push prgs/alpine-jobs:latest
+docker run -it --rm prgs/alpine-jobs:latest bash -c "./script.sh"
+2026-03-05-11:17:32 - Output...
+2026-03-05-11:17:32 - Output...
+2026-03-05-11:17:32 - Output...
+2026-03-05-11:17:32 - Output...
+2026-03-05-11:17:32 - Output...
+2026-03-05-11:17:32 - Output...
+2026-03-05-11:17:32 - Output...
+2026-03-05-11:17:32 - Output...
+2026-03-05-11:17:32 - Output...
+2026-03-05-11:17:32 - Output...
+
+
+k neat <<< $(k create job my-job --image=prgs/alpine-jobs:latest --dry-run=client -o yaml) | k apply -f -
+k get job
+NAME     STATUS     COMPLETIONS   DURATION   AGE
+my-job   Complete   1/1           11s        12s
+
+# Logs
+k logs jobs/my-job
+2026-03-05-11:17:32 - Output...
+
+k neat <<< $(k create job my-job2 --image=prgs/alpine-jobs:latest --dry-run=client -o yaml) | k apply -f -
+k get job -w
+my-job    Complete             1/1           11s        2m13s
+my-job2   Running              0/1           0s         0s
+my-job2   Running              0/1           4s         4s
+my-job2   Running              0/1           5s         5s
+my-job2   SuccessCriteriaMet   0/1           6s         6s
+my-job2   Complete             1/1           6s         6s
+
+# Outra forma de ver o Log
+# Pegue o Id do Pod gerado pelo Job
+k logs $(k get pods -l job-name=my-job2 -o name)
+
+
+k neat <<< $(k create job my-job3 --image=prgs/alpine-jobs:latest --dry-run=client -o yaml) | k apply -f -
+k logs -f $(k get pods -l job-name=my-job3 -o name)
+
+```
+
+# 🚀 Create Object - Manutenção em Membros do Cluster
+
+```bash
+# Daemonset nao pode ser migrado ( 1 pod em cada node )
+# Levar todos os Pods alocados no worker ( prgs-worker2 ) para outro node.
+k drain prgs-worker2
+k drain prgs-worker2 --ignore-daemonsets
+k drain prgs-worker2 --ignore-daemonsets --delete-emptydir-data
+node/prgs-worker2 already cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-system/kindnet-6vxfh, kube-system/kube-proxy-jrxg8, metallb-system/metallb-speaker-9vkng
+evicting pod kube-system/metrics-server-7bb58f4dcb-bxswj
+evicting pod ingress-nginx/ingress-nginx-controller-5f4f4d9787-t7x8k
+evicting pod default/nginx-1
+evicting pod ingress-nginx/ingress-nginx-admission-patch-7w88w
+pod/ingress-nginx-admission-patch-7w88w evicted
+pod/ingress-nginx-controller-5f4f4d9787-t7x8k evicted
+pod/nginx-1 evicted
+pod/metrics-server-7bb58f4dcb-bxswj evicted
+node/prgs-worker2 drained
+
+# Fazendo manutenção no worker2
+# Nenhum Pode Poderá ser agendado no worker2
+k get node
+NAME                 STATUS                     ROLES             AGE    VERSION
+prgs-control-plane   Ready                      control-plane     172m   v1.31.2
+prgs-worker          Ready                      worker-apps       172m   v1.31.2
+prgs-worker2         Ready,SchedulingDisabled   worker-postgres   172m   v1.31.2
+
+# Vai ficar pending pois o stateful set não pode ser migrado para outro node.
+# então devo deleta-lo.
+k get pod -o wide
+NAME      READY   STATUS    RESTARTS   AGE     IP            NODE          NOMINATED NODE   READINESS GATES
+nginx-0   1/1     Running   0          8m3s    10.244.1.26   prgs-worker   <none>           <none>
+nginx-1   0/1     Pending   0          3m32s   <none>        <none>        <none>           <none>
+
+# Apos manutenção eu ressuscito o Host
+kubectl uncordon prgs-worker2
+
+k get nodes
+NAME                 STATUS   ROLES             AGE    VERSION
+prgs-control-plane   Ready    control-plane     3h     v1.31.2
+prgs-worker          Ready    worker-apps       179m   v1.31.2
+prgs-worker2         Ready    worker-postgres   179m   v1.31.2
+
+k get pods
+NAME      READY   STATUS    RESTARTS   AGE
+nginx-0   1/1     Running   0          12m
+nginx-1   1/1     Running   0          7m53s
 ```
 
 
