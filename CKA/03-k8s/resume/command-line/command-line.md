@@ -1542,14 +1542,6 @@ worker01   Ready    worker          12d   v1.34.4
 # Batch Jobs ( Executa 1x só )
 # Job => Executa um Pod => Durante a execução seu status e Running => Após finalizado transita para Completed => Tchau
 #
-# Se eu precisar executar isso todo os dias?
-# CronJob => Cria o Job => Cria o Pod ( Running ) => Após finalizado transita para Completed
-#
-# Exemplo
-# https://github.com/mateusmuller/elasticsearch-delete-indices-7-days
-
-
-k get cronjob -A
 k get job -A
 
 # Sempre é mantido os 3 ultimas execuçoes de cronjobs ( k get pods )
@@ -1592,27 +1584,28 @@ RUN apk update && \
   apk add bash
 COPY script.sh .
 RUN chmod +x script.sh
-CMD [ "sh","script.sh" ]
+CMD [ "bash","script.sh" ]
 EOF
 
 cat > script.sh <<EOF
-for _ in {1..10}; do echo "$(date +%Y-%m-%d-%H:%M:%S) - Output..." && sleep 1; done
+#!/usr/bin/env bash
+for _ in {1..10}; do echo "\$(date +%Y-%m-%d-%H:%M:%S) - Output..." && sleep 1; done
 EOF
 
 docker login
 docker build -t prgs/alpine-jobs:latest .
 docker push prgs/alpine-jobs:latest
 docker run -it --rm prgs/alpine-jobs:latest bash -c "./script.sh"
-2026-03-05-11:17:32 - Output...
-2026-03-05-11:17:32 - Output...
-2026-03-05-11:17:32 - Output...
-2026-03-05-11:17:32 - Output...
-2026-03-05-11:17:32 - Output...
-2026-03-05-11:17:32 - Output...
-2026-03-05-11:17:32 - Output...
-2026-03-05-11:17:32 - Output...
-2026-03-05-11:17:32 - Output...
-2026-03-05-11:17:32 - Output...
+2026-03-06-14:16:38 - Output...
+2026-03-06-14:16:39 - Output...
+2026-03-06-14:16:40 - Output...
+2026-03-06-14:16:41 - Output...
+2026-03-06-14:16:42 - Output...
+2026-03-06-14:16:43 - Output...
+2026-03-06-14:16:44 - Output...
+2026-03-06-14:16:45 - Output...
+2026-03-06-14:16:46 - Output...
+2026-03-06-14:16:47 - Output...
 
 
 k neat <<< $(k create job my-job --image=prgs/alpine-jobs:latest --dry-run=client -o yaml) | k apply -f -
@@ -1636,11 +1629,180 @@ my-job2   Complete             1/1           6s         6s
 # Outra forma de ver o Log
 # Pegue o Id do Pod gerado pelo Job
 k logs $(k get pods -l job-name=my-job2 -o name)
+```
+
+# 🚀 Create Object - CronJobs
+
+```bash
+# Se eu precisar executar isso todo os dias?
+# CronJob => Cria o Job => Cria o Pod ( Running ) => Após finalizado transita para Completed
+#
+# Exemplo
+# https://github.com/mateusmuller/elasticsearch-delete-indices-7-days
+
+k get cronjob -A
+
+k explain cronjobs.spec
+
+k neat <<< $(k create cronjob my-cronjob --image=prgs/alpine-jobs:latest --schedule="*/1 * * * *" --dry-run=client -o yaml) | k apply -f -
+
+k get cronjob
+k get job
+k get pods -
+
+# Outra forma de ver o Log
+# Pegue o Id do Pod gerado pelo Job
+k logs my-cronjob-29546778-4fr8t
+2026-03-06-14:18:01 - Output...
+2026-03-06-14:18:02 - Output...
+2026-03-06-14:18:03 - Output...
+2026-03-06-14:18:05 - Output...
+2026-03-06-14:18:06 - Output...
+2026-03-06-14:18:07 - Output...
+2026-03-06-14:18:08 - Output...
+2026-03-06-14:18:09 - Output...
+2026-03-06-14:18:10 - Output...
+2026-03-06-14:18:11 - Output...
+
+# Pegando dinamicament
+kubectl logs $(kubectl get jobs --sort-by=.metadata.creationTimestamp -o name | tail -1)
+```
+
+# 🚀 Create Object - Services Tipos
+
+```bash
+# A comunicação interna dentro do k8s e os acessos não acontece diretamente no Pod.
+# Eu me comunico por meio de um services.
+# Comunicaçao interna ( 2 pods no mesmo namespace se comunicam por meio de service Cluster IP ).
+# Service é a forma como me comunico com cluster seja interno ou externamente.
+#
+# DNS Name ( Service Discovery )
+
+# ============================= Cluster IP ========================================
+# Cluster IP é apenas para comunicação interna dentro do cluster.
+# Ao criar o service , vc indica o selector e ele ja sabe para quem enviar a requisição.
+
+k get svc kubernetes -o yaml
+
+# name       => Nome do meu serviço ( rails-services ) esse Nome que o cluster faz busca de DNS para descobrir o serviço.
+# port       => A porta que o service do k8s irá escutar
+# targetPort => A porta que a aplicação ouve. Aqui ele redireciona tudo que chega na 80 manda para 3000
+# selector   => Isso que fara match no Deployment, ele que defini onde será enviado a requisição.
+# Isso se da por meio das labels
+# Ex:
+# --port ( É a porta do service )
+# --target-port ( É a porta do nginx rodando no container )
+
+k get pods --show-labels
+  selector:
+    app: nginx
+
+k explain svc.spec
+k explain svc.spec.selector ( map => chave / valor )
+
+# Ex:
+k neat <<< $(k create service clusterip mymysql --tcp=80:80 --dry-run=client -o yaml)
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: mymysql
+  name: mymysql
+spec:
+  ports:
+  - name: mymysql-service
+    port: 80
+  selector:
+    app: mymysql
+
+k get svc mymysql
+NAME      TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)   AGE
+mymysql   ClusterIP   10.108.151.234   <none>        80/TCP    12d
+
+k run --image alpine --rm -it teste-curl sh
+/ # ping -c 2 mymysql.default.svc.cluster.local
+PING mymysql.default.svc.cluster.local (10.108.151.234): 56 data bytes
+
+/ # ping -c 2 mymysql
+PING mymysql (10.108.151.234): 56 data bytes
+
+#************************************************************************
+# Como a resolução de nomes acontece quando estou em outra namespace?
+#************************************************************************
+#
+# Apenas por FQDN
+# Executando Pod no namespace kube-system
+k run --namespace kube-system --image alpine --rm -it teste-curl sh
+
+# Isso ( OK )
+ping -c 2 mymysql.default.svc.cluster.local
+
+# Isso ( Não Responde )
+ping -c 2 mymysql
+
+#************************************************************************
+# Como criar um service via linha de comando?
+#************************************************************************
+#
+# Criar um deployment
+k create deployment --image=nginx nginx-paulo
+k expose deployment nginx-paulo --port=80 --type='ClusterIP' --target-port=80
+
+#************************************************************************
+# Como que um service sabe chegar em um Pod?
+#************************************************************************
+#
+# Por meios dos endpoints
+# Esse comando ( endpoints ) vai ser deprecado em futuras versoes ( 1.33+ )
+k get endpoints nginx
+
+k get endpointslices.discovery.k8s.io
+NAME                ADDRESSTYPE   PORTS     ENDPOINTS                 AGE
+demo-bx494          IPv4          <unset>   <unset>                   13d
+kubernetes          IPv4          6443      10.100.100.11             14d
+mymysql-wvtvv       IPv4          <unset>   <unset>                   12d
+nginx-mjb56         IPv4          80        10.244.1.66,10.244.1.67   3d
+nginx-paulo-hspkj   IPv4          80        10.244.1.129              5m10s
 
 
-k neat <<< $(k create job my-job3 --image=prgs/alpine-jobs:latest --dry-run=client -o yaml) | k apply -f -
-k logs -f $(k get pods -l job-name=my-job3 -o name)
+# ============================== Node Port ========================================
+#
+# Pouco usado
+# Range => 30000-32767
+# Se eu escolher a porta 30000, essa porta é aberta em cada um dos nodes.
+# Para acessar eu preciso informar o Ip do Node:Porta Alta
+# Finalidade ( testes e demos )
 
+# ============================== LoadBalancer =====================================
+#
+# Constuma-se ter um L.B por aplicação
+# Se utilizar esse service para expor sua app para mundo, lembre-se que cada endpoint terá seu L.B
+# Ideal para TCP / UDP ( Layer 4 )
+
+# Obs.:
+# Se estou trabalhando na camada de aplicação http ( Layer 7 )
+# o Gateway Api ( Falecido Ingress ) é a melhor alternativa, pois usa-se apenas
+# um único LoabBalancer e cria rotas e endpoints de acesso.
+
+# ============================== External Name ====================================
+#
+# Services => ( CNAME ) => DNS
+# É um service usado para resolver nomes.
+# Suponhamos que use RDS da AWS te entregue uma URL ( Endpoint ), mas vc não quer usar esse DNS que AWS te mandou,
+# pois se ela mudar terá que sair redeployando toda suas apps.
+#
+# Então vc pode criar esse service ( External Name ) para criar um DNS válido dentro do Cluster
+#
+# Service , seria seu serviço ex: "db" que nada mais é que um cname para ( DNS URL da AWS ),
+# assim quando sua URL de banco mudar voce so muda nesse service e sua app continua igual como antes.
+#
+# Toda a parte do services é feito no node
+```
+
+# 🚀 Create Object - Roteamento KubeProxy - Ipvs Vs Iptables
+
+```bash
 ```
 
 # 🚀 Create Object - Manutenção em Membros do Cluster
