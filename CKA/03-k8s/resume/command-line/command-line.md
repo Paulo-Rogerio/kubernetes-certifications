@@ -1912,7 +1912,7 @@ Name:      nginx-1.nginx
 Address 1: 10.244.2.14 nginx-1.nginx.default.svc.cluster.local
 ```
 
-# 🚀 Create Object - Roteamento KubeProxy - Ipvs Vs Iptables
+# 🚀 Create Object - Ipvs Vs Iptables
 
 ```bash
 # Kubernetes Componetes
@@ -2066,8 +2066,11 @@ nginx        NodePort    10.106.211.96   <none>        80:32674/TCP   4s
 # Essa Porta (32674) é aberta no Node ( Worker )
 docker exec -it prgs-worker2 bash -c "curl localhost:32674"
 
-# Se tiver usando Kind , pode redirecionar a porta do NodePort para sua máquina local
 
+# =========================  Local Port  ( Kind ) ===============================
+k delete svc nginx
+
+# Se tiver usando Kind , pode redirecionar a porta do NodePort para sua máquina local
 - role: worker
   kubeadmConfigPatches:
   - |
@@ -2184,6 +2187,319 @@ nginx-1   1/1     Running   0          7m53s
 ```
 
 # 🚀 Create Object - External Name
+
+```bash
+# ============================== External Name ====================================
+#
+# Esse é um tipo de serviço onde cria-se um CNAME no DNS Server do Kubernetes.
+#
+# Services => ( CNAME ) => DNS
+#
+# É um service usado para resolver nomes.
+# Suponhamos que use RDS da AWS te entregue uma URL ( Endpoint ), mas vc não quer usar esse DNS que AWS te mandou,
+# pois se ela mudar terá que sair redeployando toda suas apps.
+#
+# Então vc pode criar esse service ( External Name ) para criar um DNS válido dentro do Cluster
+#
+# Service , seria seu serviço ex: "db" que nada mais é que um cname para ( DNS URL da AWS ),
+# assim quando sua URL de banco mudar voce so muda nesse service e sua app continua igual como antes.
+#
+# Toda a parte do services é feito no node
+
+k neat <<< $(kubectl create service externalname url-remota --external-name bar.com --dry-run=client -o yaml)
+
+# Result
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: url-remota
+  name: url-remota
+spec:
+  externalName: paulo-rogerio.github.io
+  type: ExternalName
+
+# Apply
+k neat <<< $(kubectl create service externalname url-remota --external-name paulo-rogerio.github.io --dry-run=client -o yaml) | k apply -f -
+
+k get svc
+
+NAME         TYPE           CLUSTER-IP   EXTERNAL-IP               PORT(S)   AGE
+kubernetes   ClusterIP      10.96.0.1    <none>                    443/TCP   119m
+url-remota   ExternalName   <none>       paulo-rogerio.github.io   <none>    3s
+
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+/ # apk add bind-tools
+
+/ # host paulo-rogerio.github.io
+paulo-rogerio.github.io has address 185.199.110.153
+paulo-rogerio.github.io has address 185.199.111.153
+paulo-rogerio.github.io has address 185.199.109.153
+paulo-rogerio.github.io has address 185.199.108.153
+
+/ # host url-remota
+url-remota.default.svc.cluster.local is an alias for paulo-rogerio.github.io.
+paulo-rogerio.github.io has address 185.199.110.153
+paulo-rogerio.github.io has address 185.199.111.153
+paulo-rogerio.github.io has address 185.199.108.153
+paulo-rogerio.github.io has address 185.199.109.153
+
+/ # host -t cname url-remota
+url-remota.default.svc.cluster.local is an alias for paulo-rogerio.github.io.
+
+k delete svc url-remota
+```
+
+# 🚀 Create Object - Trafic Policy
+
+```bash
+# Essa feacture é interessante quando temos um app critica que requer performance.
+
+# Trafic Policies , num cenário com LoadBalancer as requisiçoes atendidas pelo IP externo, ao cairem dentro de um Node,
+# é enviada para um ClusterIP para que esse possa rotear o tráfego entre os Pods.
+
+# Para listar todos os Pods que atendem, basta lista os endpoint e identificar os nodes que atenderiam a request.
+#
+
+k get endpointslices.discovery.k8s.io
+NAME         ADDRESSTYPE   PORTS   ENDPOINTS    AGE
+kubernetes   IPv4          6443    172.17.0.2   27m
+
+# A treta é que nesse cenário quando Endpoint vai destinar qual POd irá atender a requisição , ele pode me encaminhar
+# para um Pod que esteja rodando em outro Node.
+#
+# Isso garante que o cluster fiquem mais resiliente, distribuindo as requisiçoes entre todos os POds.
+#
+# Porém vc precisa ter em mente que isso acontece de forma natural, uma requisicao que bateu no Node A,
+# foi entregue porque Endpoint entrega ao pro ClusterIP desse Node A de forma randomica.
+#
+# A questao é quando chega no Node no qual está rodando o Pod, o Kube-Proxy entra em ação.
+# As regras definidas no Iptables redirecionará a requisição para o Pod que está rodando no Cluster B.
+#
+# Por ser uma cominicação Local ( Dentro de um mesmo backbone ) isso nao pode ser um problema. Isso pode ser um problema,
+# Se tivermos cluster rodando em regioes distintas com latencia alta.
+#
+# Mas caso queira que a conexao seja entregue a um POd rodando no mesmo Worker é necessário habilitar trafic policies.
+# O trafego so ficará no pods do mesmo node .So rotiaria para os pods do mesmo node.
+
+k create deployment --image nginx --replicas 4 nginx
+k expose deployment nginx --type=LoadBalancer --port=80 --target-port=80
+
+k get svc
+NAME         TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)        AGE
+kubernetes   ClusterIP      10.96.0.1       <none>         443/TCP        44m
+nginx        LoadBalancer   10.96.247.192   172.17.0.241   80:30340/TCP   2m7s
+
+
+k get endpointslices.discovery.k8s.io
+NAME          ADDRESSTYPE   PORTS   ENDPOINTS                                         AGE
+kubernetes    IPv4          6443    172.17.0.2                                        43m
+nginx-t9tfk   IPv4          80      10.244.0.23,10.244.0.22,10.244.0.24 + 1 more...   48s
+
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+/ # apk add curl
+
+# Se eu acessar o Ip do ClusterIP ele irá rotear o tráfego entre todos os 4 Pods
+curl -I http://10.96.247.192
+
+k get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+apline                   1/1     Running   0          2m30s
+nginx-676b6c5bbc-8kggb   1/1     Running   0          4m37s
+nginx-676b6c5bbc-n4slr   1/1     Running   0          4m37s
+nginx-676b6c5bbc-pbmjh   1/1     Running   0          4m37s
+nginx-676b6c5bbc-xkmqp   1/1     Running   0          4m37s
+
+# Abrir 4 terminais
+k logs nginx-676b6c5bbc-8kggb -f
+k logs nginx-676b6c5bbc-n4slr -f
+k logs nginx-676b6c5bbc-pbmjh -f
+k logs nginx-676b6c5bbc-xkmqp -f
+
+# Requisiçoes irão chegar em todos os POds , mesmo que esses Pods estejam em outros Workers
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+apk add curl
+while true; do curl -I http://10.96.247.192; done
+
+# ======================= Configurando Trafic Policy ==============================
+
+# Como saber a politica padrao do TrafficPolicies?
+#
+# O Padrao é "Cluster", altere para "Local"
+
+k get svc nginx -o yaml
+
+spec:
+  allocateLoadBalancerNodePorts: true
+  clusterIP: 10.96.247.192
+  clusterIPs:
+  - 10.96.247.192
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+
+# Altere para Local
+k neat <<< $(k get svc nginx -o yaml) > svc.yaml
+
+  externalTrafficPolicy: Local
+  internalTrafficPolicy: Local
+
+# =========================== Debung Trafic Policy =================================
+
+iptables-save > /tmp/iptables
+
+egrep '172.17.0.241' /tmp/iptables
+-A KUBE-SERVICES -d 172.17.0.241/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
+
+
+egrep 'KUBE-EXT-2CMXP7HKUVJN7L6M' /tmp/iptables
+:KUBE-EXT-2CMXP7HKUVJN7L6M - [0:0]
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -s 10.244.0.0/16 -m comment --comment "pod traffic for default/nginx external destinations" -j KUBE-SVC-2CMXP7HKUVJN7L6M
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -m comment --comment "masquerade LOCAL traffic for default/nginx external destinations" -m addrtype --src-type LOCAL -j KUBE-MARK-MASQ
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -m comment --comment "route LOCAL traffic for default/nginx external destinations" -m addrtype --src-type LOCAL -j KUBE-SVC-2CMXP7HKUVJN7L6M
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -j KUBE-SVL-2CMXP7HKUVJN7L6M
+-A KUBE-NODEPORTS -d 127.0.0.0/8 -p tcp -m comment --comment "default/nginx" -m tcp --dport 30655 -m nfacct --nfacct-name  localhost_nps_accepted_pkts -j KUBE-EXT-2CMXP7HKUVJN7L6M
+-A KUBE-NODEPORTS -p tcp -m comment --comment "default/nginx" -m tcp --dport 30655 -j KUBE-EXT-2CMXP7HKUVJN7L6M
+-A KUBE-SERVICES -d 172.17.0.241/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
+
+# Agora o roteamento é apenas para os Pod pertencentes ao mesmo Worker.
+
+egrep 'KUBE-SVL-2CMXP7HKUVJN7L6M' /tmp/iptables
+-A KUBE-SVL-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.6:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-C4VXQDW52UV45WW3
+-A KUBE-SVL-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.7:80" -j KUBE-SEP-DST4PJJC54MIXJRG
+
+# Requisiçoes irão chegar apenas nos Pods do mesmo Node
+#
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+apk add curl
+while true; do curl -I http://10.96.247.192; done
+```
+
+# 🚀 Create Object - Deploy Types
+
+```bash
+Canary Deploy ( Raiz )
+
+( Joao ) => LoadBalance
+               |
+               |
+               |
+        -----------------
+        |                |
+        |                |
+        |                |
+       80%( v1/old )   20%( v2/new )
+
+# Gerando Modelo
+k neat <<< $(k create deployment --image nginx --replicas 0 nginx-blue --dry-run=client -o yaml)
+
+# Criar 2 Deployments sendo blue com 1 replica e green com 9 replicas
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-blue
+  name: nginx-blue
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: httpd
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-green
+  name: nginx-green
+spec:
+  replicas: 9
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: httpd
+        name: nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+  type: LoadBalancer
+EOF
+
+# Todos Pods entra no mesmo Pool
+selector:
+  app: nginx
+
+
+k get deployments.apps
+NAME          READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-blue    1/1     1            1           38s
+nginx-green   9/9     9            9           38s
+
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+apk add curl
+
+i=0; while [[ $i -le 10 ]]; do echo $i; curl nginx -I; let i=i+1; done
+
+# Forcar cada requisição criar uma nova conexão TCP, cada requisição 1 Pod
+# keep-alive     → reutiliza conexão → mesmo pod
+# --no-keepalive → nova conexão      → novo pod
+
+i=0; while [[ $i -le 10 ]]; do echo $i; curl -s -I --no-keepalive nginx | grep nginx; let i=i+1; done
+
+...
+...
+
+9
+HTTP/1.1 200 OK
+Server: nginx/1.29.8
+Date: Tue, 14 Apr 2026 14:16:28 GMT
+Content-Type: text/html
+Content-Length: 896
+Last-Modified: Tue, 07 Apr 2026 11:37:12 GMT
+Connection: close
+ETag: "69d4ec68-380"
+Accept-Ranges: bytes
+
+10
+HTTP/1.1 200 OK
+Date: Tue, 14 Apr 2026 14:16:28 GMT
+Server: Apache/2.4.66 (Unix)
+Last-Modified: Fri, 07 Nov 2025 08:23:08 GMT
+ETag: "bf-642fce432f300"
+Accept-Ranges: bytes
+Content-Length: 191
+Connection: close
+Content-Type: text/html
+```
+
+# 🚀 Create Object - Blue Green
 
 ```bash
 ```
