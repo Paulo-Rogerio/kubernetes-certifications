@@ -2253,34 +2253,70 @@ k delete svc url-remota
 # 🚀 Create Object - Trafic Policy
 
 ```bash
-# Essa feacture é interessante quando temos um app critica que requer performance.
-
-# Trafic Policies , num cenário com LoadBalancer as requisiçoes atendidas pelo IP externo, ao cairem dentro de um Node,
-# é enviada para um ClusterIP para que esse possa rotear o tráfego entre os Pods.
-
-# Para listar todos os Pods que atendem, basta lista os endpoint e identificar os nodes que atenderiam a request.
+# Essa feature é interessante quando temos aplicações críticas que requerem performance.
 #
-
+# As Traffic Policies, em um cenário com LoadBalancer, funcionam da seguinte forma:
+#
+# As requisições chegam pelo IP externo do LoadBalancer e são recebidas por um Node do cluster.
+# Ao entrar no Node, o tráfego é direcionado para o Service (ClusterIP), e a partir daí o kube-proxy entra em # ação para decidir qual Pod irá atender a requisição.
+#
+# Para visualizar os Pods disponíveis, podemos listar os EndpointSlices:
+#
 k get endpointslices.discovery.k8s.io
 NAME         ADDRESSTYPE   PORTS   ENDPOINTS    AGE
 kubernetes   IPv4          6443    172.17.0.2   27m
 
-# A treta é que nesse cenário quando Endpoint vai destinar qual POd irá atender a requisição , ele pode me encaminhar
-# para um Pod que esteja rodando em outro Node.
+# Esses endpoints apenas informam quais Pods estão disponíveis para o Service.
 #
-# Isso garante que o cluster fiquem mais resiliente, distribuindo as requisiçoes entre todos os POds.
+# Funcionamento do roteamento
 #
-# Porém vc precisa ter em mente que isso acontece de forma natural, uma requisicao que bateu no Node A,
-# foi entregue porque Endpoint entrega ao pro ClusterIP desse Node A de forma randomica.
+# O ponto importante é que, por padrão, o kube-proxy pode encaminhar a requisição para qualquer Pod do cluster, independentemente do Node onde ele esteja rodando.
 #
-# A questao é quando chega no Node no qual está rodando o Pod, o Kube-Proxy entra em ação.
-# As regras definidas no Iptables redirecionará a requisição para o Pod que está rodando no Cluster B.
+# Ou seja:
 #
-# Por ser uma cominicação Local ( Dentro de um mesmo backbone ) isso nao pode ser um problema. Isso pode ser um problema,
-# Se tivermos cluster rodando em regioes distintas com latencia alta.
+# A requisição pode chegar no Node-A e ser encaminhada para um Pod no Node-B
 #
-# Mas caso queira que a conexao seja entregue a um POd rodando no mesmo Worker é necessário habilitar trafic policies.
-# O trafego so ficará no pods do mesmo node .So rotiaria para os pods do mesmo node.
+# Isso garante maior resiliência e distribuição de carga entre os Pods.
+#
+# Como isso acontece internamente
+#
+# O kube-proxy, rodando no Node (não dentro dos Pods), programa regras de iptables no kernel do sistema operacional.
+#
+# Essas regras fazem o balanceamento de carga utilizando probabilidade, por exemplo:
+#
+#Ex: 33% das requisicoes atendidas por esse Pod.
+
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.5:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-IZW656N5ZXYN5BEC
+
+# Isso significa que aproximadamente 33% das requisições serão encaminhadas para esse Pod específico.
+#
+# Impacto de rede
+#
+#Como essa comunicação ocorre dentro da rede do cluster, normalmente (mesma VPC ou datacenter) isso não é um problema relevante.
+#
+# Porém, pode se tornar um problema quando:
+#
+# O cluster está distribuído entre múltiplas zonas ou regiões
+# Existe latência significativa entre os Nodes
+#
+# Nesse caso, uma requisição que chega no Node A pode acabar sendo atendida por um Pod no Node B, gerando:
+#
+# Aumento de latência
+# Maior consumo de rede
+# Possível impacto em aplicações sensíveis a tempo de resposta
+#
+# Nesse modo:
+#
+# O tráfego é encaminhado apenas para Pods locais ao Node
+# Evita tráfego entre Nodes
+# Preserva o IP de origem do cliente
+#
+# Por outro lado:
+#
+# Se não houver Pod local, a requisição pode falhar
+# O balanceamento global entre Pods fica menos eficiente
+#
+# De forma pratica
 
 k create deployment --image nginx --replicas 4 nginx
 k expose deployment nginx --type=LoadBalancer --port=80 --target-port=80
@@ -2375,7 +2411,7 @@ apk add curl
 while true; do curl -I http://10.96.247.192; done
 ```
 
-# 🚀 Create Object - Deploy Types
+# 🚀 Create Object - Deploy Canary
 
 ```bash
 Canary Deploy ( Raiz )
@@ -2499,9 +2535,15 @@ Connection: close
 Content-Type: text/html
 ```
 
-# 🚀 Create Object - Blue Green
+# 🚀 Create Object - Deploy Blue Green
 
 ```bash
+# Blue-Green Deploy ( Raiz )
+#
+# Subo toda a infra da aplicação em outros Pods e faço o switch da aplicação no LoadBalancer.
+#
+# Para fazer o switch basta alterar o selector para blue
+
 ```
 
 
