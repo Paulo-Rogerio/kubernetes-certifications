@@ -2540,12 +2540,125 @@ Content-Type: text/html
 ```bash
 # Blue-Green Deploy ( Raiz )
 #
-# Subo toda a infra da aplicação em outros Pods e faço o switch da aplicação no LoadBalancer.
-#
-# Para fazer o switch basta alterar o selector para blue
+# Subo toda a infra da aplicação em outros Pods e faço o switch da aplicação no seletor do Service.
 
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-blue
+  name: nginx-blue
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: nginx-blue-service
+  template:
+    metadata:
+      labels:
+        app: nginx-blue-service
+    spec:
+      containers:
+      - image: httpd
+        name: httpd
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-green
+  name: nginx-green
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: nginx-green-service
+  template:
+    metadata:
+      labels:
+        app: nginx-green-service
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx-blue-service
+  type: LoadBalancer
+EOF
+
+k get deployments.apps
+NAME          READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-blue    5/5     5            5           99s
+nginx-green   5/5     5            5           99s
+
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+apk add curl
+
+# Blue representa o apache
+
+/ # i=0; while [[ $i -le 10 ]]; do curl -sSL nginx -I | grep Server; let i=i+1; done
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx-green-service
+  type: LoadBalancer
+EOF
+
+# Green representa o nginx
+
+/ # i=0; while [[ $i -le 10 ]]; do curl -sSL nginx -I | grep Server; let i=i+1; done
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
 ```
 
+# 🚀 Create Object - Ingress Controller
+
+```bash
+```
 
 # 🚀 Create Object - Affinity
 
