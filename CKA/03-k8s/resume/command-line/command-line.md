@@ -2284,7 +2284,7 @@ kubernetes   IPv4          6443    172.17.0.2   27m
 #
 # Essas regras fazem o balanceamento de carga utilizando probabilidade, por exemplo:
 #
-#Ex: 33% das requisicoes atendidas por esse Pod.
+# Ex: 33% das requisicoes atendidas por esse Pod.
 
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.5:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-IZW656N5ZXYN5BEC
 
@@ -2656,6 +2656,220 @@ Server: nginx/1.27.3
 ```
 
 # 🚀 Create Object - Ingress Controller
+
+```bash
+                 Usuário ( http://app.meudominio.com.br)
+                                    |
+                                    |
+                         -----------------------
+                            SVC - LoadBalancer
+                         -----------------------
+                                    |
+                                    |
+                         -----------------------
+                         Pod Ingress - Resources
+                         -----------------------
+                                    |
+                                    |
+                         -----------------------
+                             SVC - ClusterIP
+                         -----------------------
+                                    |
+                                    |
+                        ------------------------
+                        |           |          |
+                        |           |          |
+                      -----       -----      -----
+                       POD         POD        POD
+                      -----       -----      -----
+
+# O Ingress é uma aplicação que precisa ser deployadas no cluster.
+# O Serviçe LoadBalancer, entrega as requisiçoes para (Pod do Ingress). Todos os DNS ( app.demo.com ) serão resolvidas pelo LoadBalancer.
+# Quando meu manifesto yaml cria um ingress, ele adiciona uma regra de acesso ao ingress Resource.
+# Ele na real cria um virtual host no Pod do Ingress Resource ( dinamicamente )
+# O Ingress por sua vez , redireciona para o service da aplicação ( ClusterIP )
+# O Ingress é um proxy-reverso
+
+# Ingress Mantido pelo propria Corporação F5 Nginx
+https://docs.nginx.com/nginx-ingress-controller/
+
+# Ingress mantido pela comunidade ( OpenSource )
+https://kubernetes.github.io/ingress-nginx/
+
+# Esse ingress mantido pela comunidade resolve e podemos usa-lo para deployar.
+# Como estou usando MetalLB para simular o L.B, posso baixar o manifesto yaml e substituir o service
+# ( NodePort por LoadBalancer ).
+
+curl -sSL https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.15.1/deploy/static/provider/baremetal/deploy.yaml | sed 's/NodePort/LoadBalancer/' | | k apply -f -
+
+# Instalando via Helm
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+helm install ingress-nginx ingress-nginx/ingress-nginx --set controller.service.type=LoadBalancer
+
+# Check Instalação
+k get pod -n ingress-nginx
+NAME                                        READY   STATUS      RESTARTS   AGE
+ingress-nginx-admission-create-p6hvd        0/1     Completed   0          53m
+ingress-nginx-admission-patch-ffrmd         0/1     Completed   0          53m
+ingress-nginx-controller-68697cf9d9-gntwb   1/1     Running     0          53m
+
+k get svc -n ingress-nginx
+NAME                                 TYPE           CLUSTER-IP       EXTERNAL-IP    PORT(S)                      AGE
+ingress-nginx-controller             LoadBalancer   10.101.12.218    172.17.0.240   80:31168/TCP,443:30256/TCP   53m
+ingress-nginx-controller-admission   ClusterIP      10.108.227.154   <none>         443/TCP                      53m
+
+# Porque o curl retornou 404, sendo que tenho deployado o Ingress Controller?
+# R: Ainda não foi deployado nenhum recurso ( ingress resources )
+curl -I http://172.17.0.240
+HTTP/1.1 404 Not Found
+Date: Fri, 17 Apr 2026 13:32:51 GMT
+Content-Type: text/html
+Content-Length: 146
+Connection: keep-alive
+
+# =============================== Ingress Class ====================================
+#
+# No momento da criação do meu ingress resource, eu defino qual ingress class irá me atender.
+# Isso porque eu posso ter multimplos ingress instalado no cluster.
+
+k get ingressclasses
+NAME    CONTROLLER             PARAMETERS   AGE
+nginx   k8s.io/ingress-nginx   <none>       57m
+
+**OBS.:**
+# Se eu não informa o ingressclass, a criação do ingress ficará pending.
+# Para evitar isso, posso definir o niginx comm ingressclass default.
+
+https://kubernetes.io/docs/concepts/services-networking/ingress/#ingress-class
+
+# Definir isso como anotation
+k edit ingressclasses nginx
+ingressclass.kubernetes.io/is-default-class: "true"
+
+# Ex:
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+  name: nginx
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: "true"
+spec:
+  controller: k8s.io/ingress-nginx
+
+# =============================== Criando Recurso ==================================
+
+k explain ingress.spec
+k explain ingress.spec.rules.http
+
+k create deployment --image nginx --replicas 3 nginx
+k expose deployment nginx --type=ClusterIP --port=80
+
+k get endpointslices.discovery.k8s.io
+NAME          ADDRESSTYPE   PORTS   ENDPOINTS                            AGE
+kubernetes    IPv4          6443    172.17.0.3                           69m
+nginx-9slrs   IPv4          80      10.244.1.9,10.244.1.11,10.244.1.10   32s
+
+# 1) Resolve o DNS ( nginx.demo.com => IP do LoadBalancer )
+# 2) Ao bater nesse IP, ele cai no Pod do Ingress Controller
+# 3) O Ingress vai checar nas entradas de sua conf, se ha um virtual host definido, para o path e se sim,
+# vai encaminhar para o backend rodando ( nginx )
+
+cat <<EOF | k apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meu-nginx-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "nginx.demo.com"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+EOF
+
+kubectl get svc ingress-nginx-controller -n ingress-nginx
+NAME                       TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)                      AGE
+ingress-nginx-controller   LoadBalancer   10.101.12.218   172.17.0.240   80:31168/TCP,443:30256/TCP   74m
+
+k get ingress
+NAME                CLASS   HOSTS            ADDRESS     PORTS   AGE
+meu-nginx-ingress   nginx   nginx.demo.com   localhost   80      25s
+
+# Simulando uma chamada via Vhost
+curl 172.17.0.240 -H "Host: nginx.demo.com"
+
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+html { color-scheme: light dark; }
+
+# Vc poderia criar uma entrada no ( /etc/host )
+172.17.0.240 nginx.demo.com
+curl nginx.demo.com
+
+# =============================== Traefic ==================================
+
+helm repo add traefik https://traefik.github.io/charts
+helm repo update
+helm install traefik traefik/traefik --namespace traefik --create-namespace --set logs.access.enabled=true
+helm list -A
+helm uninstall traefik -n traefik
+
+k get ingressclass
+k get svc -n traefik
+NAME      TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)                      AGE
+traefik   LoadBalancer   10.98.226.102   172.17.0.241   80:32268/TCP,443:30421/TCP   57s
+
+cat <<EOF | k apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meu-nginx-ingress
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: "nginx.demo.com"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+EOF
+
+# Check
+k get ingress
+NAME                CLASS     HOSTS            ADDRESS        PORTS   AGE
+meu-nginx-ingress   traefik   nginx.demo.com   172.17.0.241   80      11m
+
+# Testando
+curl 172.17.0.241 -I -H "Host: nginx.demo.com"
+HTTP/1.1 200 OK
+Accept-Ranges: bytes
+Content-Length: 896
+Content-Type: text/html
+Date: Fri, 17 Apr 2026 14:01:36 GMT
+Etag: "69d4ec68-380"
+Last-Modified: Tue, 07 Apr 2026 11:37:12 GMT
+Server: nginx/1.29.8
+```
+
+# 🚀 Create Object - Ingress Múltiplos Services
 
 ```bash
 ```
