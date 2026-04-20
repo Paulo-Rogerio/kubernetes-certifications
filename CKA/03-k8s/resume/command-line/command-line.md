@@ -2869,6 +2869,279 @@ Last-Modified: Tue, 07 Apr 2026 11:37:12 GMT
 Server: nginx/1.29.8
 ```
 
+# 🚀 Create Object - Ingress Nginx Rewrite
+
+```bash
+
+Para exemplificar essa funcinalidade do ingress, vamos criar um ambiente mais simples e ir ajustando os paths e o rewrite.
+
+k create deployment --image nginx --replicas 3 nginx
+k expose deployment nginx --type=ClusterIP --port=80 --target-port=80
+
+k get endpointslices.discovery.k8s.io
+NAME          ADDRESSTYPE   PORTS   ENDPOINTS                            AGE
+kubernetes    IPv4          6443    172.17.0.2                           12m
+nginx-28qhs   IPv4          80      10.244.1.11,10.244.1.9,10.244.1.10   11s
+
+
+cat <<EOF | k apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meu-nginx-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+EOF
+
+k get ingress
+NAME                CLASS   HOSTS   ADDRESS   PORTS   AGE
+meu-nginx-ingress   nginx   *                 80      4s
+
+k get svc -n ingress-nginx
+NAME                                 TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)                      AGE
+ingress-nginx-controller             LoadBalancer   10.102.19.83    172.17.0.240   80:31519/TCP,443:31037/TCP   12m
+
+# Porque nao foi especififcado hosts?
+
+  rules:
+  - host: "nginx.demo.com"
+    http:
+      paths:
+      - path: /
+    ...
+    ...
+    ...
+
+# Quando é especificado o campo "Host" no manifesto, o Ingress cria uma regra específica.
+# Só roteie se o header HTTP Host for "nginx.demo.com".
+# curl 172.17.0.241 -H "Host: nginx.demo.com" => Assim eu forco o Header
+#
+# Ex:
+server {
+    server_name nginx.demo.com;
+}
+
+# Quando NÂO especifico o campo "Host" , o ingress cria uma regra Genérica ( catch-all )
+# Aceita qualquer Host
+#
+# Esse _ é o default server / catch-all
+# Ex:
+server {
+    server_name _;
+}
+
+
+# Desta forma estou acessando o nginx do Ingress Controller.
+curl 172.17.0.240 -I
+HTTP/1.1 200 OK
+Date: Mon, 20 Apr 2026 13:11:25 GMT
+Content-Type: text/html
+Content-Length: 896
+Connection: keep-alive
+Last-Modified: Tue, 07 Apr 2026 11:37:12 GMT
+ETag: "69d4ec68-380"
+Accept-Ranges: bytes
+
+
+# Se precisar definir uma rota? Ex: /nginx
+# O Pod teria que que está apto a trbalhar nessa rota tbm?
+# Sempre que informar um /nginx quero que seja redirecionado para o container do Nginx
+# Quero que o redirecionamento seja na base do path e nao em base no host.
+
+cat <<EOF | k apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meu-nginx-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /nginx
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+EOF
+
+k describe ingress meu-nginx-ingress
+Name:             meu-nginx-ingress
+Labels:           <none>
+Namespace:        default
+Address:          localhost
+Ingress Class:    nginx
+Default backend:  <default>
+Rules:
+  Host        Path  Backends
+  ----        ----  --------
+  *
+              /nginx   nginx:80 (10.244.1.11:80,10.244.1.9:80,10.244.1.10:80)
+Annotations:  <none>
+Events:
+  Type    Reason  Age                 From                      Message
+  ----    ------  ----                ----                      -------
+  Normal  Sync    117s (x3 over 19m)  nginx-ingress-controller  Scheduled for sync
+
+# DEU RUIM....
+
+curl 172.17.0.240 -I
+HTTP/1.1 404 Not Found
+Date: Mon, 20 Apr 2026 13:29:21 GMT
+Content-Type: text/html
+Content-Length: 146
+Connection: keep-alive
+
+curl 172.17.0.240/nginx -I
+HTTP/1.1 404 Not Found
+Date: Mon, 20 Apr 2026 13:29:34 GMT
+Content-Type: text/html
+Content-Length: 153
+Connection: keep-alive
+
+# 1) A requisicao está chegando no Pod ?
+
+NAME                     READY   STATUS    RESTARTS   AGE
+nginx-66686b6766-r2njd   1/1     Running   0          29m
+nginx-66686b6766-x99qp   1/1     Running   0          29m
+nginx-66686b6766-xsxgz   1/1     Running   0          29m
+
+k logs nginx-66686b6766-xsxgz
+
+2026/04/20 13:02:03 [notice] 1#1: start worker process 43
+2026/04/20 13:02:03 [notice] 1#1: start worker process 44
+2026/04/20 13:02:03 [notice] 1#1: start worker process 45
+2026/04/20 13:02:03 [notice] 1#1: start worker process 46
+2026/04/20 13:02:03 [notice] 1#1: start worker process 47
+10.244.1.5 - - [20/Apr/2026:13:11:25 +0000] "HEAD / HTTP/1.1" 200 0 "-" "curl/8.5.0" "10.244.1.1"
+10.244.1.5 - - [20/Apr/2026:13:29:34 +0000] "HEAD /nginx HTTP/1.1" 404 0 "-" "curl/8.5.0" "10.244.1.1"
+2026/04/20 13:29:34 [error] 37#37: *2 open() "/usr/share/nginx/html/nginx" failed (2: No such file or directory), client: 10.244.1.5, server: localhost, request: "HEAD /nginx HTTP/1.1", host: "172.17.0.240"
+
+
+# Ele tentou abrir uma pasta chamada nginx em ( /usr/share/nginx/html/nginx ), isso porque ele tentou uma rota /nginx
+
+
+#=========================== O que de fato queriamos? ==============================
+#
+# Ao acessar o /nginx o controller do nginx, deveria remover o "/nginx" da requisição e encaminhar para o pode correto no "/"
+# Esse erro aconteceu porque a imagem não tem o path /nginx definido para responder requisição.
+#
+# Precisamos Reescrever o Path da Rotas
+
+https://kubernetes.github.io/ingress-nginx/
+https://kubernetes.github.io/ingress-nginx/examples/rewrite/
+
+# Anotations injeta configurações ( Comportamento do Nginx )
+
+# Tudo que começar com /nginx deve ir para o service nginx, mas reescrevendo a URL antes de enviar.
+# nginx.ingress.kubernetes.io/use-regex: "true", Ativa interpretação de regex no path.
+# Sem isso, /nginx(/|$)(.*) seria tratado como string literal.
+#
+# nginx.ingress.kubernetes.io/rewrite-target: /$2
+# $2 = segundo grupo da regex → (.*)
+
+# Internamente o Nginx gera isso...
+
+location ~ /nginx(/|$)(.*) {
+    rewrite ^ /$2 break;
+    proxy_pass http://nginx-service;
+}
+
+
+| URL externa   | Vai virar internamente |
+| --------------| ---------------------- |
+| /nginx        | /                      |
+| /nginx/       | /                      |
+| /nginx/teste  | /teste                 |
+| /nginx/api/v1 | /api/v1                |
+
+
+cat <<EOF | k apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meu-nginx-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /nginx(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+EOF
+
+k get ingress
+NAME                CLASS   HOSTS   ADDRESS     PORTS   AGE
+meu-nginx-ingress   nginx   *       localhost   80      26m
+
+
+k describe ingress meu-nginx-ingress
+Name:             meu-nginx-ingress
+Labels:           <none>
+Namespace:        default
+Address:          localhost
+Ingress Class:    nginx
+Default backend:  <default>
+Rules:
+  Host        Path  Backends
+  ----        ----  --------
+  *
+              /nginx(/|$)(.*)   nginx:80 (10.244.1.11:80,10.244.1.9:80,10.244.1.10:80)
+Annotations:  nginx.ingress.kubernetes.io/rewrite-target: /
+              nginx.ingress.kubernetes.io/use-regex: true
+Events:
+  Type    Reason  Age                From                      Message
+  ----    ------  ----               ----                      -------
+  Normal  Sync    34s (x4 over 26m)  nginx-ingress-controller  Scheduled for sync
+
+curl 172.17.0.240/nginx -I
+
+HTTP/1.1 200 OK
+Date: Mon, 20 Apr 2026 13:36:23 GMT
+Content-Type: text/html
+Content-Length: 896
+Connection: keep-alive
+Last-Modified: Tue, 07 Apr 2026 11:37:12 GMT
+ETag: "69d4ec68-380"
+Accept-Ranges: bytes
+
+
+# Annotations influenciam o comportamento do Ingress Controller, mas não são o que definem o Ingress por completo.
+spec:
+  rules:
+  - host:
+    http:
+      paths:
+
+# Isso define:
+# - quem recebe a requisição
+# - para onde ela vai (service)
+# - paths e hosts
+
+# Annotations (dependem do controller) - rotas extras
+# Annotations customizam o comportamento do Ingress
+```
+
 # 🚀 Create Object - Ingress Múltiplos Services
 
 ```bash
