@@ -3303,7 +3303,477 @@ k patch svc httpd -p '{"spec":{"selector":{"app":"httpd"}}}'
 # 🚀 Create Object - Ingress TLS
 
 ```bash
+https://kubernetes.io/docs/concepts/services-networking/ingress/
+
+# Gerando Certificados - Auto Assinado
+openssl req -x509 \
+  -nodes \
+  -days 365 \
+  -newkey rsa:2048 \
+  -keyout /tmp/tls.key \
+  -out /tmp/tls.crt \
+  -subj '/CN=*.prgs.corp/O=prgs' \
+  -addext 'subjectAltName = DNS:*.prgs.corp'
+
+openssl x509 -in /tmp/tls.crt -text
+
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            25:c2:90:99:20:76:8f:0a:09:9f:03:fd:a4:d9:0b:c8:27:88:17:a2
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: CN = *.prgs.corp, O = prgs
+        Validity
+            Not Before: Apr 20 19:52:06 2026 GMT
+            Not After : Apr 20 19:52:06 2027 GMT
+        Subject: CN = *.prgs.corp, O = prgs
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                Public-Key: (2048 bit)
+                Modulus:
+                    00:e6:46:b0:c6:77:4b:e0:c1:4c:cf:f6:c3:28:61:
+...
+...
+...
+
+k create deployment --image nginx --replicas 3 nginx
+k expose deployment nginx --type=ClusterIP --port=80 --target-port=80
+k get endpointslices.discovery.k8s.io
+
+cat <<EOF | k apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meu-nginx-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "nginx.prgs.corp"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+EOF
+
+k get svc -n ingress-nginx
+NAME                                 TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)                      AGE
+ingress-nginx-controller             LoadBalancer   10.102.19.83    172.17.0.240   80:31519/TCP,443:31037/TCP   7h4m
+
+# Testando Http
+curl 172.17.0.240 -H "Host: nginx.prgs.corp"
+
+# Criando Secrets
+k create secret tls prgs-domain-secret --key /tmp/tls.key --cert /tmp/tls.crt
+
+k get secrets
+NAME                 TYPE                DATA   AGE
+prgs-domain-secret   kubernetes.io/tls   2      6s
+
+k describe secrets prgs-domain-secret
+...
+...
+tls.crt:  1192 bytes
+tls.key:  1708 bytes
+
+# Recuperar Certificado
+k get secrets prgs-domain-secret -o yaml
+
+# Decriptar Certificado
+base64 -d <<< $(k get secrets prgs-domain-secret -o=jsonpath='{.data.tls\.crt}')
+
+# Isso aqui injeta TLS
+  tls:
+  - hosts:
+    - *.demo.com
+    secretName: demo-domain-secret
+
+
+cat <<EOF | k apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meu-nginx-ingress
+spec:
+  tls:
+  - hosts:
+    - "*.prgs.corp"
+    secretName: prgs-domain-secret
+  ingressClassName: nginx
+  rules:
+  - host: "nginx.prgs.corp"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+EOF
+
+k get ingress
+NAME                CLASS   HOSTS             ADDRESS     PORTS     AGE
+meu-nginx-ingress   nginx   nginx.prgs.corp   localhost   80, 443   169m
+
+k describe ingress meu-nginx-ingress
+Name:             meu-nginx-ingress
+Labels:           <none>
+Namespace:        default
+Address:          localhost
+Ingress Class:    nginx
+Default backend:  <default>
+TLS:
+  prgs-domain-secret terminates *.prgs.corp
+Rules:
+  Host             Path  Backends
+  ----             ----  --------
+  nginx.prgs.corp
+                   /   nginx:80 (10.244.1.16:80,10.244.1.15:80,10.244.1.17:80)
+Annotations:       <none>
+Events:
+  Type    Reason  Age                 From                      Message
+  ----    ------  ----                ----                      -------
+  Normal  Sync    35s (x5 over 169m)  nginx-ingress-controller  Scheduled for sync
+
+
+# Query feita via http sendo redirecionada para https
+curl 172.17.0.240 -I -H "Host: nginx.prgs.corp";
+HTTP/1.1 308 Permanent Redirect
+Date: Mon, 20 Apr 2026 20:15:07 GMT
+Content-Type: text/html
+Content-Length: 164
+Connection: keep-alive
+Location: https://nginx.prgs.corp
+
+# Query feita via https ( -L / -k )
+# Para que este teste funcione e necessário adicionar entrada no ( /etc/hosts )
+curl 172.17.0.240 -k -I -L -H "Host: nginx.prgs.corp"
+
+HTTP/1.1 308 Permanent Redirect
+Date: Mon, 20 Apr 2026 20:19:49 GMT
+Content-Type: text/html
+Content-Length: 164
+Connection: keep-alive
+Location: https://nginx.prgs.corp
+
+HTTP/2 200
+date: Mon, 20 Apr 2026 20:19:49 GMT
+content-type: text/html
+content-length: 896
+last-modified: Tue, 07 Apr 2026 11:37:12 GMT
+etag: "69d4ec68-380"
+accept-ranges: bytes
+strict-transport-security: max-age=31536000; includeSubDomains
+
+# Ou se preferir pode definir isso na query, forcando o curl a resolver o Nome.
+# Aqui não tem redirect, o curl já conversa via https.
+curl -k -I -L \
+  --resolve nginx.prgs.corp:443:172.17.0.240 \
+  https://nginx.prgs.corp
+
+HTTP/2 200
+date: Mon, 20 Apr 2026 20:22:30 GMT
+content-type: text/html
+content-length: 896
+last-modified: Tue, 07 Apr 2026 11:37:12 GMT
+etag: "69d4ec68-380"
+accept-ranges: bytes
+strict-transport-security: max-age=31536000; includeSubDomains
 ```
+
+# 🚀 Create Object - ConfigMap Vs Secrets
+
+```bash
+
+# Configmap e Secrets => Objetos do Kubernetes
+#
+# Configmap => Composto por key=value
+# Secrets   => Key armazenada no formato base64
+#
+# Ambos injetam dados para dentro de um Pod.
+#
+# Como injetar isso dentro do Pod?
+# - Variavies de Ambiente
+# - Montar-lo como arquivo dentro do filesystem
+# - Um secret geralmente vira um arquivo de texto ( Ex: Vault )
+#
+# Obs.: Secret não está encripitado, está apenas encodado ( base64 )
+
+```
+
+# 🚀 Create Object - ConfigMap
+
+```bash
+k get cm -n kube-system
+NAME                                                   DATA   AGE
+coredns                                                1      7h35m
+extension-apiserver-authentication                     6      7h35m
+kube-apiserver-legacy-service-account-token-tracking   1      7h35m
+kube-proxy                                             2      7h35m
+kube-root-ca.crt                                       1      7h35m
+kubeadm-config                                         1      7h35m
+kubelet-config                                         1      7h35m
+
+
+k get cm -n kube-system coredns -o yaml | k neat
+apiVersion: v1
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health {
+           lameduck 5s
+        }
+        ready
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+           pods insecure
+           fallthrough in-addr.arpa ip6.arpa
+           ttl 30
+        }
+        prometheus :9153
+        forward . /etc/resolv.conf {
+           max_concurrent 1000
+        }
+        cache 30 {
+           disable success cluster.local
+           disable denial cluster.local
+        }
+        loop
+        reload
+        loadbalance
+    }
+kind: ConfigMap
+metadata:
+  name: coredns
+  namespace: kube-system
+
+# Corefile => Representa a minha chave
+# Tudo que está depois do  "|" é o conteudo ( Multi line )
+
+k create configmap --help
+k create configmap my-config --from-literal=key1=config1 --from-literal=key2=config2
+
+k get cm
+
+k get cm my-config -o yaml
+apiVersion: v1
+data:
+  key1: config1
+  key2: config2
+kind: ConfigMap
+metadata:
+  creationTimestamp: "2026-04-20T20:33:35Z"
+  name: my-config
+  namespace: default
+  resourceVersion: "17859"
+  uid: d13be0b6-a1c1-4951-9719-55a6341a656a
+
+# Deletar um configmap
+k delete cm my-config
+
+https://kubernetes.io/docs/concepts/configuration/configmap/
+
+# Gerando um modelo
+k neat <<< $(k create deployment --image nginx --replicas 1 nginx --dry-run=client -o yaml)
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        env:
+          - name: VHOSTS_PAULO
+            valueFrom:
+              configMapKeyRef:
+                name: virtualhost
+                key: nginx.prgs.corp
+          - name: API_URL
+            valueFrom:
+              configMapKeyRef:
+                  name: virtualhost
+                  key: api.prgs.corp
+EOF
+
+# Se alguma coisa estiver errada?
+NAME                    READY   STATUS                       RESTARTS   AGE
+nginx-96b46d48d-h6ft2   0/1     CreateContainerConfigError   0          8s
+
+# Pegando Os enventos
+k describe pod nginx-96b46d48d-h6ft2
+
+# O erro ocorreu porque não foi definido o configmap
+
+Events:
+  Type     Reason     Age               From               Message
+  ----     ------     ----              ----               -------
+  Normal   Scheduled  56s               default-scheduler  Successfully assigned default/nginx-96b46d48d-h6ft2 to prgs-worker
+  Normal   Pulled     54s               kubelet            Successfully pulled image "nginx" in 1.244s (1.244s including waiting). Image size: 62960006 bytes.
+  Normal   Pulled     52s               kubelet            Successfully pulled image "nginx" in 1.679s (1.679s including waiting). Image size: 62960006 bytes.
+  Normal   Pulled     40s               kubelet            Successfully pulled image "nginx" in 1.247s (1.247s including waiting). Image size: 62960006 bytes.
+  Normal   Pulled     23s               kubelet            Successfully pulled image "nginx" in 1.383s (1.383s including waiting). Image size: 62960006 bytes.
+  Normal   Pulling    9s (x5 over 56s)  kubelet            Pulling image "nginx"
+  Warning  Failed     8s (x5 over 54s)  kubelet            Error: configmap "virtualhost" not found
+  Normal   Pulled     8s                kubelet            Successfully pulled image "nginx" in 1.25s (1.25s including waiting). Image size: 62960006 bytes.
+
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: virtualhost
+data:
+  vhost: "prgs.corp"
+  api_url: "https://api.prgs.corp"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        env:
+          - name: VHOSTS_PAULO
+            valueFrom:
+              configMapKeyRef:
+                name: virtualhost
+                key: vhost
+          - name: API_URL
+            valueFrom:
+              configMapKeyRef:
+                  name: virtualhost
+                  key: api_url
+EOF
+
+
+# Recuperar Nome do Pod
+k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
+
+# Executando e extraindo as variaveis
+k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- env | egrep 'VHOSTS_PAULO|API_URL'
+VHOSTS_PAULO=prgs.corp
+API_URL=https://api.prgs.corp
+
+# Deletando Tudo
+k delete deployments.apps nginx && k delete cm virtualhost
+
+#============================= ConfigMap SubPaths ==================================
+
+# Gerando um modelo
+k neat <<< $(k create deployment --image nginx --replicas 1 nginx --dry-run=client -o yaml)
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: virtualhost
+data:
+  vhost: "prgs.corp"
+  api_url: "https://api.prgs.corp"
+  index.html: |
+    <html>
+      <h1>
+        Index.html Prgs Corp
+      </h1>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        env:
+           - name: VHOSTS_PAULO
+             valueFrom:
+               configMapKeyRef:
+                  name: virtualhost
+                  key: vhost
+           - name: API_URL
+             valueFrom:
+                configMapKeyRef:
+                   name: virtualhost
+                   key: api_url
+        volumeMounts:
+        - name: index-html
+          mountPath: "/usr/share/nginx/html"
+          readOnly: true
+      volumes:
+      - name: index-html
+        configMap:
+          name: virtualhost
+          items:
+          - key: "index.html"
+            path: "index.html"
+EOF
+
+# Crie um service para expor o Pod
+k expose deployment nginx --type=ClusterIP --port=80 --target-port=80
+
+# Desta forma todos os html contido nesse diretório ( /usr/share/nginx/html ) é substituido
+
+kubectl run -i --tty --image alpine test --restart=Never --rm
+apk add curl
+curl nginx
+<html>
+  <h1>
+    Chegou Index.html novo
+  </h1>
+</html>
+
+#====================== ConfigMap SubPaths - Evitar Replace ========================
+
+# Para evitar o replace do diretório e substituirmos apenas o index.html precisamos ajustar o deployment.
+
+```
+
 
 # 🚀 Create Object - Affinity
 
