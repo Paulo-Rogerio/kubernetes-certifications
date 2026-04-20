@@ -3142,10 +3142,164 @@ spec:
 # Annotations customizam o comportamento do Ingress
 ```
 
-# 🚀 Create Object - Ingress Múltiplos Services
+# 🚀 Create Object - Ingress Múltiplos Paths
 
 ```bash
+k create deployment --image nginx --replicas 3 nginx
+k expose deployment nginx --type=ClusterIP --port=80 --target-port=80
+k create deployment --image httpd --replicas 3 httpd
+k expose deployment httpd --type=ClusterIP --port=80 --target-port=80
+
+k get endpointslices.discovery.k8s.io
+NAME          ADDRESSTYPE   PORTS   ENDPOINTS                             AGE
+httpd-cqdhd   IPv4          80      10.244.1.12,10.244.1.13,10.244.1.14   31s
+kubernetes    IPv4          6443    172.17.0.2                            4h20m
+nginx-5g2r7   IPv4          80      10.244.1.11,10.244.1.9,10.244.1.10    39s
+
+cat <<EOF | k apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meu-nginx-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /nginx(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+  - http:
+      paths:
+      - path: /httpd(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: httpd
+            port:
+              number: 80
+EOF
+
+
+k get ingress
+NAME                CLASS   HOSTS   ADDRESS     PORTS   AGE
+meu-nginx-ingress   nginx   *       localhost   80      20s
+
+curl 172.17.0.240/nginx -I
+curl 172.17.0.240/httpd -I
+
+# Outra possibilidade é expor via Virtual Host.
+
+cat <<EOF | k apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: meu-nginx-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "nginx.demo.com"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+  - host: "httpd.demo.com"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: httpd
+            port:
+              number: 80
+EOF
+
+k get ingress
+NAME                CLASS   HOSTS                           ADDRESS     PORTS   AGE
+meu-nginx-ingress   nginx   nginx.demo.com,httpd.demo.com   localhost   80      3m49s
+
+curl 172.17.0.240 -I -H "Host: nginx.demo.com"
+curl 172.17.0.240 -I -H "Host: httpd.demo.com"
+
 ```
+
+# 🚀 Create Object - Ingress Error 503
+
+```bash
+
+# Assumo aqui que o service e o deployment do httpd estejam rodando.
+
+while true; do curl 172.17.0.240 -H "Host: httpd.demo.com"; sleep 1; echo "============"; done
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>It works! Apache httpd</title>
+</head>
+<body>
+<p>It works!</p>
+</body>
+</html>
+============
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title>It works! Apache httpd</title>
+</head>
+<body>
+<p>It works!</p>
+</body>
+</html>
+============
+...
+...
+
+k get svc
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+httpd        ClusterIP   10.98.113.191   <none>        80/TCP    18m
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP   4h38m
+nginx        ClusterIP   10.96.129.112   <none>        80/TCP    18m
+
+k edit svc httpd
+
+# Alterar o nome do selector app para forcar um erro 500
+k patch svc httpd -p '{"spec":{"selector":{"app":"ui"}}}'
+
+<html>
+<head><title>503 Service Temporarily Unavailable</title></head>
+<body>
+<center><h1>503 Service Temporarily Unavailable</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+============
+<html>
+<head><title>503 Service Temporarily Unavailable</title></head>
+<body>
+<center><h1>503 Service Temporarily Unavailable</h1></center>
+<hr><center>nginx</center>
+</body>
+</html>
+============
+
+# Alterar o nome do selector app para httpd e voltar
+k patch svc httpd -p '{"spec":{"selector":{"app":"httpd"}}}'
+
+```
+
 
 # 🚀 Create Object - Affinity
 
