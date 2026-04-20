@@ -3300,6 +3300,10 @@ k patch svc httpd -p '{"spec":{"selector":{"app":"httpd"}}}'
 
 ```
 
+# 🚀 Create Object - Ingress TLS
+
+```bash
+```
 
 # 🚀 Create Object - Affinity
 
