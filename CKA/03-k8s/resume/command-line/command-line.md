@@ -3691,7 +3691,7 @@ API_URL=https://api.prgs.corp
 # Deletando Tudo
 k delete deployments.apps nginx && k delete cm virtualhost
 
-#============================= ConfigMap SubPaths ==================================
+#============================= ConfigMap Sem SubPaths ================================
 
 # Gerando um modelo
 k neat <<< $(k create deployment --image nginx --replicas 1 nginx --dry-run=client -o yaml)
@@ -3764,16 +3764,224 @@ apk add curl
 curl nginx
 <html>
   <h1>
-    Chegou Index.html novo
+    Index.html Prgs Corp
   </h1>
 </html>
 
-#====================== ConfigMap SubPaths - Evitar Replace ========================
+# Aqui é montando o volume inteiro no diretório. Sendo assim , o conteúdo total da pasta original é substituido.
+k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- ls /usr/share/nginx/html
+index.html
+
+
+#====================== ConfigMap Com SubPaths - Evitar Replace =====================
 
 # Para evitar o replace do diretório e substituirmos apenas o index.html precisamos ajustar o deployment.
+# Nessa implementação a pasta não e sobrescrita.
 
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: virtualhost
+data:
+  vhost: "prgs.corp"
+  api_url: "https://api.prgs.corp"
+  index.html: |
+    <html>
+      <h1>
+        Index.html Prgs Corp
+      </h1>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        env:
+           - name: VHOSTS_PAULO
+             valueFrom:
+               configMapKeyRef:
+                  name: virtualhost
+                  key: vhost
+           - name: API_URL
+             valueFrom:
+                configMapKeyRef:
+                   name: virtualhost
+                   key: api_url
+        volumeMounts:
+        - name: index-html
+          mountPath: "/usr/share/nginx/html/index.html"
+          subPath: "index.html"
+          readOnly: true
+      volumes:
+      - name: index-html
+        configMap:
+          name: virtualhost
+          items:
+          - key: "index.html"
+            path: "index.html"
+EOF
+
+
+# Recuperar Nome do Pod
+k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
+
+# Executando e extraindo as variaveis
+k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- env | egrep 'VHOSTS_PAULO|API_URL'
+VHOSTS_PAULO=prgs.corp
+API_URL=https://api.prgs.corp
+
+# Como foi usado subPath, o arquivo 50x.html ( Original ), se manteve
+k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- ls /usr/share/nginx/html
+50x.html  index.html
+
+# Index.html conteúdo gerido pelo configmap é substituido.
+k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- cat /usr/share/nginx/html/index.html
+<html>
+  <h1>
+    Index.html Prgs Corp
+  </h1>
+</html>
 ```
 
+# 🚀 Create Object - ConfigMap Vhost Ingress
+
+```bash
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: virtualhost
+data:
+  vhost: "prgs.corp"
+  api_url: "https://api.prgs.corp"
+  index.html: |
+    <html>
+      <h1>
+        Chegou Index.html prgs.corp
+      </h1>
+    </html>
+  index_app1.html: |
+    <html>
+      <h1>
+        Sou o Index App1
+      </h1>
+    </html>
+  vhost_app1.conf: |
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name app.prgs.corp www.prgs.corp;
+        root /usr/share/nginx/app1;
+        index index.html index.htm index.nginx-debian.html;
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        env:
+           - name: VHOSTS_PAULO
+             valueFrom:
+               configMapKeyRef:
+                  name: virtualhost
+                  key: vhost
+           - name: API_URL
+             valueFrom:
+                configMapKeyRef:
+                   name: virtualhost
+                   key: api_url
+        volumeMounts:
+        - name: index-html
+          mountPath: "/usr/share/nginx/html/index.html"
+          subPath: "index.html"
+          readOnly: true
+        - name: index-app1-html
+          mountPath: "/usr/share/nginx/app1/index.html"
+          subPath: "index.html"
+          readOnly: true
+        - name: vhost-app1-conf
+          mountPath: "/etc/nginx/conf.d/vhost.conf"
+          subPath: "vhost.conf"
+      volumes:
+        - name: index-html
+          configMap:
+            name: virtualhost
+            items:
+            - key: "index.html"
+              path: "index.html"
+        - name: index-app1-html
+          configMap:
+            name: virtualhost
+            items:
+            - key: "index_app1.html"
+              path: "index.html"
+        - name: vhost-app1-conf
+          configMap:
+            name: virtualhost
+            items:
+            - key: "vhost_app1.conf"
+              path: "vhost.conf"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prgs-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "app.prgs.corp"
+    http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+  - http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: nginx
+            port:
+              number: 80
+EOF
+
+```
 
 # 🚀 Create Object - Affinity
 
