@@ -3861,6 +3861,10 @@ k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
 
 # 🚀 Create Object - ConfigMap Vhost Ingress
 
+
+k expose deployment nginx --type=ClusterIP --port=80 --target-port=80 --dry-run=client -o yaml
+
+
 ```bash
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -3953,6 +3957,23 @@ spec:
             - key: "vhost_app1.conf"
               path: "vhost.conf"
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -3980,6 +4001,188 @@ spec:
             port:
               number: 80
 EOF
+
+k get svc -n ingress-nginx
+NAME                                 TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)                      AGE
+ingress-nginx-controller             LoadBalancer   10.110.246.62   172.17.0.240   80:31548/TCP,443:30114/TCP   5m29
+
+pod=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
+k exec -it $pod -- ls /etc/nginx/conf.d/vhost.conf
+k exec -it $pod -- cat /etc/nginx/conf.d/vhost.conf
+k exec -it $pod -- nginx -t
+k exec -it $pod -- ls /usr/share/nginx/app1/index.html
+k exec -it $pod -- cat /usr/share/nginx/app1/index.html
+
+
+k get pod -o wide
+NAME                     READY   STATUS    RESTARTS   AGE    IP            NODE          NOMINATED NODE   READINESS GATES
+nginx-5b56d896c6-4b4rh   1/1     Running   0          4m6s   10.244.1.9    prgs-worker   <none>           <none>
+
+
+kubectl run -i --tty --image alpine test --restart=Never --rm
+apk add curl
+
+# Batendo direto no Pod - Sem virtual Host
+/ # curl 10.244.1.9
+<html>
+  <h1>
+    Chegou Index.html prgs.corp
+  </h1>
+</html>
+
+# Batendo direto no Pod - Com virtual Host
+/ # curl 10.244.1.9 -H "Host: app.prgs.corp"
+<html>
+  <h1>
+    Sou o Index App1
+  </h1>
+</html
+
+
+# Batendo direto no Ingress - Sem virtual Host
+curl 172.17.0.240
+<html>
+  <h1>
+    Chegou Index.html prgs.corp
+  </h1>
+</html>
+
+# Batendo direto no Ingress - Com virtual Host
+curl 172.17.0.240 -H "Host: app.prgs.corp"
+<html>
+  <h1>
+    Sou o Index App1
+  </h1>
+</html>
+```
+
+# 🚀 Create Object - Types Secrets
+
+```bash
+k create secret --help
+
+# Available Commands:
+#   docker-registry   Cria um secret para ser utilizado com o Docker registry
+#   generic           Cria uma secret "from a local file", directory, or literal value
+#   tls               Cria uma secret do tipo TLS
+
+k create secret generic credentials --from-literal=username=admin
+k get secrets
+
+base64 -d <<< $(k get secrets credentials -o=jsonpath='{.data.username}') && echo
+
+https://kubernetes.io/docs/concepts/configuration/secret/#secret-types
+
+# Ao criar uma secret é importante checar o tipo na documentação acima, e criar conforme o k8s espera.
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secret-basic-auth
+type: kubernetes.io/basic-auth
+stringData:
+  username: admin # required field for kubernetes.io/basic-auth
+  password: t0p-Secret # required field for kubernetes.io/basic-auth
+
+
+#================================ Secrets Encode ====================================
+#
+# Ao criar um secret base64 lembra de rodar assim , para não ter quebra de linha
+#
+echo -n "segredo" | base64
+
+k create secret \
+  generic credentials \
+  --from-literal=username=admin \
+  --from-literal=password=admin \
+  --type=kubernetes.io/basic-auth \
+  --dry-run=client \
+  -o yaml
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: credentials
+type: kubernetes.io/basic-auth
+data:
+  password: YWRtaW4=
+  username: YWRtaW4=
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: virtualhost
+data:
+  vhost: "prgs.com"
+  api_url: "https://api.prgs.com"
+  index.html: |
+    <html>
+      <h1>
+        Chegou Index.html novo
+      </h1>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        env:
+           - name: VHOSTS_PAULO
+             valueFrom:
+               configMapKeyRef:
+                  name: virtualhost
+                  key: vhost
+           - name: API_URL
+             valueFrom:
+                configMapKeyRef:
+                   name: virtualhost
+                   key: api_url
+           - name: USERNAME
+             valueFrom:
+                secretKeyRef:
+                   name: credentials
+                   key: username
+        volumeMounts:
+        - name: index-html
+          mountPath: "/usr/share/nginx/html/index.html"
+          subPath: "index.html"
+          readOnly: true
+        - name: secret-password
+          mountPath: "/segredo"
+          readOnly: true
+      volumes:
+        - name: index-html
+          configMap:
+            name: virtualhost
+            items:
+            - key: "index.html"
+              path: "index.html"
+        - name: secret-password
+          secret:
+            secretName: credentials
+EOF
+
+k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- ls /
+
+# Montou-se um diretorio ( /segredo ), e la dentro os arquivos
+k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- cat /segredo/username && echo
+admin
 
 ```
 
