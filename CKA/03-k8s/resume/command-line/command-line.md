@@ -4439,6 +4439,137 @@ overlay                            466G  255G  188G  58% /data
 # Storage Classe é uma pratilheira com vários tipos de storage que posso usar.Ex: ( EFS que é o NFS da AWS , EBS, NFS, Longhorn )
 #
 # Quem faz essa mágia é o pod de controller para gerenciar esse dinamismo. Ele que cuida em criar o PV.
+#
+# Todo provisionamento dinamico terá um controller envolvido fazendo a magica...
+#
+# StoragClasses => NãO é especifico de uma namespace
+#
+# Vantagens do Volume dinamico, eu apenas escolho na prateleira qual PVC me atenderá e o resto o k8s
+# se encarrega de fazer, que é montar o PV.
+
+
+k get storageclasses
+NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  47m
+
+https://artifacthub.io/packages/helm/kvaps/nfs-server-provisioner
+
+https://medium.com/@dikkumburage/how-to-deploy-nfs-client-provionser-31407a3746c8
+
+# Não tenho que informar volumeName ( PV ) quando trabalho com volume dinamico
+#
+# Preciso informar qual storageClass
+#
+k get sc
+NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  65m
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prgs-control-plane-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 10Mi
+  storageClassName: standard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prgs-control-plane-pvc
+EOF
+
+
+# Fisicamente os dados estao sendo persistidos dentro do worker
+docker exec prgs-control-plane bash -c "ls -la /var/local-path-provisioner"
+drwxr-xr-x  3 root root 4096 Apr 23 13:06 .
+drwxr-xr-x 12 root root 4096 Apr 23 13:06 ..
+drwxrwxrwx  2 root root 4096 Apr 23 13:06 pvc-1f64a261-b8b2-4e36-a8a7-33969078cc41_default_prgs-control-plane-pvc
+
+
+# Cada pod escreveu 10 arquivos.txt no mesmo volume.
+pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
+
+while IFS= read -r pod;
+do
+  k exec $pod -- bash -c 'for i in {1..10}; do touch "/data/${HOSTNAME}-$i.txt"; done'
+done <<< "$pods"
+
+
+# Lendo
+while IFS= read -r pod;
+do
+  k exec $pod -- bash -c "ls /data"
+  echo "-------------------"
+done <<< "$pods"
+
+# Todos os Pods escrevem no volume.
+nginx-7b98f58f85-rx2r8-1.txt
+nginx-7b98f58f85-rx2r8-10.txt
+nginx-7b98f58f85-rx2r8-2.txt
+nginx-7b98f58f85-rx2r8-3.txt
+nginx-7b98f58f85-rx2r8-4.txt
+nginx-7b98f58f85-rx2r8-5.txt
+nginx-7b98f58f85-rx2r8-6.txt
+nginx-7b98f58f85-rx2r8-7.txt
+nginx-7b98f58f85-rx2r8-8.txt
+nginx-7b98f58f85-rx2r8-9.txt
+nginx-7b98f58f85-s97b7-1.txt
+nginx-7b98f58f85-s97b7-10.txt
+nginx-7b98f58f85-s97b7-2.txt
+nginx-7b98f58f85-s97b7-3.txt
+nginx-7b98f58f85-s97b7-4.txt
+nginx-7b98f58f85-s97b7-5.txt
+nginx-7b98f58f85-s97b7-6.txt
+nginx-7b98f58f85-s97b7-7.txt
+nginx-7b98f58f85-s97b7-8.txt
+nginx-7b98f58f85-s97b7-9.txt
+nginx-7b98f58f85-wq6mg-1.txt
+nginx-7b98f58f85-wq6mg-10.txt
+nginx-7b98f58f85-wq6mg-2.txt
+nginx-7b98f58f85-wq6mg-3.txt
+nginx-7b98f58f85-wq6mg-4.txt
+nginx-7b98f58f85-wq6mg-5.txt
+nginx-7b98f58f85-wq6mg-6.txt
+nginx-7b98f58f85-wq6mg-7.txt
+nginx-7b98f58f85-wq6mg-8.txt
+nginx-7b98f58f85-wq6mg-9.txt
+-------------------
+
+
+# Por ter esse mode de acesso ( ReadWriteOnce ) todos os Pods schedulados neste Node Podem escrever
+#
+# Por isso nao montou esse diretorio no outro container docker ( prgs-worker )
+#
+✅ Significa: o volume pode ser montado em modo leitura/escrita por UM NODE por vez
+✅ Compartilhamento de filesystem dentro do mesmo node, não cluster-wide.
 
 #================================== Access Modes ====================================
 
