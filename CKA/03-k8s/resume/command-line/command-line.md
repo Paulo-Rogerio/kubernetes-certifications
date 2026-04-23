@@ -4186,6 +4186,270 @@ admin
 
 ```
 
+# 🚀 Create Object - Storage PV / PVC / StorageClass
+
+```bash
+# Vamos separar o bloco storage em 3 temas:
+# - Provisionamento Dinamico
+# - Provisionamento Estático
+# - Access Modes
+#
+#========================== Provisionamento Estático  ===============================
+#
+# Neste modelo consideramos:
+                              POD
+                                |
+                                |
+                              PVC
+                                |
+                                |
+                               PV
+                                |
+                                |
+(POD Controller) =>  PVC (Persistent Volume Clain) => PV ( Persistent Volume )
+
+#
+# Infra:
+#
+# Persistent Volume ( PV ) => Precisamos de ( Objeto Persistent Volume ) , podemos ter vários tipos de persistent Volumes
+# e uma vez criado eu posso ofertar isso ao pod.
+# No persistent volume vc como admin defini o tipo, caracteristica e tamanho.
+# Isso permitirá que agora meu cluster tenha um Objeto para persistir dados.
+#
+# Um cenario comum é ter um disco externo conectado em um dos Nodes ( Worker ), e entao os nodes schedulados para rodarem.
+# Nesse node específico que tem esse disco, poderá escrever os dados nesse disco.
+# Esse tipo de provisionamento é chamado "local". Ex: Criar um PV de 100GB
+#
+# PV => Storage que estou disponibilizando
+#
+# App:
+#
+# Persistent Volume Clain ( PVC ) => Minha aplicação que quer usar esse Volume definido pelo time da infra.
+# A app entao pede ( clain ), requisita esse volume , entao ele usa esse objeto ( PVC ), um pedaço ( Ex: 5GB ).
+# Obs.:
+# O pod não fala direto com PV
+#
+# PVC é uma requisição de uma parte desse storage. Cada App terá seu PVC
+#
+
+https://kubernetes.io/docs/concepts/storage/volumes/
+
+https://kubernetes.io/docs/concepts/storage/volumes/#local
+
+# Para exemplificar iniciaremos com PV ( PersistentVolume )
+#
+# PV é global, isso quer dizer que não é atachado em NENHUM namespace.
+#
+k api-resources| grep persis
+persistentvolumeclaims              pvc          v1                                true         PersistentVolumeClaim
+persistentvolumes                   pv           v1                                false        PersistentVolume
+#
+#
+# kubectl get nodes -o custom-columns=NAME:.metadata.name,LABELS:.metadata.labels
+#
+k get node --show-labels
+NAME                 STATUS   ROLES           AGE     VERSION   LABELS
+prgs-control-plane   Ready    control-plane   6m38s   v1.34.0   beta.kubernetes.io/arch=amd64,
+                                                                beta.kubernetes.io/os=linux,
+                                                                kubernetes.io/arch=amd64,
+                                                                kubernetes.io/hostname=prgs-control-plane,
+                                                                kubernetes.io/os=linux,
+                                                                node-role.kubernetes.io/control-plane=
+prgs-worker          Ready    worker-apps     13m     v1.34.0   beta.kubernetes.io/arch=amd64,
+                                                                beta.kubernetes.io/os=linux,
+                                                                kubernetes.io/arch=amd64,
+                                                                kubernetes.io/hostname=prgs-worker,
+                                                                kubernetes.io/os=linux,
+                                                                kubernetes.io/role=worker-apps,prgs/apps=true
+
+
+# Em meu ambiente, tenho apenas 1 Node ( Control Plane ) e 1 Node ( Control Data )
+#
+docker exec prgs-worker bash -c "mkdir -p /data"
+docker exec prgs-worker bash -c "ls -la /"
+
+###################
+# Criado PV
+###################
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prgs-worker-pv
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: ""
+  local:
+    path: /data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - prgs-worker
+EOF
+
+# RECLAIM POLICY => Retain ( Não vai deletar os dados )
+# STATUS         => Available ( Disponível e não atachado e nenhum PVC )
+
+k get pv
+NAME             CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+prgs-worker-pv   1Gi        RWO            Retain           Available                          <unset>
+
+###################
+# Criado PVC
+###################
+
+https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+
+https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims
+
+# No meu ambiente kind, já é provisionado o StorageClass, mas ELE NÃO SERÁ informado ao definir o PVC
+# Se eu não definir o storageClassName, ele pegará isso de forma dinamica, pegará o default do cluster.
+#
+# Entao PRECISO deixar o storageClassName vazio, e preciso informar no campo volumeName o PV criado na fase anterior.
+#
+k explain pvc.spec.storageClassName
+
+k get sc
+NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  150m
+
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prgs-worker-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 10Mi
+  storageClassName: ""
+  volumeName: prgs-worker-pv
+EOF
+
+k get pvc
+NAME              STATUS   VOLUME           CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+prgs-worker-pvc   Bound    prgs-worker-pv   1Gi        RWO                           <unset>                 114s
+
+# O Kubernetes faz o bind do PVC com o PV assim que encontrou um match válido.
+
+k describe pvc prgs-worker-pvc
+
+# Doc para entender o Yaml
+k explain deployment.spec.template.spec
+k explain deployment.spec.template.spec.volumes
+k explain deployment.spec.template.spec.volumes | grep required
+name	<string> -required-
+
+k explain deployment.spec.template.spec.volumes.persistentVolumeClaim
+k explain deployment.spec.template.spec.volumes.persistentVolumeClaim | grep required
+claimName	<string> -required-
+
+k explain deployment.spec.template.spec.containers.volumeMounts | grep required
+mountPath	<string> -required-
+name	<string> -required-
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prgs-worker-pvc
+EOF
+
+docker exec prgs-worker bash -c "ls -la /data"
+
+pod=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
+
+k exec -it $pod -- bash -c "cd /data && for i in {1..20}; do dd if=/dev/zero of=foo.\$i bs=1MB count=1; done"
+
+k exec -it $pod -- bash -c "du -hs /data"
+
+# Não criamos um PV de 1GB e um PVC 10 MB, como ele permitiu aramazenar 20MB?
+✅  PVC não limita espaço por si só.
+✅  Local PV não tem quota ( Deve-se usar LVM com PV limitando a capacidade do bloco, ou mesmo StorageClass como Ceph (RBD) / Longhorn).
+✅  Aqui usa-se Bloco todo onde o está definido o PV. Limite real depende do storage backend.
+✅  É comportamento esperado.
+
+# E esse trecho abaixo, não deveria fazer isso?
+
+resources:
+  requests:
+    storage: 10Mi
+
+✅ Não !! Isso é um limite rígido, é apenas um requisito mínimo para binding.
+
+k exec -it $pod -- bash -c "df -h"
+Filesystem                         Size  Used Avail Use% Mounted on
+overlay                            466G  255G  188G  58% /
+tmpfs                               64M     0   64M   0% /dev
+overlay                            466G  255G  188G  58% /data
+
+
+#============================= Provisionamento Dinamico =============================
+
+                             POD
+                              |
+                              |
+                        StorageClass
+                              |
+                              |
+    (POD Controller) =>   Storage Class => ( NFS / Local Path)
+
+# App
+# Não muda em nada se comparando com ( Provisionamento Estático ) ou seja , preciso de um PVC para requisitar uma parte do storage.
+#
+# Cada App terá seu PVC.
+#
+# A mudanca é que ao criar um PVC terá um campo para que eu informe a StorageClass, a depender da storageClass, será definido e seu tipo.
+#
+# Storage Classe é uma pratilheira com vários tipos de storage que posso usar.Ex: ( EFS que é o NFS da AWS , EBS, NFS, Longhorn )
+#
+# Quem faz essa mágia é o pod de controller para gerenciar esse dinamismo. Ele que cuida em criar o PV.
+
+#================================== Access Modes ====================================
+
+# AccessModes => O PV definido ( ReadWriteOnce ) terá o disco atachado somente a um Node.
+# Eu até posso ter mais Pod lendo o mesmo disco, desde que esses Pod rodem no mesmo worker.
+#
+# PersistentVolumeReclaimPolicy => Ao ser deletado o PV, qual comportamento?
+# Sera deletado todos os dados uma vez que ja foi removido o PV ( Ao definir como Delete isso irá acontecer )
+
+```
+
 # 🚀 Create Object - Affinity
 
 ```bash
