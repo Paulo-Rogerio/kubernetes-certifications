@@ -1,3 +1,5 @@
+- [Command Line - Contexts](#-command-line---contexts)
+- [Command Line - Nodes](#-command-line---nodes)
 
 # 🚀 Command Line - Contexts
 
@@ -4578,6 +4580,11 @@ nginx-7b98f58f85-wq6mg-9.txt
 #
 # PersistentVolumeReclaimPolicy => Ao ser deletado o PV, qual comportamento?
 # Sera deletado todos os dados uma vez que ja foi removido o PV ( Ao definir como Delete isso irá acontecer )
+#
+# Cada tipo de storage suportará access Modes diferentes.
+
+https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
+
 
 ```
 
