@@ -1,5 +1,25 @@
 - [Command Line - Contexts](#-command-line---contexts)
 - [Command Line - Nodes](#-command-line---nodes)
+- [Command Line - Pods](#-command-line---pods)
+- [Create Object - Pod](#-create-object---pod)
+- [Create Object - StaticPod](#-create-object---staticpod)
+- [Create Object - Init Containers](#-create-object---init-containers)
+- [Create Object - Replace Entrypoint](#-create-object---replace-entrypoint)
+- [Create Object - Multi Containers](#-create-object---multi-containers)
+- [Create Object - Acessando Pod Sem Kubectl Via Nsenter](#-create-object---acessando-pod-sem-kubectl-via-nsenter)
+- [Create Object - Pod Lifecycle](#-create-object---pod-lifecycle)
+- [Create Object - Namespace](#-create-object---namespace)
+- [Create Object - Deployment](#-create-object---deployment)
+- [Create Object - Scale Deployment](#-create-object---scale-deployment)
+- [Create Object - Request Limits](#-create-object---request-limits)
+- [Create Object - Resources Limits](#-create-object---resources-limits)
+- [Create Object - ReplicaSet](#-create-object---replicaset)
+- [Create Object - ReplicaSet Rollout](#-create-object---replicaset-rollout)
+- [Create Object - Rollout maxSurge / maxUnavailable](#-create-object---rollout-maxsurge--maxunavailable)
+- [Create Object - Liveness / Readness Probes](#-create-object---liveness--readness-probes)
+- [Explorando Documentação - Kubectl](#-explorando-documentação---kubectl)
+
+
 
 # 🚀 Command Line - Contexts
 
@@ -868,20 +888,6 @@ spec:
       containers:
       - image: nginx
         name: nginx
-```
-
-# 🚀 Explorando Documentação - Kubectl
-
-```bash
-k explain deployment
-
-k explain deployment.metadata
-
-k explain deployment.spec
-
-k explain deployment.spec.template
-
-k explain deployment.spec.template.spec.containers
 ```
 
 # 🚀 Create Object - Liveness / Readness Probes
@@ -4688,4 +4694,18 @@ Ao aplicar o deployment irá criará outro replicaset ( replicaset2 ) com 3 novo
 Existe outras formas de deploy Ex: canary, mas nesse formato ( rolling Update ) o Replicaset1 remove (-) um pod a medida que o Replicaset2 adiciona (+) um pod.
 
 Isso permite eu fazer um UNDO para outro replicaset
+```
+
+# 🚀 Explorando Documentação - Kubectl
+
+```bash
+k explain deployment
+
+k explain deployment.metadata
+
+k explain deployment.spec
+
+k explain deployment.spec.template
+
+k explain deployment.spec.template.spec.containers
 ```
