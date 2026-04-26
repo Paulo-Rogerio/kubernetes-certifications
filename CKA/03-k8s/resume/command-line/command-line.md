@@ -17,6 +17,9 @@
 - [Create Object - ReplicaSet Rollout](#-create-object---replicaset-rollout)
 - [Create Object - Rollout maxSurge / maxUnavailable](#-create-object---rollout-maxsurge--maxunavailable)
 - [Create Object - Liveness / Readness Probes](#-create-object---liveness--readness-probes)
+- [Create Object - Daemonset](#-create-object---daemonset)
+- [Create Object - Statefullset](#-create-object---statefullset)
+- [Create Object - PDB / PodDisruptionBudget](#-create-object---pdb--poddisruptionbudget)
 - [Explorando Documentação - Kubectl](#-explorando-documentação---kubectl)
 
 
@@ -1450,7 +1453,7 @@ Events:            <none>
 #=============================================================================
 ```
 
-# 🚀 Create Object - PDB -PodDisruptionBudget
+# 🚀 Create Object - PDB / PodDisruptionBudget
 
 ```bash
 # É um objeto do cluster que garanti que um POD nunca fique indisponível
