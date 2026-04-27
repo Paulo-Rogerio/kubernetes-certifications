@@ -39,7 +39,8 @@
 - [Create Object - ConfigMap](#-create-object---configmap)
 - [Create Object - ConfigMap Vhost Ingress](#-create-object---configmap-vhost-ingress)
 - [Create Object - Types Secrets](#-create-object---types-secrets)
-- [Create Object - Storage PV / PVC / StorageClass](#-create-object---storage-pv--pvc--storageclass)
+- [Create Object - Storage PV / PVC / StorageClass](#-create-object---storage-pv--pvc--storageclass--accessmode)
+- [Create Object - Reclaim Policy PVC / StorageClass](#-create-object---reclaim-policy-pvc--storageclass)
 
 
 
@@ -4253,7 +4254,7 @@ admin
 ```
 [Índice](#-menu)
 
-# 🚀 Create Object - Storage PV / PVC / StorageClass
+# 🚀 Create Object - Storage PV / PVC / StorageClass / AccessMode
 
 ```bash
 # Vamos separar o bloco storage em 3 temas:
@@ -4650,7 +4651,850 @@ nginx-7b98f58f85-wq6mg-9.txt
 
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
 
+# ReadWriteOnce ( RWO ) => Eu até posso ter mais Pod lendo o mesmo disco/volume,
+# desde que esses POd rodem no mesmo worker, ou storage seja compartilhado NFS.
+#
+# ReadWriteMany ( RWX ) => Casa da mãe Joana ( Todo mundo pode tudo )
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prgs-worker-claim
+spec:
+  accessModes:
+    - ReadWriteMany
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 10Mi
+  storageClassName: standard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prgs-worker-claim
+EOF
+
+# Ao tentar aplicar o manifesto , será schedulado o kube-scheduler irá tentar distribuir a carga entre os membro do cluster.
+# O que acontecerá nesse cenário acima?
+
+k describe pvc prgs-worker-claim
+
+Events:
+  Type     Reason                Age                From                                                                                                Message
+  ----     ------                ----               ----                                                                                                -------
+  Normal   WaitForFirstConsumer  30s                persistentvolume-controller                                                                         waiting for first consumer to be created before binding
+  Normal   Provisioning          15s (x2 over 30s)  rancher.io/local-path_local-path-provisioner-57c5987fd4-m2f5m_840e8c44-e7d9-427b-93e5-a2b88ac268c5  External provisioner is provisioning volume for claim "default/prgs-worker-claim"
+  Warning  ProvisioningFailed    15s (x2 over 30s)  rancher.io/local-path_local-path-provisioner-57c5987fd4-m2f5m_840e8c44-e7d9-427b-93e5-a2b88ac268c5  failed to provision volume with StorageClass "standard": Only support ReadWriteOnce access mode
+  Normal   ExternalProvisioning  10s (x3 over 30s)  persistentvolume-controller                                                                         Waiting for a volume to be created either by the external provisioner 'rancher.io/local-path' or manually by the system administrator. If volume creation is delayed, please verify that the provisioner is running and correctly registered.
+
+# O error é de compatibilidade entre o tipo de volume e o access mode que foi pedido.
+
+accessModes:
+  - ReadWriteMany
+
+# Mas o provisionador que está sendo usado é o local-path-provisioner, e ele só suporta: ReadWriteOnce (RWO)
+# A mensagem "Only support ReadWriteOnce access mode" deixa isso claro.
+#
+# Como corrigir?
+
+accessModes:
+  - ReadWriteOnce
+
+# Todos os pods vão usar volumes separados
+# ou o scheduler pode concentrar no mesmo node.
+#
+# Usar storage que suporta RWX (recomendado para esse caso)
+# Ex:
+# NFS
+# CephFS
+# Longhorn (com RWX habilitado)
+# GlusterFS
 ```
+[Índice](#-menu)
+
+# 🚀 Create Object - Reclaim Policy PVC / StorageClass
+
+```bash
+https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reclaim-policy
+
+# Delete => Default ( Assim que deleta os recursos pvc é deletado os dados )
+# Retain => Deleta o PVC, mas os dados continuam lá
+#
+# É na definição da PVC que aplico o tipo de Policy
+
+reclaimPolicy: Retain
+
+...
+...
+...
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: volume-persistente
+
+# Isso quer dizer que os Deployments que usarem esse PVC ( volume-persistente ) não teram seus dados apagados
+
+# Se eu deletar o Deployment + PVC , meus dados ainda sim continuaram intactos,
+# pois quem ta garantindo isso é o StorageClass do tipo Retain.
+
+# O PV ainda estará lá mas com status ( Release )
+# Estando nesse estado ( Release ) , ele pode ser atachado novamente.
+
+k get pv
+
+# Para re-usar esse PV é necessário ajustar o deploy do PVC para "especificar o PV" e deixo em "branco o storageClass".
+#
+# Ex: pv-55be07b6-f39c-41e5-90bc-59885eecdc2d
+
+kind: PersistentVolumeClaim
+metadata:
+  name: prgs-worker-claim
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 10Mi
+  storageClassName: ""
+  volumeName: pv-55be07b6-f39c-41e5-90bc-59885eecdc2d
+
+#================================== PVC Policy Retain ===============================
+#
+# Nada impede ter multiplos storageClass no seu cluster. No exemplo abaixo, será criado um novo pvc
+# manualmente, e será rotulado que esse PVC terá um nome qualquer como StorageClass
+
+# Crie o diretório
+docker exec prgs-control-plane bash -c "mkdir -p /data"
+docker exec prgs-control-plane bash -c "ls /data"
+
+# Para esse laboratório, primeiro cria-se o PV
+# Como esse PV tem uma regra específica de afinidade, ele so montará os pods com esse volume neste node ( prgs-control-plane )
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prgs-control-plane-pv
+spec:
+  capacity:
+    storage: 10Mi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: prgs-control-plane-sc
+  local:
+    path: /data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - prgs-control-plane
+EOF
+
+k get pv
+NAME                    CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS            VOLUMEATTRIBUTESCLASS   REASON   AGE
+prgs-control-plane-pv   10Mi       RWO            Retain           Available           prgs-control-plane-sc   <unset>                          3s
+
+# Criando PVC
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prgs-control-plane-pvc
+spec:
+  storageClassName: prgs-control-plane-sc
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Mi
+EOF
+
+# Check
+
+k get pvc
+NAME                     STATUS   VOLUME                  CAPACITY   ACCESS MODES   STORAGECLASS            VOLUMEATTRIBUTESCLASS   AGE
+prgs-control-plane-pvc   Bound    prgs-control-plane-pv   10Mi       RWX            prgs-control-plane-sc   <unset>                 4s
+
+# Apesar do PVC ter sido rotulado com StorageClass, chamado "prgs-control-plane-sc", esse storageClass não existe no K8S.
+
+k get sc
+NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  17m
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - prgs-control-plane
+      containers:
+        - image: nginx
+          name: nginx
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prgs-control-plane-pvc
+EOF
+
+pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
+
+while IFS= read -r pod;
+do
+  k exec $pod -- bash -c 'for i in {1..10}; do touch "/data/${HOSTNAME}-$i.txt"; done'
+done <<< "$pods"
+
+
+# Lendo pelo Pod
+while IFS= read -r pod;
+do
+  k exec $pod -- bash -c "ls /data"
+  echo "-------------------"
+done <<< "$pods"
+
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+
+# Lendo No worker
+docker exec prgs-control-plane bash -c "ls /data"
+nginx-7b98f58f85-4trx6-1.txt
+nginx-7b98f58f85-764fk-10.txt
+...
+...
+nginx-7b98f58f85-764fk-1.txt
+nginx-7b98f58f85-764fk-10.txt
+...
+...
+nginx-7b98f58f85-jr46k-1.txt
+nginx-7b98f58f85-jr46k-10.txt
+
+# E se eu deletar tudo ?
+#
+k delete deployments.apps nginx
+deployment.apps "nginx" deleted from default namespace
+
+# Delete PVC
+k delete pvc prgs-control-plane-pvc
+persistentvolumeclaim "prgs-control-plane-pvc" deleted from default namespace
+
+# Delete Pv
+k delete pv prgs-control-plane-pv
+persistentvolume "prgs-control-plane-pv" deleted
+
+# Lendo No worker
+# Os dados estao lá
+#
+docker exec prgs-control-plane bash -c "ls /data"
+nginx-7b98f58f85-4trx6-1.txt
+nginx-7b98f58f85-764fk-10.txt
+...
+...
+nginx-7b98f58f85-764fk-1.txt
+nginx-7b98f58f85-764fk-10.txt
+...
+...
+nginx-7b98f58f85-jr46k-1.txt
+nginx-7b98f58f85-jr46k-10.txt
+
+# Se eu Subir novamente ( PV / PVC / Deployment ) o que acontece?
+k get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+nginx-6767449f59-h58tb   1/1     Running   0          63s
+nginx-6767449f59-pg2sl   1/1     Running   0          63s
+nginx-6767449f59-vdxbp   1/1     Running   0          63s
+
+# Lendo pelo Pod
+pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
+
+while IFS= read -r pod;
+do
+  k exec $pod -- bash -c "ls /data"
+  echo "-------------------"
+done <<< "$pods"
+
+# Consegue montar e ler os dados normalmente. Isso porque ao criar o PVC foi Definido ( persistentVolumeReclaimPolicy: Retain )
+
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+
+#============================= StoraClass Policy Retain =============================
+#
+# A ideia aqui e aplicar a mesma regras de Retaim feita no PVC, porém a nivel de StorageClass
+#
+# O pv é criado herdando o que foi definido na StorgaClass
+#
+# É na definição da StorageClass que aplico o tipo de Policy
+#
+# Vamos criar um StorageClass Personalizado.
+
+k neat <<< $(k get sc standard -o yaml) | sed 's/true/false/;s/standard/volume-persistente/;s/Delete/Retain/'
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+  name: volume-persistente
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+
+k neat <<< $(k get sc standard -o yaml) | sed 's/true/false/;s/standard/volume-persistente/;s/Delete/Retain/' | k apply -f -
+
+# List StorageClass
+k get sc
+NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  4h25m
+volume-persistente   rancher.io/local-path   Retain          WaitForFirstConsumer   false                  3s
+
+# Criando o PVC
+#
+# Obs.: Aqui foi definido que o mode de acesso ...
+
+accessModes:
+  - ReadWriteOnce
+
+✅ Por ter esse mode de acesso ( ReadWriteOnce ) todos os Pods schedulados neste Node Podem escrever / ler.
+✅ O volume pode ser montado em modo leitura/escrita por UM NODE por vez
+✅ Compartilhamento de filesystem dentro do mesmo node, não cluster-wide.
+✅ O PV definido ( ReadWriteOnce ) terá o disco atachado somente a um Node.
+✅ Vários Pods podem usar o mesmo volume se estiverem no mesmo node.
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prgs-control-plane-pvc
+spec:
+  storageClassName: volume-persistente
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Mi
+EOF
+
+# Check
+# OBS.: Aqui ele ficará como Pending até que um POD faca requisição para usar esse PVC
+
+k get pvc
+NAME                     STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS         VOLUMEATTRIBUTESCLASS   AGE
+prgs-control-plane-pvc   Pending                                      volume-persistente   <unset>                 2s
+
+# Criando Deployment
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prgs-control-plane-pvc
+EOF
+
+# Como ficou o ponto montagem dentro do Worker?
+#
+docker exec prgs-control-plane bash -c "ls /var/local-path-provisioner"
+pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc
+
+k get pvc
+NAME                     STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS         VOLUMEATTRIBUTESCLASS   AGE
+prgs-control-plane-pvc   Bound    pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd   10Mi       RWO            volume-persistente   <unset>                 9m8s
+
+
+# Injetando Dados
+pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
+
+while IFS= read -r pod;
+do
+  k exec $pod -- bash -c 'for i in {1..10}; do touch "/data/${HOSTNAME}-$i.txt"; done'
+done <<< "$pods"
+
+# Listando direto do Worker
+docker exec prgs-control-plane bash -c "ls /var/local-path-provisioner/pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc"
+nginx-7b98f58f85-5lt9h-1.txt
+nginx-7b98f58f85-5lt9h-10.txt
+nginx-7b98f58f85-5lt9h-2.txt
+nginx-7b98f58f85-5lt9h-3.txt
+nginx-7b98f58f85-5lt9h-4.txt
+nginx-7b98f58f85-5lt9h-5.txt
+nginx-7b98f58f85-5lt9h-6.txt
+nginx-7b98f58f85-5lt9h-7.txt
+nginx-7b98f58f85-5lt9h-8.txt
+nginx-7b98f58f85-5lt9h-9.txt
+nginx-7b98f58f85-jrzn6-1.txt
+nginx-7b98f58f85-jrzn6-10.txt
+nginx-7b98f58f85-jrzn6-2.txt
+nginx-7b98f58f85-jrzn6-3.txt
+nginx-7b98f58f85-jrzn6-4.txt
+nginx-7b98f58f85-jrzn6-5.txt
+nginx-7b98f58f85-jrzn6-6.txt
+nginx-7b98f58f85-jrzn6-7.txt
+nginx-7b98f58f85-jrzn6-8.txt
+nginx-7b98f58f85-jrzn6-9.txt
+nginx-7b98f58f85-ph4cz-1.txt
+nginx-7b98f58f85-ph4cz-10.txt
+nginx-7b98f58f85-ph4cz-2.txt
+nginx-7b98f58f85-ph4cz-3.txt
+nginx-7b98f58f85-ph4cz-4.txt
+nginx-7b98f58f85-ph4cz-5.txt
+nginx-7b98f58f85-ph4cz-6.txt
+nginx-7b98f58f85-ph4cz-7.txt
+nginx-7b98f58f85-ph4cz-8.txt
+nginx-7b98f58f85-ph4cz-9.txt
+
+# E se eu deletar tudo?
+#
+k delete deployments.apps nginx
+deployment.apps "nginx" deleted from default namespace
+#
+k delete pvc prgs-control-plane-pvc
+persistentvolumeclaim "prgs-control-plane-pvc" deleted from default namespace
+
+# Listando direto do Worker
+# Os dados continuam lá , isso por conta da regra ( Policy Retain )
+#
+docker exec prgs-control-plane bash -c "ls /var/local-path-provisioner/pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc"
+nginx-7b98f58f85-5lt9h-1.txt
+nginx-7b98f58f85-5lt9h-10.txt
+...
+...
+nginx-7b98f58f85-jrzn6-1.txt
+nginx-7b98f58f85-jrzn6-10.txt
+...
+...
+nginx-7b98f58f85-ph4cz-1.txt
+nginx-7b98f58f85-ph4cz-10.txt
+...
+...
+
+# Se não tenho mais PVC, mas os dados estao montados fisicamente nesse Worker, com esse NOME ( pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc )
+# Como eu montaria esse PVC novamente?
+#
+# OBS.:
+# OBS.: ISSO SÓ É POSSIVEL, PORQUE AO DELETAR O PVC , O PV É CONSERVADO
+# OBS.:
+
+k get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                            STORAGECLASS         VOLUMEATTRIBUTESCLASS   REASON   AGE
+pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd   10Mi       RWO            Retain           Released   default/prgs-control-plane-pvc   volume-persistente   <unset>                          9m45s
+
+# Recriando o PVC fazendo match com PV existente
+#
+# Obs: Foi definido o ID do PV no PVC
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prgs-control-plane-pvc
+spec:
+  storageClassName: "volume-persistente"
+  volumeName: pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Mi
+EOF
+
+# Listando PVC
+k get pvc
+NAME                     STATUS    VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS         VOLUMEATTRIBUTESCLASS   AGE
+prgs-control-plane-pvc   Pending   pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd   0                         volume-persistente   <unset>                 9s
+
+# Caso o PV esteja montado em node específico, e melhor definir uma regra de afinidade ao montar o deployment.
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - prgs-control-plane
+      containers:
+        - image: nginx
+          name: nginx
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: prgs-control-plane-pvc
+EOF
+
+# Listando os Pod...
+# Não subiu nada !!!
+#
+NAME                     READY   STATUS    RESTARTS   AGE
+nginx-6767449f59-2jhlp   0/1     Pending   0          2s
+nginx-6767449f59-8blp8   0/1     Pending   0          2s
+nginx-6767449f59-hrxn8   0/1     Pending   0          2s
+
+# Isso acontece porque o PV ainda está atrelado ao PVC antigo que morreu
+# O fato do Status está como ( Released ), aponta para essa caracterítica.
+#
+k get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                            STORAGECLASS         VOLUMEATTRIBUTESCLASS   REASON   AGE
+pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd   10Mi       RWO            Retain           Released   default/prgs-control-plane-pvc   volume-persistente   <unset>                          25m
+
+# ----------------- Hard Core -----------------------------
+# Uma outra solução seria fazer um provisionamento estatico.
+# Defino storageClass como ""
+# Aponto qual pv quero usar usando o objeto volumeName
+# Uma outra alternativa seria editar o PV e remover o ID atrelado ao PV
+# Ex: Remover a entrada ( claimRef => uid: 0e436051-7441-42d5-83d9-3a8362ee0d34 )
+# ---------------------------------------------------------
+
+# Aplicar PAtch de correção...
+# Obs.:
+kubectl patch pv pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd -p '{"spec":{"claimRef": null}}'
+# Obs.:
+#
+
+k delete deployments.apps nginx
+k delete pvc prgs-control-plane-pvc
+
+# Reaplique o PVC
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prgs-control-plane-pvc
+spec:
+  storageClassName: "volume-persistente"
+  volumeName: pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Mi
+EOF
+
+pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
+
+while IFS= read -r pod;
+do
+  k exec $pod -- bash -c "ls /data"
+  echo "-------------------"
+done <<< "$pods"
+
+
+# Consegue montar e ler os dados normalmente. Isso porque ao criar o PVC foi Definido ( persistentVolumeReclaimPolicy: Retain )
+
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+
+#================================= PV Policy Retain =================================
+#
+# Criei StorageClass com Policy Retaim, mas matei o PV
+# Como fica?
+#
+k delete deployments.apps nginx
+deployment.apps "nginx" deleted from default namespace
+
+k delete pvc prgs-control-plane-pvc
+persistentvolumeclaim "prgs-control-plane-pvc" deleted from default namespace
+
+k delete pv pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd
+persistentvolume "pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd" deleted
+
+# Meu volume está orfão
+#
+# Porém o dado ainda existe no meu cluster
+docker exec prgs-control-plane bash -c "ls /var/local-path-provisioner/pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc"
+nginx-7b98f58f85-5lt9h-1.txt
+nginx-7b98f58f85-5lt9h-10.txt
+nginx-7b98f58f85-5lt9h-2.txt
+nginx-7b98f58f85-5lt9h-3.txt
+nginx-7b98f58f85-5lt9h-4.txt
+nginx-7b98f58f85-5lt9h-5.txt
+nginx-7b98f58f85-5lt9h-6.txt
+nginx-7b98f58f85-5lt9h-7.txt
+nginx-7b98f58f85-5lt9h-8.txt
+nginx-7b98f58f85-5lt9h-9.txt
+nginx-7b98f58f85-jrzn6-1.txt
+nginx-7b98f58f85-jrzn6-10.txt
+nginx-7b98f58f85-jrzn6-2.txt
+nginx-7b98f58f85-jrzn6-3.txt
+nginx-7b98f58f85-jrzn6-4.txt
+nginx-7b98f58f85-jrzn6-5.txt
+nginx-7b98f58f85-jrzn6-6.txt
+nginx-7b98f58f85-jrzn6-7.txt
+nginx-7b98f58f85-jrzn6-8.txt
+nginx-7b98f58f85-jrzn6-9.txt
+nginx-7b98f58f85-ph4cz-1.txt
+nginx-7b98f58f85-ph4cz-10.txt
+nginx-7b98f58f85-ph4cz-2.txt
+nginx-7b98f58f85-ph4cz-3.txt
+nginx-7b98f58f85-ph4cz-4.txt
+nginx-7b98f58f85-ph4cz-5.txt
+nginx-7b98f58f85-ph4cz-6.txt
+nginx-7b98f58f85-ph4cz-7.txt
+nginx-7b98f58f85-ph4cz-8.txt
+nginx-7b98f58f85-ph4cz-9.txt
+
+# O processo de recuperação de um PV orfão é manual.
+#
+# Criando PV
+#
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-recuperado
+spec:
+  capacity:
+    storage: 10Mi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  local:
+    path: /var/local-path-provisioner/pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - prgs-control-plane
+EOF
+
+# Criando PVC
+#
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-recuperado
+spec:
+  volumeName: pv-recuperado
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Mi
+EOF
+
+# Listando PVC
+k get pvc
+NAME             STATUS    VOLUME          CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+pvc-recuperado   Pending   pv-recuperado   0                                        <unset>                 3s
+
+# Criando App
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - prgs-control-plane
+      containers:
+        - image: nginx
+          name: nginx
+          volumeMounts:
+          - name: data
+            mountPath: "/data"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pvc-recuperado
+EOF
+
+k get pvc
+NAME             STATUS   VOLUME          CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+pvc-recuperado   Bound    pv-recuperado   10Mi       RWO                           <unset>                 81s
+
+# Listando conteúdo
+#
+pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
+
+while IFS= read -r pod;
+do
+  k exec $pod -- bash -c "ls /data"
+  echo "-------------------"
+done <<< "$pods"
+
+# Consegue montar e ler os dados normalmente. Isso porque ao criar o PVC foi Definido ( persistentVolumeReclaimPolicy: Retain )
+
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+nginx-7b98f58f85-4trx6-1.txt
+...
+...
+nginx-7b98f58f85-4trx6-10.txt
+-------------------
+
+```
+
 [Índice](#-menu)
 
 # 🚀 Create Object - Affinity
