@@ -22,7 +22,25 @@
 - [Create Object - Daemonset](#-create-object---daemonset)
 - [Create Object - Statefullset](#-create-object---statefullset)
 - [Create Object - PDB / PodDisruptionBudget](#-create-object---pdb--poddisruptionbudget)
-- [Explorando Documentação - Kubectl](#-explorando-documentação---kubectl)
+- [Create Object - Jobs](#-create-object---jobs)
+- [Create Object - CronJobs](#-create-object---cronjobs)
+- [Create Object - Services Tipos](#-create-object---services-tipos)
+- [Create Object - Ipvs Vs Iptables](#-create-object---ipvs-vs-iptables)
+- [Create Object - Manutenção em Membros do Cluster](#-create-object---manutenção-em-membros-do-cluster)
+- [Create Object - External Name](#-create-object---external-name)
+- [Create Object - Trafic Policy](#-create-object---trafic-policy)
+- [Create Object - Deploy Canary](#-create-object---deploy-canary)
+- [Create Object - Deploy Blue Green](#-create-object---deploy-blue-green)
+- [Create Object - Ingress Controller](#-create-object---ingress-controller)
+- [Create Object - Ingress Múltiplos Paths](#-create-object---ingress-múltiplos-paths)
+- [Create Object - Ingress Error 503](#-create-object---ingress-error-503)
+- [Create Object - Ingress TLS](#-create-object---ingress-tls)
+- [Create Object - ConfigMap Vs Secrets](#-create-object---configmap-vs-secrets)
+- [Create Object - ConfigMap](#-create-object---configmap)
+- [Create Object - ConfigMap Vhost Ingress](#-create-object---configmap-vhost-ingress)
+- [Create Object - Types Secrets](#-create-object---types-secrets)
+- [Create Object - Storage PV / PVC / StorageClass](#-create-object---storage-pv--pvc--storageclass)
+
 
 
 
@@ -45,6 +63,7 @@ KUBECONFIG=~/.kube/config:~/.kube/kube_outro_cluster_config kubectl config view 
 # AWS ( EKS )
 aws eks update-kubeconfig --dry-run --name paulo --region us-east-2
 ```
+[Índice](#-menu)
 
 # 🚀 Command Line - Nodes
 
@@ -1663,6 +1682,7 @@ my-job2   Complete             1/1           6s         6s
 # Pegue o Id do Pod gerado pelo Job
 k logs $(k get pods -l job-name=my-job2 -o name)
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - CronJobs
 
@@ -1700,6 +1720,7 @@ k logs my-cronjob-29546778-4fr8t
 # Pegando dinamicament
 kubectl logs $(kubectl get jobs --sort-by=.metadata.creationTimestamp -o name | tail -1)
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Services Tipos
 
@@ -1944,6 +1965,7 @@ Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
 Name:      nginx-1.nginx
 Address 1: 10.244.2.14 nginx-1.nginx.default.svc.cluster.local
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Ipvs Vs Iptables
 
@@ -2168,6 +2190,7 @@ egrep 'KUBE-SVC-2CMXP7HKUVJN7L6M' /tmp/iptables
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.6:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-C4VXQDW52UV45WW3
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.2.6:80" -j KUBE-SEP-UOZCNMEBPO5JGMU4
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Manutenção em Membros do Cluster
 
@@ -2218,6 +2241,7 @@ NAME      READY   STATUS    RESTARTS   AGE
 nginx-0   1/1     Running   0          12m
 nginx-1   1/1     Running   0          7m53s
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - External Name
 
@@ -2282,6 +2306,7 @@ url-remota.default.svc.cluster.local is an alias for paulo-rogerio.github.io.
 
 k delete svc url-remota
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Trafic Policy
 
@@ -2443,6 +2468,7 @@ kubectl run -i --tty --image alpine apline --restart=Never --rm
 apk add curl
 while true; do curl -I http://10.96.247.192; done
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Deploy Canary
 
@@ -2567,6 +2593,7 @@ Content-Length: 191
 Connection: close
 Content-Type: text/html
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Deploy Blue Green
 
@@ -2687,6 +2714,7 @@ Server: nginx/1.27.3
 Server: nginx/1.27.3
 Server: nginx/1.27.3
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Ingress Controller
 
@@ -2901,6 +2929,7 @@ Etag: "69d4ec68-380"
 Last-Modified: Tue, 07 Apr 2026 11:37:12 GMT
 Server: nginx/1.29.8
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Ingress Nginx Rewrite
 
@@ -3174,6 +3203,7 @@ spec:
 # Annotations (dependem do controller) - rotas extras
 # Annotations customizam o comportamento do Ingress
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Ingress Múltiplos Paths
 
@@ -3268,6 +3298,7 @@ curl 172.17.0.240 -I -H "Host: nginx.demo.com"
 curl 172.17.0.240 -I -H "Host: httpd.demo.com"
 
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Ingress Error 503
 
@@ -3332,6 +3363,7 @@ k patch svc httpd -p '{"spec":{"selector":{"app":"ui"}}}'
 k patch svc httpd -p '{"spec":{"selector":{"app":"httpd"}}}'
 
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Ingress TLS
 
@@ -3520,6 +3552,7 @@ etag: "69d4ec68-380"
 accept-ranges: bytes
 strict-transport-security: max-age=31536000; includeSubDomains
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - ConfigMap Vs Secrets
 
@@ -3540,6 +3573,7 @@ strict-transport-security: max-age=31536000; includeSubDomains
 # Obs.: Secret não está encripitado, está apenas encodado ( base64 )
 
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - ConfigMap
 
@@ -3891,12 +3925,11 @@ k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
   </h1>
 </html>
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - ConfigMap Vhost Ingress
 
-
 k expose deployment nginx --type=ClusterIP --port=80 --target-port=80 --dry-run=client -o yaml
-
 
 ```bash
 cat <<EOF | k apply -f -
@@ -4088,6 +4121,7 @@ curl 172.17.0.240 -H "Host: app.prgs.corp"
   </h1>
 </html>
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Types Secrets
 
@@ -4216,8 +4250,8 @@ k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
 # Montou-se um diretorio ( /segredo ), e la dentro os arquivos
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- cat /segredo/username && echo
 admin
-
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Storage PV / PVC / StorageClass
 
@@ -4616,8 +4650,8 @@ nginx-7b98f58f85-wq6mg-9.txt
 
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
 
-
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Affinity
 
@@ -4685,6 +4719,7 @@ spec:
                 operator: Exists
 '
 ```
+[Índice](#-menu)
 
 # 🚀 Estratégias Deploy
 
@@ -4720,6 +4755,7 @@ Existe outras formas de deploy Ex: canary, mas nesse formato ( rolling Update ) 
 
 Isso permite eu fazer um UNDO para outro replicaset
 ```
+[Índice](#-menu)
 
 # 🚀 Explorando Documentação - Kubectl
 
@@ -4734,3 +4770,4 @@ k explain deployment.spec.template
 
 k explain deployment.spec.template.spec.containers
 ```
+[Índice](#-menu)
