@@ -1,3 +1,5 @@
+# 🚀 Menu
+
 - [Command Line - Contexts](#-command-line---contexts)
 - [Command Line - Nodes](#-command-line---nodes)
 - [Command Line - Pods](#-command-line---pods)
@@ -79,6 +81,7 @@ done
 kubectl cordon worker01
 kubectl uncordon worker01
 ```
+[Índice](#-menu)
 
 # 🚀 Command Line - Pods
 
@@ -142,6 +145,7 @@ k exec -it -n <namespace> <pod> -- bash
 k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash
 k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash -c "pwd; ls"
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Pod
 
@@ -183,6 +187,7 @@ k patch svc demo -p '{"spec":{"ports":[{"port":80,"targetPort":80,"nodePort":300
 # Adicione a entrada
 # - --service-node-port-range=20000-40000
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - StaticPod
 
@@ -205,6 +210,7 @@ systemctl status kubelet
 
 # Usando especificamente pelo controlplane. Por ser estático dentro do worker , NÃO É ESCALAVEL.
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Init Containers
 
@@ -280,6 +286,7 @@ Error from server (BadRequest): container "nginx" in pod "nginx" is waiting to s
 k logs nginx -c waitfordns -f
 Clone repo....
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Replace Entrypoint
 
@@ -322,6 +329,7 @@ spec:
     args: [ "while true; do sleep 30; done;" ]
 EOF
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Multi Containers
 
@@ -357,6 +365,7 @@ k logs multicontainers -c debug
 k exec -it multicontainers -c debug -- sh
 ps fax
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Acessando Pod Sem Kubectl Via Nsenter
 
@@ -395,6 +404,7 @@ crictl inspect dfa92a11e4461 | jq -r '.info.pid'
 nsenter -t 148192 -n ls /
 nsenter -t 148192 -n curl localhost
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Pod Lifecycle
 
@@ -454,7 +464,7 @@ kubectl delete pod pod-lifecycle -n default
 # terminationGracePeriodSeconds: 60 com um valor que satisfaça minha necessidade.
 
 ```
-
+[Índice](#-menu)
 
 # 🚀 Create Object - Namespace
 
@@ -476,6 +486,7 @@ k create ns familia
 k neat <<< $(k create ns familia --dry-run=client -o yaml)
 k neat <<< $(k create ns familia --dry-run=client -o yaml)
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Deployment
 
@@ -518,6 +529,7 @@ spec:
 
 k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | k apply -f -
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Scale Deployment
 
@@ -525,6 +537,7 @@ k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o y
 k scale --help
 k scale deployment nginx-paulo --replicas 10
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Request Limits
 
@@ -602,6 +615,7 @@ k top nodes
 # Memoria:
 # É informada em M/G ex: 500M
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Resources Limits
 
@@ -667,6 +681,7 @@ spec:
             memory: 512M
 
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - ReplicaSet
 
@@ -758,6 +773,7 @@ spec:
 k get pod -l app=nginx-paulo
 k get pod -n kube-system -l k8s-app=kube-dns
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - ReplicaSet Rollout
 
@@ -831,6 +847,7 @@ k get rs nginx-paulo-78455bbb4 -o yaml | grep deployment.kubernetes.io/revision
 # Reiniciar todos os Pods do Deployment nginx-paulo
 k rollout restart deployment/nginx-paulo
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Rollout maxSurge / maxUnavailable
 
@@ -892,6 +909,7 @@ spec:
       - image: nginx
         name: nginx
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Liveness / Readness Probes
 
@@ -1029,6 +1047,7 @@ k explain deployment.spec.template.spec.containers.env
 
 https://12factor.net/
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Daemonset
 
@@ -1156,6 +1175,7 @@ nginx-paulo   1         1         1       1            1           node-role.kub
 k explain daemonset --recursive | less
 k explain daemonset.spec
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Statefullset
 
@@ -1452,6 +1472,7 @@ Source:
 Events:            <none>
 #=============================================================================
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - PDB / PodDisruptionBudget
 
@@ -1546,6 +1567,7 @@ NAME       STATUS   ROLES           AGE   VERSION
 master01   Ready    control-plane   12d   v1.34.4
 worker01   Ready    worker          12d   v1.34.4
 ```
+[Índice](#-menu)
 
 # 🚀 Create Object - Jobs
 
