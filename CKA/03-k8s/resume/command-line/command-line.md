@@ -41,6 +41,7 @@
 - [Create Object - Types Secrets](#-create-object---types-secrets)
 - [Create Object - Storage PV / PVC / StorageClass](#-create-object---storage-pv--pvc--storageclass--accessmode)
 - [Create Object - Reclaim Policy PVC / StorageClass](#-create-object---reclaim-policy-pvc--storageclass)
+- [Create Object - Projected Volume](#-create-object---projected-volume)
 
 
 
@@ -5493,6 +5494,13 @@ nginx-7b98f58f85-4trx6-1.txt
 nginx-7b98f58f85-4trx6-10.txt
 -------------------
 
+```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - Projected Volume
+
+```bash
 ```
 
 [Índice](#-menu)
