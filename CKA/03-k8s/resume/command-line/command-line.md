@@ -41,7 +41,7 @@
 - [Create Object - Types Secrets](#-create-object---types-secrets)
 - [Create Object - Storage PV / PVC / StorageClass](#-create-object---storage-pv--pvc--storageclass--accessmode)
 - [Create Object - Reclaim Policy PVC / StorageClass](#-create-object---reclaim-policy-pvc--storageclass)
-- [Create Object - Projected Volume](#-create-object---projected-volume)
+- [Create Object - HPA / VPA](#-create-object---hpa--vpa)
 
 
 
@@ -4122,6 +4122,68 @@ curl 172.17.0.240 -H "Host: app.prgs.corp"
     Sou o Index App1
   </h1>
 </html>
+
+#================================ Projected-Volumes =================================
+#
+# Permite montar 2 ou mais pontos de montagem apontando para o mesmo arquivo.
+#
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: virtualhost
+data:
+  index.html: |
+    <html>
+      <h1>
+        Chegou Index.html novo
+      </h1>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - image: nginx
+          name: nginx
+          volumeMounts:
+            - name: all-in-one
+              mountPath: "/usr/share/nginx/html"
+              readOnly: true
+      volumes:
+        - name: all-in-one
+          projected:
+            sources:
+              - configMap:
+                  name: virtualhost
+                  items:
+                    - key: "index.html"
+                      path: "index.html"
+                    - key: "index.html"
+                      path: "index2.html"
+EOF
+
+k get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+nginx-66d8fc6cdb-s9x7q   1/1     Running   0          13s
+
+# Temos 2 arquivos diferentes que referenciam o mesmo source ( configmap )
+k exec nginx-66d8fc6cdb-s9x7q -- bash -c "ls /usr/share/nginx/html"
+index.html
+index2.html
 ```
 [Índice](#-menu)
 
@@ -5498,9 +5560,394 @@ nginx-7b98f58f85-4trx6-10.txt
 
 [Índice](#-menu)
 
-# 🚀 Create Object - Projected Volume
+# 🚀 Create Object - HPA / VPA
 
 ```bash
+# Escala Vertical X Escala Horizontal ( Componentes que monitoram recursos )
+#
+#================================ Horizontal (HPA) ==================================
+#
+# Deployment => ReplicaSet => Pod
+#
+# No Deployment injetamos um novo objeto chamado HPA, ele irá escutar alguma métrica ( CPU / RAM ),
+# mas pode-se usar metricas externas e uma vez que esse threshoud bater no limite definido, o HPA escalará os PODS.
+#
+
+https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+
+https://kubernetes.io/docs/reference/command-line-tools-reference/kube-controller-manager/
+
+# No start no kube-controller existem parametros listado no link acima que definem comportamentos do HPA
+# Ex: --horizontal-pod-autoscale-xxxx
+#
+# Em amnientes gerenciados, vc dificilmente ajustará esses comportamentos pois não tem gerencia sobre o control-plane.
+#
+# Formas como HPA coleta as metricas?
+
+https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-resource-metrics
+
+- Custom Metrics ( Escalar baseada em CPU )
+- APi Metrics ( Coleta metricas de um Prometheus )
+- Escalar baseada em request, fila SQS .. etc
+
+# OBS.:
+# Preciso do metrics-server deployado no cluster
+#
+# Metric Server baseada em CPU
+metrics.k8s.io API
+
+# Metrics Customizadas / Como é coletada as metrics
+custom.metrics.k8s.io API.
+external.metrics.k8s.io API.
+
+# Recursos consumidos pelo Node
+k top nodes
+NAME                 CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)
+prgs-control-plane   532m         4%       1570Mi          10%
+
+# Recursos consumidos pelos Pods
+k top pods -A
+NAMESPACE            NAME                                                        CPU(cores)   MEMORY(bytes)
+argocd               argo-cd-argocd-application-controller-0                     1m           28Mi
+argocd               argo-cd-argocd-applicationset-controller-65f795bdf4-m4gdv   1m           28Mi
+argocd               argo-cd-argocd-dex-server-76c9c5f56b-6lhdd                  1m           82Mi
+argocd               argo-cd-argocd-notifications-controller-7d746d6f96-5vt4k    1m           22Mi
+argocd               argo-cd-argocd-redis-9c859c655-qlm2v                        14m          5Mi
+argocd               argo-cd-argocd-repo-server-6d9f79976f-9rcg7                 2m           24Mi
+argocd               argo-cd-argocd-server-66b994c4fd-zrc8q                      1m           32Mi
+argocd               gateway-nginx-8445d7855-9w4cw                               48m          42Mi
+kube-system          coredns-66bc5c9577-25kt8                                    4m           15Mi
+kube-system          coredns-66bc5c9577-5t6ts                                    4m           15Mi
+kube-system          etcd-prgs-control-plane                                     59m          79Mi
+kube-system          kindnet-hxn6z                                               2m           11Mi
+kube-system          kube-apiserver-prgs-control-plane                           160m         542Mi
+kube-system          kube-controller-manager-prgs-control-plane                  30m          77Mi
+kube-system          kube-proxy-4l5fz                                            5m           15Mi
+kube-system          kube-scheduler-prgs-control-plane                           18m          23Mi
+kube-system          metrics-server-fcf6b4bd6-8wnrl                              7m           19Mi
+local-path-storage   local-path-provisioner-7b8c8ddbd6-jq7td                     1m           7Mi
+metallb-system       metallb-controller-765c495b75-2wsxx                         4m           32Mi
+metallb-system       metallb-speaker-cjct8                                       10m          51Mi
+nginx-gateway        ngf-nginx-gateway-fabric-c98866d6f-h4fpw                    20m          36Mi
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        resources:
+          requests:
+            cpu: 10m
+          limits:
+            cpu: 15m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  ports:
+  - name: nginx-service
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+  type: ClusterIP
+EOF
+
+
+# ==========================================================================
+# Obs.:
+# Request é usado sempre quando um pod é colocado dentro de um node.
+# Ele é levado em conta na escolha do node onde será colocado o pod.
+# Kube-schedules é quem decide em qual worker meu pod vai rodar, ele avalia os recursos.
+# ==========================================================================
+#
+# O segredo está em declarar os resource no deployment
+# O que o HPA leva em consideração é o (request).
+# O limits é usado para definir a quantidade maxima de CPU / RAM usada por um POd ( hard limit )
+# O HPA nao consulta o limits para tomada de decisao em escalar.
+# A tomada de decisão do scheduler de iniciar um novo Pod acontece por meio da metrica de request.
+
+k explain horizontalpodautoscalers.spec
+k explain horizontalpodautoscalers.spec.metrics.resource.target
+k explain horizontalpodautoscalers.spec | grep required
+maxReplicas	<integer> -required-
+scaleTargetRef	<CrossVersionObjectReference> -required-
+
+# Um recurso namespace
+k api-resources | grep hpa
+horizontalpodautoscalers            hpa                               autoscaling/v2                    true         HorizontalPodAutoscaler
+
+k neat <<< $(k autoscale deployment nginx --cpu=50 --min=1 --max=5 --dry-run=client -o yaml)
+
+# HPA ( Baseado em milicore do CPU )
+# Quando o workloads variam muito
+# Requer um controle absoluto de CPU
+
+cat <<EOF | k apply -f -
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx
+spec:
+  maxReplicas: 5
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx
+  metrics:
+  - resource:
+      name: cpu
+      target:
+        averageValue: 10m
+        type: AverageValue
+    type: Resource
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+EOF
+
+# Saida do HPA quando usa-se regras baseadas em Milicore
+k get hpa
+NAME    REFERENCE          TARGETS      MINPODS   MAXPODS   REPLICAS   AGE
+nginx   Deployment/nginx   cpu: 0/10m   1         5         1          51m
+
+
+
+# HPA ( Baseado em % de Uso do CPU )
+#
+# Quando definido bem o requests.cpu
+# Na grande maioria dos workloads (APIs, web, microserviços)
+
+cat <<EOF | k apply -f -
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx
+spec:
+  maxReplicas: 5
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx
+  metrics:
+  - resource:
+      name: cpu
+      target:
+        averageUtilization: 50
+        type: Utilization
+    type: Resource
+EOF
+
+k get hpa
+NAME    REFERENCE          TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+nginx   Deployment/nginx   cpu: 0%/50%   1         5         1          16s
+
+k describe hpa nginx
+
+# Validando processo
+# Monitore o HPA
+k get hpa -w
+nginx   Deployment/nginx   cpu: 0%/50%     1         5         1          114s
+
+nginx   Deployment/nginx   cpu: 20%/50%    1         5         1          5m1s
+nginx   Deployment/nginx   cpu: 200%/50%   1         5         1          5m31s
+nginx   Deployment/nginx   cpu: 200%/50%   1         5         4          5m46s
+nginx   Deployment/nginx   cpu: 110%/50%   1         5         4          6m1s
+
+# Gerando carga de Stress no Nginx
+k run --image alpine --rm -it teste-curl sh
+apk add curl
+while true; do curl -I nginx; done
+
+# Vendo os Pods sendo criados.
+k get pods
+nginx-7577f95fd6-2zqjb   0/1     ContainerCreating   0          5s
+nginx-7577f95fd6-hdmbf   0/1     ContainerCreating   0          5s
+nginx-7577f95fd6-sl8fh   1/1     Running             0          30m
+nginx-7577f95fd6-vhn74   0/1     ContainerCreating   0          5s
+
+# Após encerrar a carga de Stress, os Pods devem assumir o valor default do deployment.
+# Mesmo com CPU baixa, ele “segura” os pods por alguns minutos antes de matar
+
+k get pods
+NAME                     READY   STATUS        RESTARTS   AGE
+nginx-7577f95fd6-2zqjb   1/1     Terminating   0          6m32s
+nginx-7577f95fd6-8kx5t   1/1     Terminating   0          5m47s
+nginx-7577f95fd6-hdmbf   1/1     Terminating   0          6m32s
+nginx-7577f95fd6-sl8fh   1/1     Running       0          36m
+nginx-7577f95fd6-vhn74   1/1     Terminating   0          6m32s
+teste-curl               1/1     Running       0          7m50s
+
+# Como deixar o scale down mais rápido.
+# Adicionando o Bloco abaixo no manifesto...
+
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+
+# Ex:
+cat <<EOF | k apply -f -
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nginx
+spec:
+  maxReplicas: 5
+  minReplicas: 1
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx
+  metrics:
+  - resource:
+      name: cpu
+      target:
+        averageUtilization: 50
+        type: Utilization
+    type: Resource
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+EOF
+
+#*************************** Etendendo o calculo do HPA *****************************
+#
+
+https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#algorithm-details
+
+# ceil => Função de arrendodamento ( Golang )
+
+# Fórmula para determinar a quantidade de replicas para aguentar as requisiçoes.
+# Ele vai calcular a quantidade de replicas desejadas
+#
+# currentReplicas    => Replicas definidas no deployment
+# desiredMetricValue => HPA averageUtilization
+# currentMetricValue => Utilização/Desejado Isso é calculado baseado no request limits ( requests => cpu: 10m )
+
+k get hpa
+NAME        REFERENCE          TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+nginx    Deployment/nginx    cpu: 0%/50%       1         5         1        105m
+
+# Ex:
+# Se minha app precisa de 10m ( mili core ou milicpu ), mas no momento não tem utilização e o pod está consumindo 3m de cpu.
+# Sendo que para esse POD foi definido 10m. Esse  é o maximo e como se fosse o hard limit.
+# Esse 10m e o request pois e nesse campo que o HPA atua.
+#
+k top pods
+NAME                     CPU(cores)   MEMORY(bytes)
+nginx-7577f95fd6-sl8fh   0m           10Mi
+
+# Vamos imaginar que vc definiu isso no seu HPA
+# Do nada seu Pod começa a usar 12m cpu , isso quer dizer que 12m é maior que 10m que é maior que 100%
+# OS 10m representa a totallidade de CPU tolerada pelo HPA ( ele representa o 100% )
+
+- resource:
+    name: cpu
+    target:
+      averageValue: 10m
+      type: AverageValue
+  type: Resource
+
+# Pods trabalhando em sem sobrecarga
+k get hpa
+NAME    REFERENCE          TARGETS      MINPODS   MAXPODS   REPLICAS   AGE
+nginx   Deployment/nginx   cpu: 0/10m   1         5         1          73m
+
+# Pods trabalhando com sobrecarga
+k get hpa
+nginx   Deployment/nginx   cpu: 10m/10m   1         5         4          69m
+
+# Regra de 3
+10m -- 100%
+12m -- x
+10x = 1200
+x = 120%
+
+# Entao posso afirmar que a request definido no manifesto ( 10m isso equivale a 100% )
+# Esse valor será o atributo usado para calculo do HPA
+# mas com Pods consumindo 32m tem consumido 320% da cpu definida.
+
+desiredReplicas = ceil[currentReplicas * ( currentMetricValue / desiredMetricValue )]
+
+desiredReplicas = ceil[1 * ( X / 50 )]
+
+desiredReplicas = ceil[1 * ( 320 / 60 )]
+
+desiredReplicas = ceil[1  * ( 5.3 )]
+
+desiredReplicas = 6
+
+# Fazendo na prática
+watch kubectl top pod nginx-599d9c6bc5-twzk8
+NAME                     CPU(cores)   MEMORY(bytes)
+nginx-599d9c6bc5-twzk8   58m           3Mi
+
+# Suponhamos que
+# 58m => Regrinha de 3 ( Isso quer dizer quase 580%)
+
+desiredReplicas = ceil[1 * ( 580 / 60 )]
+
+desiredReplicas = ceil[1 * ( 9.666 )]
+
+desiredReplicas = 10
+
+# Sendo assim o valor desejado para atender essa demanda seria 10 Replicas.
+# Se algum pod estiver trabalhando com mais de 10m cpu HPA irá provisionar mais nodes.
+
+k get hpa -w
+NAME        REFERENCE          TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+nginx-hpa   Deployment/nginx   cpu: 0%/60%     1         50        1          92s
+nginx-hpa   Deployment/nginx   cpu: 580%/60%   1         50        1          5m16s
+nginx-hpa   Deployment/nginx   cpu: 23%/60%    1         50        10          11m
+nginx-hpa   Deployment/nginx   cpu: 1%/60%     1         50        10          11m
+nginx-hpa   Deployment/nginx   cpu: 0%/60%     1         50        10          12m
+
+
+#================================= Vertical (VPA) ===================================
+#
+# Deployment => ReplicaSet => Pod
+# OBS.: O VPA só ira atuar em deployments que tenha no mínimo 2 réplicas
+# Qual comportamento?
+#
+# Ele mata um dos pods, o novo Pod ao ser criado será interceptado pelo VPA que ajustará os request limits com
+# um valor definido no VPA ( recursos necessários ) e ai sim o Pod sobe.
+#
+# Aplicaçoes Monolitas é um bom caso de uso de VPA
+
 ```
 
 [Índice](#-menu)
