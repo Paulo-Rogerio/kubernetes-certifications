@@ -45,7 +45,6 @@
 
 
 
-
 # 🚀 Command Line - Contexts
 
 ```bash
@@ -5936,6 +5935,18 @@ nginx-hpa   Deployment/nginx   cpu: 23%/60%    1         50        10          1
 nginx-hpa   Deployment/nginx   cpu: 1%/60%     1         50        10          11m
 nginx-hpa   Deployment/nginx   cpu: 0%/60%     1         50        10          12m
 
+https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#default-behavior
+
+# Stabillization window , define como o kubernetes desescala o pods ( Isso aqui que é punk para ele )
+# usado para scale down.
+#
+# Padrao ( 300s / 5 minutos )
+
+k explain hpa.spec
+k explain hpa.spec.behavior
+k explain hpa.spec.behavior.scaleDown
+k explain hpa.spec.behavior.scaleDown.stabilizationWindowSeconds
+
 
 #================================= Vertical (VPA) ===================================
 #
@@ -5947,6 +5958,155 @@ nginx-hpa   Deployment/nginx   cpu: 0%/60%     1         50        10          1
 # um valor definido no VPA ( recursos necessários ) e ai sim o Pod sobe.
 #
 # Aplicaçoes Monolitas é um bom caso de uso de VPA
+# Assim como no HPA no VPA leva-se em consideração o request limits.
+#
+#
+# VPA não é deployado automaticamente
+
+https://github.com/kubernetes/autoscaler
+
+# OBS.: Faça checkou na ultima tag estavel
+#
+# VPA atua em cima dos enventos
+#
+# cluster-autoscaler é usado pelos cloud providers para escalar os nodes
+#
+# Deploy Manual
+git clone https://github.com/kubernetes/autoscaler.git
+git checkout vertical-pod-autoscaler-1.32.7
+cd vertical-pod-autoscaler/
+./hack/vpa-up.sh
+
+# Deploy Helm
+helm repo add fairwinds-stable https://charts.fairwinds.com/stable
+helm repo update
+helm install vertical-pod-autoscaler fairwinds-stable/vpa \
+  --namespace vertical-pod-autoscaler \
+  --create-namespace \
+  --wait
+
+# Check
+k describe pods -n vertical-pod-autoscaler vertical-pod-autoscaler-vpa-admission-controller-7f4667b6fszspr
+
+# Como o VPA trabalha?
+# Ele intercepta a criação do POD e ajusta dinamicamente os request limits, observe que ele atua a nivel de Pod.
+# Ele usa esse recuso de Webhook para gerir isso.
+
+k get mutatingwebhookconfigurations
+NAME                                         WEBHOOKS   AGE
+vertical-pod-autoscaler-vpa-webhook-config   1          3m18s
+
+# Yaml
+k get mutatingwebhookconfigurations vertical-pod-autoscaler-vpa-webhook-config -o yaml
+
+# Açoes as quais esse mutatingweebhook irá trigar.
+# - Qualquer chamada de create no recurso de POds. Sempre que um pod for criado , ele vai cair nesse Hook
+# - Sempre que atualizar ou criar um VPA
+#
+# O que ele faz?
+#
+# Ele pega a requisição e manda para um service
+
+  service:
+      name: vertical-pod-autoscaler-vpa-webhook
+      namespace: vertical-pod-autoscaler
+      port: 443
+
+
+# Qual serviço é o que faz a magica?
+k get svc -n vertical-pod-autoscaler
+
+# O que está por de traz desse serviço?
+k get endpointslices.discovery.k8s.io -n vertical-pod-autoscaler
+NAME                                        ADDRESSTYPE   PORTS   ENDPOINTS     AGE
+vertical-pod-autoscaler-vpa-webhook-r59kl   IPv4          8000    10.244.0.23   8m42s
+
+# Quem é esse POd ( 10.244.0.23 )?
+k get pods -A -o wide | grep 10.244.0.23
+vertical-pod-autoscaler   vertical-pod-autoscaler-vpa-admission-controller-7f4667b6fszspr   1/1     Running   0          9m56s   10.244.0.23
+
+#********************************* VPA Na prática ***********************************
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        resources:
+          requests:
+            cpu: 10m
+            memory: 10M
+          limits:
+            cpu: 15m
+            memory: 12M
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx-service
+spec:
+  ports:
+  - name: http-port
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+  type: ClusterIP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    hostname: "nginx.prgs-corp.xyz"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute
+spec:
+  parentRefs:
+    - name: gateway
+  hostnames:
+    - nginx.prgs-corp.xyz
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: nginx-service
+          port: 80
+EOF
+
+k get gateway
+NAME      CLASS   ADDRESS        PROGRAMMED   AGE
+gateway   nginx   172.17.0.241   True         9m53s
+
+curl 172.17.0.241 -H "Host: nginx.prgs-corp.xyz"
 
 ```
 
