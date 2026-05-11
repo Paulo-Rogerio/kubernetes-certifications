@@ -6005,15 +6005,13 @@ k get mutatingwebhookconfigurations vertical-pod-autoscaler-vpa-webhook-config -
 #
 # O que ele faz?
 #
-# Ele pega a requisição e manda para um service
+# Ele pega a requisição e manda para o seu service ( HPA Webhook )
 
   service:
       name: vertical-pod-autoscaler-vpa-webhook
       namespace: vertical-pod-autoscaler
       port: 443
 
-
-# Qual serviço é o que faz a magica?
 k get svc -n vertical-pod-autoscaler
 
 # O que está por de traz desse serviço?
@@ -6025,89 +6023,279 @@ vertical-pod-autoscaler-vpa-webhook-r59kl   IPv4          8000    10.244.0.23   
 k get pods -A -o wide | grep 10.244.0.23
 vertical-pod-autoscaler   vertical-pod-autoscaler-vpa-admission-controller-7f4667b6fszspr   1/1     Running   0          9m56s   10.244.0.23
 
-#********************************* VPA Na prática ***********************************
+# Obs:
+#
+✔️ O Vertical Pod Autoscaler calcula novos requests
+✔️ Ele pode recriar o pod para aplicar esses valores
+✔️ Ele usa o valor de Target, não o manifesto YAML
 
+# Quem define o valor final?
+#
+👉 É o recommender do VPA
+
+Ele calcula:
+Target:
+  cpu: 350m
+  memory: ~335Mi
+
+# EvictedPod ... to apply resource recommendation
+👉 Isso significa:
+
+✔️ VPA calculou
+✔️ VPA decidiu
+✔️ VPA matou o pod
+✔️ VPA aplicou novos requests
+
+💥 O VPA NÃO reage diretamente ao OOM
+
+❌ não diz “deu OOM → sobe pra 1GB”
+✅ diz “uso médio indica que precisa ~335Mi”
+
+#********************************* VPA Na prática ***********************************
+#
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: nginx
-  name: nginx
+    app: stress
+  name: stress
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
-      app: nginx
+      app: stress
   template:
     metadata:
       labels:
-        app: nginx
+        app: stress
     spec:
       containers:
-      - image: nginx
-        name: nginx
+      - name: stress
+        image: alpine
+        command: [ "/bin/sh", "-c", "--" ]
+        args: [ "while true; do echo Running...; sleep 30; done;" ]
         resources:
           requests:
-            cpu: 10m
-            memory: 10M
+            cpu: 200m
+            memory: 200M
           limits:
-            cpu: 15m
-            memory: 12M
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: nginx
-  name: nginx-service
-spec:
-  ports:
-  - name: http-port
-    port: 80
-    protocol: TCP
-    targetPort: 80
-  selector:
-    app: nginx
-  type: ClusterIP
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: gateway
-spec:
-  gatewayClassName: nginx
-  listeners:
-  - name: http
-    protocol: HTTP
-    port: 80
-    hostname: "nginx.prgs-corp.xyz"
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: httproute
-spec:
-  parentRefs:
-    - name: gateway
-  hostnames:
-    - nginx.prgs-corp.xyz
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: nginx-service
-          port: 80
+            cpu: 200m
+            memory: 200M
 EOF
 
-k get gateway
-NAME      CLASS   ADDRESS        PROGRAMMED   AGE
-gateway   nginx   172.17.0.241   True         9m53s
+# Check recurso
+pod=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}' | grep '^stress-')
 
-curl 172.17.0.241 -H "Host: nginx.prgs-corp.xyz"
+while read i;
+do
+  k get pods ${i} -o yaml | egrep 'cpu|memory'
+  echo "---"
+done <<< ${pod}
 
+...
+---
+...
+---
+        cpu: 200m
+        memory: 200M
+        cpu: 200m
+        memory: 200M
+      cpu: 200m
+      memory: 200M
+        cpu: 200m
+        memory: 200M
+        cpu: 200m
+        memory: 200M
+
+# Monitore os Eventos dos Pods ao vivo
+# Esse recurso não ficará notificando criacão de Pods, para esse laboratório.
+# Observer que após criados os Pod acima, não terá ação de create.
+k get events --sort-by=.lastTimestamp -w
+...
+...
+...
+
+# Check consumo do Pod
+watch kubectl top pod -l app=stress
+NAME                     CPU(cores)   MEMORY(bytes)
+stress-59788cbb7-6f9xs   1m           0Mi
+stress-59788cbb7-8lht5   0m           0Mi
+stress-59788cbb7-jxc7v   0m           0Mi
+
+
+
+# Aplciando VPA
+cat <<EOF | k apply -f -
+apiVersion: "autoscaling.k8s.io/v1"
+kind: VerticalPodAutoscaler
+metadata:
+  name: stress-vpa
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind: Deployment
+    name: stress
+  updatePolicy:
+    updateMode: "Recreate"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: "*"
+        minAllowed:
+          cpu: 200m
+          memory: 200Mi
+        maxAllowed:
+          cpu: 600m
+          memory: 600Mi
+        controlledResources: ["cpu", "memory"]
+EOF
+
+k get vpa
+NAME         MODE       CPU    MEM     PROVIDED   AGE
+stress-vpa   Recreate   200m   200Mi   True       14s
+
+# Após a aplicação do VPA , os PODs foram interceptados e recriados.
+# Como tenho 3 Pods, fez isso um para cada Pod.
+k get events --sort-by=.lastTimestamp -w
+
+0s          Normal   Killing                   pod/stress-59788cbb7-8lht5            Stopping container stress
+0s          Normal   EvictedByVPA              pod/stress-59788cbb7-8lht5            Pod was evicted by VPA Updater to apply resource recommendation.
+0s          Normal   EvictedPod                verticalpodautoscaler/stress-vpa      VPA Updater evicted Pod stress-59788cbb7-8lht5 to apply resource recommendation.
+0s          Normal   SuccessfulCreate          replicaset/stress-59788cbb7           Created pod: stress-59788cbb7-dl2xv
+0s          Normal   Scheduled                 pod/stress-59788cbb7-dl2xv            Successfully assigned default/stress-59788cbb7-dl2xv to prgs-control-plane
+0s          Normal   Pulling                   pod/stress-59788cbb7-dl2xv            Pulling image "alpine"
+0s          Normal   Pulled                    pod/stress-59788cbb7-dl2xv            Successfully pulled image "alpine" in 1.241s (1.241s including waiting). Image size: 3875040 bytes.
+0s          Normal   Created                   pod/stress-59788cbb7-dl2xv            Created container: stress
+0s          Normal   Started                   pod/stress-59788cbb7-dl2xv            Started container stress
+0s          Normal   Killing                   pod/stress-59788cbb7-jxc7v            Stopping container stress
+0s          Normal   EvictedByVPA              pod/stress-59788cbb7-jxc7v            Pod was evicted by VPA Updater to apply resource recommendation.
+0s          Normal   SuccessfulCreate          replicaset/stress-59788cbb7           Created pod: stress-59788cbb7-zdrzw
+0s          Normal   Scheduled                 pod/stress-59788cbb7-zdrzw            Successfully assigned default/stress-59788cbb7-zdrzw to prgs-control-plane
+0s          Normal   EvictedPod                verticalpodautoscaler/stress-vpa      VPA Updater evicted Pod stress-59788cbb7-jxc7v to apply resource recommendation.
+0s          Normal   Pulling                   pod/stress-59788cbb7-zdrzw            Pulling image "alpine"
+0s          Normal   Pulled                    pod/stress-59788cbb7-zdrzw            Successfully pulled image "alpine" in 1.185s (1.185s including waiting). Image size: 3875040 bytes.
+0s          Normal   Created                   pod/stress-59788cbb7-zdrzw            Created container: stress
+0s          Normal   Started                   pod/stress-59788cbb7-zdrzw            Started container stress
+0s          Normal   EvictedByVPA              pod/stress-59788cbb7-6f9xs            Pod was evicted by VPA Updater to apply resource recommendation.
+0s          Normal   Killing                   pod/stress-59788cbb7-6f9xs            Stopping container stress
+0s          Normal   EvictedPod                verticalpodautoscaler/stress-vpa      VPA Updater evicted Pod stress-59788cbb7-6f9xs to apply resource recommendation.
+0s          Normal   SuccessfulCreate          replicaset/stress-59788cbb7           Created pod: stress-59788cbb7-wptm6
+0s          Normal   Scheduled                 pod/stress-59788cbb7-wptm6            Successfully assigned default/stress-59788cbb7-wptm6 to prgs-control-plane
+0s          Normal   Pulling                   pod/stress-59788cbb7-wptm6            Pulling image "alpine"
+0s          Normal   Pulled                    pod/stress-59788cbb7-wptm6            Successfully pulled image "alpine" in 1.232s (1.232s including waiting). Image size: 3875040 bytes.
+0s          Normal   Created                   pod/stress-59788cbb7-wptm6            Created container: stress
+0s          Normal   Started                   pod/stress-59788cbb7-wptm6            Started container stress
+
+
+# Porque Matou os Pod e os Recriou
+# O campo Recomendation dita a regra do jogo do VPA
+k describe vpa stress-vpa
+
+Status:
+  Conditions:
+    Last Transition Time:  2026-05-11T09:06:33Z
+    Status:                True
+    Type:                  RecommendationProvided
+  Recommendation:
+    Container Recommendations:
+      Container Name:  stress
+      Lower Bound:
+        Cpu:     200m
+        Memory:  200Mi
+      Target:
+        Cpu:     200m
+        Memory:  200Mi
+      Uncapped Target:
+        Cpu:     15m
+        Memory:  100Mi
+      Upper Bound:
+        Cpu:     600m
+        Memory:  600Mi
+Events:
+  Type    Reason      Age   From         Message
+  ----    ------      ----  ----         -------
+  Normal  EvictedPod  13m   vpa-updater  VPA Updater evicted Pod stress-59788cbb7-8lht5 to apply resource recommendation.
+  Normal  EvictedPod  12m   vpa-updater  VPA Updater evicted Pod stress-59788cbb7-jxc7v to apply resource recommendation.
+  Normal  EvictedPod  11m   vpa-updater  VPA Updater evicted Pod stress-59788cbb7-6f9xs to apply resource recommendation.
+
+
+# Gerando Carga de Stress
+pod=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}' | grep '^stress-')
+while read i;
+do
+  echo "Connect Pod: $i"
+  echo "--------"
+  k exec ${i} -- sh -c "apk add stress-ng"
+done <<< ${pod}
+
+count=0
+while read i;
+do
+  echo "Connect Pod: $i"
+  echo "--------"
+  [[ $count == 0 ]] && k exec ${i} -- sh -c 'for _ in $(seq 1 10); do stress-ng --vm 1 --vm-bytes 200M --timeout 300; sleep 10; done'
+  ((count++))
+done <<< ${pod}
+
+
+stress-59788cbb7-9c9sv   200m         66Mi
+stress-59788cbb7-wptm6   1m           1Mi
+stress-59788cbb7-zdrzw   1m           1Mi
+
+# Observe que o VPA ja alterou o resource limits para o valor que ele mesmo prospectou.
+k get pods stress-59788cbb7-9c9sv -o yaml | grep memo
+    vpaUpdates: 'Pod resources updated by stress-vpa: container 0: cpu request, memory
+      request, cpu limit, memory limit'
+        memory: "380258472"
+        memory: "380258472"
+      memory: "380258472"
+        memory: "380258472"
+        memory: "380258472"
+
+#********************************* VPA Nginx K6 ************************************
+#
+https://grafana.com/docs/k6/latest/
+#
+# Gerando Carga de dados.
+#
+# Watching
+watch -n 2 "kubectl get pod -l app=nginx -o wide"
+
+# Em outra aba
+k get events --sort-by=.lastTimestamp -w
+
+
+# Running - Gerar carga de stress
+cat > script.js <<EOF
+import http from 'k6/http';
+import { sleep, check } from 'k6';
+
+export const options = {
+  vus: 50,
+  duration: '10m',
+};
+
+export default function () {
+  const res = http.get('http://172.17.0.241', {
+    headers: {
+      Host: 'nginx.prgs-corp.xyz',
+    },
+  });
+
+  check(res, {
+    'status 200': (r) => r.status === 200,
+  });
+
+  sleep(1);
+}
+EOF
+
+k6 run --insecure-skip-tls-verify script.js
+
+# Running - Gerar carga de stress
+k run --image alpine --rm -it teste-curl sh
+apk add curl
+while true; do curl -I nginx-service; done
 ```
 
 [Índice](#-menu)
