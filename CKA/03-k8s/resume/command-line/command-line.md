@@ -2,7 +2,7 @@
 
 - [Command Line - Contexts](#-command-line---contexts)
 - [Command Line - Nodes](#-command-line---nodes)
-- [Command Line - Pods](#-command-line---pods)
+- [Command Line - Explorando API](#-command-line---explorando-api)
 - [Create Object - Pod](#-create-object---pod)
 - [Create Object - StaticPod](#-create-object---staticpod)
 - [Create Object - Init Containers](#-create-object---init-containers)
@@ -42,6 +42,8 @@
 - [Create Object - Storage PV / PVC / StorageClass](#-create-object---storage-pv--pvc--storageclass--accessmode)
 - [Create Object - Reclaim Policy PVC / StorageClass](#-create-object---reclaim-policy-pvc--storageclass)
 - [Create Object - HPA / VPA](#-create-object---hpa--vpa)
+- [Create Object - CNI](#-create-object---cni)
+- [Create Object - DNS](#-create-object---dns)
 
 
 
@@ -103,11 +105,29 @@ kubectl uncordon worker01
 ```
 [Índice](#-menu)
 
-# 🚀 Command Line - Pods
+# 🚀 Command Line - Explorando API
 
 ```bash
 # Nivel de verbosidade + alto
 k get pods -A -v9
+
+# Visualizando o Certificados
+kubectl config view --raw -o jsonpath='{.users[?(@.name=="kind-prgs")].user.client-certificate-data}' \
+| base64 -d \
+| openssl x509 -text -noout
+
+# Extraindo Certificados
+base64 -d <<< $(kubectl config view --raw -o jsonpath='{.users[?(@.name=="kind-prgs")].user.client-key-data}') > prgs.key
+
+base64 -d <<< $(kubectl config view --raw -o jsonpath='{.users[?(@.name=="kind-prgs")].user.client-certificate-data}') > prgs.crt
+
+base64 -d <<< $(kubectl config view --raw -o jsonpath='{.clusters[?(@.name=="kind-prgs")].cluster.certificate-authority-data}') > ca.crt
+
+port=$(docker inspect prgs-control-plane \
+  --format='{{(index (index .NetworkSettings.Ports "6443/tcp") 0).HostPort}}')
+
+curl --cacert ca.crt --cert prgs.crt --key prgs.key  "https://127.0.0.1:${port}/api/v1/pods?limit=500"
+
 
 # Consulmindo a API
 kubectl config view --raw -o jsonpath='{.users[0].user.client-certificate-data}' | base64 -d > /tmp/cert.crt
@@ -165,6 +185,7 @@ k exec -it -n <namespace> <pod> -- bash
 k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash
 k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash -c "pwd; ls"
 ```
+
 [Índice](#-menu)
 
 # 🚀 Create Object - Pod
@@ -6296,6 +6317,231 @@ k6 run --insecure-skip-tls-verify script.js
 k run --image alpine --rm -it teste-curl sh
 apk add curl
 while true; do curl -I nginx-service; done
+```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - CNI
+
+```bash
+# CNI é diferente entre os cluster ( AWS / Azure )
+# CNI é uma especifiçao de como a rede deve se comportar num cluster K8S.
+# Isso gera uma grande diversidade de implementaçoes, sendo que cada cloud provider tem suas necessidades para ser atendida.
+
+# Entao isso não pode ser implementado pelo core do código k8s e sim pelo vendor que vai entregar o k8s como serviço para vc.
+
+# Um pod precisa comunicar-se com outro pod independente em qual node estiver rodando , sem usar nat.
+# Um daemonset tem que ter a capacidade de comunicar-se diretamente com o pod
+# CNI geralmente é um daemonset que roda em cada no do cluster
+
+k get pods -n kube-system -o wide | grep kindnet
+
+kindnet-7npgk   1/1     Running   0          4h50m   172.17.0.2   prgs-control-plane  <none>           <none>
+
+# Criando um Deployment e um Service
+k create deployment --image=nginx nginx
+k create service clusterip nginx --tcp=80:80
+
+k get pods -o wide
+NAME                     READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+nginx-66686b6766-xgt78   1/1     Running   0          71s   10.244.0.32   prgs-control-plane   <none>           <none>
+
+# Listando as Interface no Host
+docker exec prgs-control-plane bash -c "ip a | grep veth"
+
+3: veth82067b25@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth82067b25
+4: veth05d59c24@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth05d59c24
+5: veth8dec968f@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth8dec968f
+6: veth448f4893@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth448f4893
+7: vethc1917bac@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global vethc1917bac
+9: veth6e5b38c2@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth6e5b38c2
+13: vethcaab9ce8@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global vethcaab9ce8
+14: vethadd1228f@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global vethadd1228f
+15: vetheecc2fbe@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global vetheecc2fbe
+16: veth4b1eb62f@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth4b1eb62f
+17: veth7b54fa9c@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth7b54fa9c
+18: vethc5cf1a50@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global vethc5cf1a50
+19: veth7e71391f@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth7e71391f
+20: veth312bf78b@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth312bf78b
+22: veth18ec8eaf@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth18ec8eaf
+23: vethc4ab357f@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global vethc4ab357f
+24: veth297ec1ad@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth297ec1ad
+33: veth8b8a115d@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
+    inet 10.244.0.1/32 scope global veth8b8a115d
+
+# Porque se cria tanta interface de rede no Host? Não Conflita?
+👉 Porque cada pod precisa de uma "placa de rede virtual" própria.
+👉 No Kubernetes, um pod não compartilha a interface do node diretamente.
+👉 Recurso que está mapeado a um Network namespace no nível do kernel do Host ( isola a rede ).
+👉 Então o kernel cria um veth pair:
+
+[pod netns] eth0 <------> vethXXXX [node]
+
+👉 É literalmente um “cabo virtual Ethernet”.
+👉 uma ponta fica no namespace do pod a outra ponta fica no node.
+👉 o tráfego entra por um lado e sai pelo outro
+👉 ponta da interface no node/container
+
+# Esses IPs iguais NÃO conflitam?
+👉 IP representa SOMENTE este endpoint.
+👉 Sem subnet /32
+
+# Porque Linux permite o MESMO IP em interfaces diferentes?
+👉 São rotas point-to-point
+👉 usam policy routing
+👉 usam namespaces
+👉 ou são usados como next-hop internos do CNI
+
+# Ex:
+inet 10.244.0.1/32 scope global vethXXXX
+
+# De forma prática
+pod A <-> veth A usa 10.244.0.1
+pod B <-> veth B usa 10.244.0.1
+
+pod1 ===== fio privado ===== node
+pod2 ===== fio privado ===== node
+pod3 ===== fio privado ===== node
+
+👉 cada pod precisa de stack TCP/IP própria
+👉 isolamento de rede
+👉 firewall independente
+👉 roteamento independente
+👉 policy independente
+👉 observabilidade independente
+
+1 pod = 1 netns = 1 eth0 = 1 veth pair
+
+
+#************************************ Debug CNI ************************************
+#
+# Tenho essa procissão de Network, qual delas atende meu Pod ( nginx-66686b6766-xgt78 )
+k get pods -o wide
+NAME                     READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+nginx-66686b6766-xgt78   1/1     Running   0          24h   10.244.0.32   prgs-control-plane   <none>           <none>
+
+
+
+# Obs.:
+# O 10.244.0.1/32 que você viu NÃO é o IP do pod.
+# Esse normalmente é IP da bridge/rota usada pelo CNI.
+#
+# Descobrir a outra ponta do veth
+docker exec prgs-control-plane bash -c "ip link"
+
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: eth0@if93: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default
+    link/ether 42:3f:a7:fb:a6:14 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+3: veth82067b25@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether d6:0f:81:f3:11:5c brd ff:ff:ff:ff:ff:ff link-netns cni-aa5c9c4e-2a72-db95-c2b8-ef261bf21dc2
+4: veth05d59c24@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 6e:9f:6a:ca:f4:92 brd ff:ff:ff:ff:ff:ff link-netns cni-d482bde7-f7dc-48db-a241-206b452dfe87
+5: veth8dec968f@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 9e:2e:df:9f:50:4a brd ff:ff:ff:ff:ff:ff link-netns cni-783c6c5f-fc7e-2fb7-8ff8-f6a86b644591
+6: veth448f4893@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 6e:4d:9d:c3:99:4f brd ff:ff:ff:ff:ff:ff link-netns cni-d0549ef8-4d61-2411-5185-f2c2beb295e8
+7: vethc1917bac@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 3e:69:81:60:4b:26 brd ff:ff:ff:ff:ff:ff link-netns cni-7b9aade6-626a-482a-e7c6-44efc1110c76
+9: veth6e5b38c2@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 9a:fe:97:44:b5:af brd ff:ff:ff:ff:ff:ff link-netns cni-d5f63792-1051-7cc6-40dc-d6ffa802ddb7
+13: vethcaab9ce8@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether ae:ad:0c:28:45:41 brd ff:ff:ff:ff:ff:ff link-netns cni-3cfdf0b9-ab55-c3b1-5c37-e133367d520b
+14: vethadd1228f@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 8a:7f:2f:ef:55:4d brd ff:ff:ff:ff:ff:ff link-netns cni-6c883486-8117-2db6-6910-c72699ed300c
+15: vetheecc2fbe@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 9a:cc:3c:88:fe:1c brd ff:ff:ff:ff:ff:ff link-netns cni-56e61d8e-039b-6183-3498-ceb21891f258
+16: veth4b1eb62f@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 32:b6:46:2b:53:2b brd ff:ff:ff:ff:ff:ff link-netns cni-361eb0f7-88ad-d14f-b2d4-ce658215be6f
+17: veth7b54fa9c@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 22:73:10:37:38:e7 brd ff:ff:ff:ff:ff:ff link-netns cni-8c5a894e-b78d-313d-049a-9674c2d4fa46
+18: vethc5cf1a50@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 7a:e8:1f:e3:63:f1 brd ff:ff:ff:ff:ff:ff link-netns cni-5fb0d73c-d699-9927-f2f5-dd61b0895b12
+19: veth7e71391f@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether aa:f7:79:65:12:ab brd ff:ff:ff:ff:ff:ff link-netns cni-4a174ced-70f0-df8f-e466-501e202e98d5
+20: veth312bf78b@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 3a:83:09:76:5f:6c brd ff:ff:ff:ff:ff:ff link-netns cni-8d7adb2a-3de1-cbe5-f166-9742d9abe86a
+22: veth18ec8eaf@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 7e:6c:60:b3:08:10 brd ff:ff:ff:ff:ff:ff link-netns cni-fe485a1a-cc55-357e-2c82-21f9a65d7eb6
+23: vethc4ab357f@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 6a:1a:73:13:fd:a7 brd ff:ff:ff:ff:ff:ff link-netns cni-a6898e03-71e5-be69-58d8-e30f3d83e6f9
+24: veth297ec1ad@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether ae:ac:40:f1:be:93 brd ff:ff:ff:ff:ff:ff link-netns cni-3314b657-ac96-e965-b2e6-e60ed232c762
+33: veth8b8a115d@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 6a:7b:2e:1f:68:11 brd ff:ff:ff:ff:ff:ff link-netns cni-bab69db5-ed3d-ef0e-4aae-2c8fc10d3c25
+
+# Ao ver essa informação ( veth82067b25@if2 ), esse @if2 significa que:
+- a outra ponta do par veth possui índice 2 dentro do namespace do pod.
+
+# Inspecionando CNI ( cni-aa5c9c4e-2a72-db95-c2b8-ef261bf21dc2 )
+# Ex:
+docker exec prgs-control-plane bash -c "nsenter --net=/var/run/netns/cni-aa5c9c4e-2a72-db95-c2b8-ef261bf21dc2 ip link"
+
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: eth0@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 3a:ba:dd:52:a3:38 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+
+# O que isso quer dizer?
+👉 Perceba:
+
+# host vê if2
+# pod  vê if3
+
+# Como identificar qual CNI está vinculada ao meu Pod e Service?
+
+# Exportar Variavel
+export cnis=$(docker exec prgs-control-plane bash -c "ip link | egrep -o 'cni-[a-z0-9-]+'")
+
+# Print
+docker exec prgs-control-plane bash -c "printf '%s\n' \"${cnis}\""
+
+# Saida padrao do nsenter
+2: eth0@if33: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000 link-netnsid 0
+    inet 10.244.0.32/24 brd 10.244.0.255 scope global eth0
+       valid_lft forever preferred_lft forever
+
+# Regex
+# (?<=inet\s)\d+(\.\d+){3}
+# (?<=...) → lookbehind positivo ( Olho para traz )
+# inet     → texto literal bate com palavra chave inet
+# \s       → um espaço em branco
+# Pego IPV4 apos esse match
+
+# 10.244.0.32 => Ip do Pod ( Nginx )
+
+while read -r cni;
+do
+  match=$(docker exec prgs-control-plane bash -c "nsenter --net=/var/run/netns/${cni} ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}'")
+  [[ ${match} == "10.244.0.32" ]] && echo "${cni} - ${match}"
+done <<< ${cnis}
+
+# Entao a CNI que está atendendo o Pod Nginx é:
+cni-bab69db5-ed3d-ef0e-4aae-2c8fc10d3c25 - 10.244.0.32
+```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - DNS
+
+```bash
 ```
 
 [Índice](#-menu)
