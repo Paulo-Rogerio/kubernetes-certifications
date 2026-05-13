@@ -44,7 +44,9 @@
 - [Create Object - HPA / VPA](#-create-object---hpa--vpa)
 - [Create Object - CNI](#-create-object---cni)
 - [Create Object - DNS](#-create-object---dns)
-
+- [Create Object - Network Policies](#-create-object---network-policies)
+- [Create Object - RBAC / CRB / RB](#-create-object---rbac--crb--rb)
+- [Create Object - RBAC / Create User](#-create-object---rbac--create-user)
 
 
 # 🚀 Command Line - Contexts
@@ -6542,7 +6544,475 @@ cni-bab69db5-ed3d-ef0e-4aae-2c8fc10d3c25 - 10.244.0.32
 # 🚀 Create Object - DNS
 
 ```bash
+# Kube-DNS resolv Name
+k get svc -n kube-system
+NAME             TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                  AGE
+kube-dns         ClusterIP   10.96.0.10      <none>        53/UDP,53/TCP,9153/TCP   78m
+metrics-server   ClusterIP   10.108.129.79   <none>        443/TCP                  73m
+
+# Criando um Deployment e um Service
+k create deployment --image=nginx nginx
+k create service clusterip nginx --tcp=80:80
+
+pod=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
+k exec -it $pod -- bash -c "cat /etc/resolv.conf"
+
+search default.svc.cluster.local svc.cluster.local cluster.local
+nameserver 10.96.0.10
+options ndots:5
+
+# Quem gera esse resolv.conf?
+# O próprio kubelet
+
+👉 Search => Definie os domínios de busca automática.
+nginx.default.svc.cluster.local
+nginx.svc.cluster.local
+nginx.cluster.local
+
+👉 Nameserver => Ip do servidor.
+👉 options    => ndots:5
+
+# Ela controla quando um nome é considerado “absoluto” (FQDN) ou “relativo”.
+# Se o hostname tiver MENOS de 5 pontos (.), o resolver tentará aplicar os domínios do search.
+# Ex:
+# curl google.com
+# Tentará resolver...
+# google.com.default.svc.cluster.local
+# google.com.svc.cluster.local
+# google.com.cluster.local
+# Tenta isso antes, de tentar isso...
+# google.com
+
+# Esses sao os Pod que irão atender essas requisiçoes
+k get endpoints -n kube-system kube-dns
+NAME       ENDPOINTS                                               AGE
+kube-dns   10.244.0.2:53,10.244.0.4:53,10.244.0.2:53 + 3 more...   14m
+
+k get pods -n kube-system -o wide | grep coredns
+coredns-66bc5c9577-9wjg7                     1/1     Running   0          15m   10.244.0.2   prgs-control-plane   <none>           <none>
+coredns-66bc5c9577-t4k6n                     1/1     Running   0          15m   10.244.0.4   prgs-control-plane   <none>           <none>
+
+# Monitorando os Logs
+dns=$(k get pods -n kube-system -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}' | grep '^coredns-')
+
+while true;
+do
+  while read i;
+  do
+    k logs -n kube-system ${i}
+    echo "---"
+  done <<< ${dns}
+  sleep 3
+done
+
+pod=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
+k exec -it $pod -- bash -c "curl nginx"
+
+# Observe que os Logs do kube-system não trazem a resolução dos Nomes
+# Como Ativar / Habilitar ( Logs e Debug )?
+
+k get cm -n kube-system coredns
+k get cm -n kube-system coredns -o yaml
+k edit cm -n kube-system coredns -o yaml
+
+apiVersion: v1
+data:
+  Corefile: |
+    .:53 {
+        log
+        debug
+        errors
+        health {
+           lameduck 5s
+        }
+
+# Após modificar o ConfigMap, reinicie os Pods
+k rollout restart -n kube-system deployment coredns
+deployment.apps/coredns restarted
+
+# Execute novamente o monitoramento
+[INFO] 127.0.0.1:58994 - 34124 "HINFO IN 6037978408014335337.605814283789943898. udp 56 false 512" NXDOMAIN qr,rd,ra 131 0.030715552s
+[INFO] 10.244.0.18:44094 - 2374 "TXT IN _grpc_config.localhost.cluster.local. udp 65 false 1232" NXDOMAIN qr,aa,rd 147 0.000133673s
+[INFO] 10.244.0.18:53621 - 42692 "TXT IN _grpc_config.localhost. udp 51 false 1232" NOERROR qr,aa,rd,ra 40 0.000665255s
+[INFO] 10.244.0.18:50217 - 27442 "TXT IN _grpc_config.localhost.argocd.svc.cluster.local. udp 76 false 1232" NXDOMAIN qr,aa,rd 158 0.000451439s
+[INFO] 10.244.0.18:47653 - 27301 "TXT IN _grpc_config.localhost.cluster.local. udp 65 false 1232" NXDOMAIN qr,aa,rd 147 0.000265055s
+[INFO] 10.244.0.18:42682 - 225 "TXT IN _grpc_config.localhost.svc.cluster.local. udp 69 false 1232" NXDOMAIN qr,aa,rd 151 0.000098051s
+[INFO] 10.244.0.18:59465 - 42232 "TXT IN _grpc_config.localhost.argocd.svc.cluster.local. udp 76 false 1232" NXDOMAIN qr,aa,rd 158 0.000412204s
+[INFO] 10.244.0.18:43551 - 3161 "TXT IN _grpc_config.localhost.cluster.local. udp 65 false 1232" NXDOMAIN qr,aa,rd 147 0.000274895s
+[INFO] 10.244.0.18:46699 - 41298 "TXT IN _grpc_config.localhost. udp 51 false 1232" NOERROR qr,aa,rd,ra 40 0.001113165s
+[INFO] 10.244.0.18:51218 - 41659 "TXT IN _grpc_config.localhost.cluster.local. udp 65 false 1232" NXDOMAIN qr,aa,rd 147 0.00010227s
+[INFO] 10.244.0.18:49290 - 65400 "TXT IN _grpc_config.localhost. udp 51 false 1232" NOERROR qr,aa,rd,ra 40 0.000420723s
+[INFO] 10.244.0.18:40972 - 13505 "TXT IN _grpc_config.localhost.argocd.svc.cluster.local. udp 76 false 1232" NXDOMAIN qr,aa,rd 158 0.000533889s
+[INFO] 10.244.0.18:43550 - 21969 "TXT IN _grpc_config.localhost.svc.cluster.local. udp 69 false 1232" NXDOMAIN qr,aa,rd 151 0.000305457s
+[INFO] 10.244.0.18:45800 - 35989 "TXT IN _grpc_config.localhost.cluster.local. udp 65 false 1232" NXDOMAIN qr,aa,rd 147 0.000350586s
+[INFO] 10.244.0.18:34607 - 33844 "TXT IN _grpc_config.localhost.argocd.svc.cluster.local. udp 76 false 1232" NXDOMAIN qr,aa,rd 158 0.00048275s
+[INFO] 10.244.0.18:51297 - 16213 "TXT IN _grpc_config.localhost.svc.cluster.local. udp 69 false 1232" NXDOMAIN qr,aa,rd 151 0.000346629s
+[INFO] 10.244.0.18:38990 - 39505 "TXT IN _grpc_config.localhost. udp 51 false 1232" NOERROR qr,aa,rd,ra 40 0.001392945s
+[INFO] 10.244.0.11:50750 - 53043 "A IN nginx.default.svc.cluster.local. udp 49 false 512" NOERROR qr,aa,rd 96 0.000213921s
+[INFO] 10.244.0.11:50750 - 44854 "AAAA IN nginx.default.svc.cluster.local. udp 49 false 512" NOERROR qr,aa,rd 142 0.000279647s
+
+
+# Se tiver um DNS interno, resolvendo outro dominio, como fazer para esse Dominio ficar acessível no cluster?
+# Deve-se configurar um DNS Externo.
+
+k get cm -n kube-system coredns
+k get cm -n kube-system coredns -o yaml
+k edit cm -n kube-system coredns -o yaml
+
+# Adicione um novo bloco, no meu caso o bloco chama-se "interno.prgs.corp"
+
+apiVersion: v1
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health {
+           lameduck 5s
+        }
+        ready
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+           pods insecure
+           fallthrough in-addr.arpa ip6.arpa
+           ttl 30
+        }
+        prometheus :9153
+        forward . /etc/resolv.conf {
+           max_concurrent 1000
+        }
+        cache 30 {
+           disable success cluster.local
+           disable denial cluster.local
+        }
+        loop
+        reload
+        loadbalance
+    }
+    interno.prgs.corp {
+        log
+        errors
+        forward . 192.168.56.56
+        loadbalance
+        cache 30
+        reload
+    }
+
+# Reinicie os Pods
+k rollout restart -n kube-system deployment coredns
+
+# Nesse cenário, O DNS externo ( vault.interno.prgs.corp aponta para 192.168.56.56 )
+#
+k run --image alpine --rm -it curl sh
+/ # ping 192.168.56.56
+/ # apk add bind-tools
+/ # host vault.interno.prgs.corp 192.168.56.56
+Using domain server:
+Name: 192.168.56.56
+Address: 192.168.56.56#53
+Aliases:
+
+Host vault.interno.prgs.corp.default.svc.cluster.local not found: 5(REFUSED)
+
+/ # cat /etc/resolv.conf
+search default.svc.cluster.local svc.cluster.local cluster.local
+nameserver 10.96.0.10
+options ndots:5
+
+/ # host vault.interno.prgs.corp
+vault.interno.prgs.corp is an alias for ns1.interno.prgs.corp.
+ns1.interno.prgs.corp has address 192.168.56.56
+
+/ # ping vault.interno.prgs.corp
+PING vault.interno.prgs.corp (192.168.56.56): 56 data bytes
+64 bytes from 192.168.56.56: seq=0 ttl=62 time=0.750 ms
+64 bytes from 192.168.56.56: seq=1 ttl=62 time=0.519 ms
+64 bytes from 192.168.56.56: seq=2 ttl=62 time=0.719 ms
+
 ```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - Network Policies
+
+```bash
+
+# Para reproduzir esse laboratório é necessário ter uma CNI que suporta Policies. No cenários abaixo foi implementado o Kind com suporte a Cilium.
+#
+# Subir o kind com suporte a cilium
+
+k apply -f apps
+deployment.apps/backend created
+deployment.apps/database created
+deployment.apps/frontend created
+
+k get pods -o wide
+NAME                        READY   STATUS    RESTARTS   AGE   IP             NODE           NOMINATED NODE   READINESS GATES
+backend-76f4f86497-p76q2    1/1     Running   0          17m   10.244.2.148   prgs-worker    <none>           <none>
+database-57f5bfb9c5-tfb6b   1/1     Running   0          17m   10.244.2.181   prgs-worker    <none>           <none>
+frontend-64f4b788f9-hw8hb   1/1     Running   0          17m   10.244.1.49    prgs-worker2   <none>           <none>
+
+# Frontend:
+#   - Recebe tráfego de fora, mas só pode conversar com Backend.
+#   - Não pode falar com database.
+
+# Backend:
+#   - Recebe requisiçoes do Frontend
+#   - Pode fazer requisições para o Database.
+
+# Database:
+#   - Só recebe requisiçoes do Frontend.
+
+
+#******************* Frontend não consegue Chegar no Database **********************
+#
+# 1) Conectar no Database e deixar uma porta Listen ( 5432 )
+
+k exec -it database-57f5bfb9c5-tfb6b  -- sh
+nc -lvp 5432
+listening on [::]:5432 ...
+connect to [::ffff:10.244.2.181]:5432 from [::ffff:10.244.1.49]:42587 ([::ffff:10.244.1.49]:42587)
+
+# 2) Conectar no Frontend e tentar conectar na porta ( 5432 )
+k exec -it frontend-64f4b788f9-hw8hb  -- sh
+nc -v 10.244.2.181 5432
+10.244.2.181 (10.244.2.181:5432) open
+
+# Esse Policie aplicada permite conexão externa , mas não permite conexão intra cluster.
+# Ela bloqueia tudo, como o DNS está no range dos Pods ( 10.244.0.0/16 ) não consigo resolver nomes.
+#
+cat <<EOF | k apply -f -
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-internet-only
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.244.0.0/16
+EOF
+
+k exec -it frontend-64f4b788f9-hw8hb  -- sh
+/ # apk add curl
+/ # ping 4.2.2.2 -c 5
+PING 4.2.2.2 (4.2.2.2): 56 data bytes
+64 bytes from 4.2.2.2: seq=0 ttl=61 time=1.347 ms
+64 bytes from 4.2.2.2: seq=1 ttl=61 time=0.707 ms
+64 bytes from 4.2.2.2: seq=2 ttl=61 time=0.915 ms
+64 bytes from 4.2.2.2: seq=3 ttl=61 time=0.682 ms
+64 bytes from 4.2.2.2: seq=4 ttl=61 time=0.923 ms
+
+
+cat <<EOF | k apply -f -
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-internet-only
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 10.244.0.0/16
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-dns
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+EOF
+
+k exec -it frontend-64f4b788f9-hw8hb  -- sh
+/ # apk add curl
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/APKINDEX.tar.gz
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/community/x86_64/APKINDEX.tar.gz
+(1/9) Installing brotli-libs (1.1.0-r2)
+(2/9) Installing c-ares (1.34.3-r0)
+(3/9) Installing libunistring (1.2-r0)
+(4/9) Installing libidn2 (2.3.7-r0)
+(5/9) Installing nghttp2-libs (1.64.0-r0)
+(6/9) Installing libpsl (0.21.5-r3)
+(7/9) Installing zstd-libs (1.5.6-r2)
+(8/9) Installing libcurl (8.11.1-r0)
+(9/9) Installing curl (8.11.1-r0)
+Executing busybox-1.37.0-r9.trigger
+OK: 12 MiB in 24 packages
+
+kubectl get networkpolicy
+kubectl describe networkpolicy allow-dns
+
+```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - RBAC / CRB / RB
+
+```bash
+
+# RBAC ( Role Based Access Control )
+#
+# Role => Função que te dá acesso a alguma coisa.
+
+           AUTH            |        Authorization
+-------------------------------------------------------------
+                            ------ ( CRB ) Cluster Rolling Binding => View
+( Usuário kubeconfig )-----|
+                            ------ (  RB ) Rolling Binding         => Monitoring ( ro )
+
+# Auth ( Processo que verifica se vc é diz quem ser )
+#
+# Ex: Usuário irá interagir com o cluster por meio do kubectl, mas os mesmo comandos as mesmas chamadas
+# podem ser realizadas por algum pod que esteja em execução e se esse POD tiver previlégio usando ( services accounts ),
+# ele poderá efetivar alteraçoes no cluster.
+
+# Todas as chamadas sejam feitas por um usuário ( kubectl ), dentro ou fora do cluster irão passar pelo api-server.
+#
+# Ao passar pelo api-server é necessário ser uma chamada de API, entao como esse acesso é autenticado , conseguimos
+# mapear as permissões que podem ser realizado.
+
+# ( CRB ) Cluster Rolling Binding => Dá acesso a recursos a nivel do cluster inteiro, não por namespace.
+# Ex: Se eu der permissão para usuário ler os services, o usuário poderá ler todos todos os services de todos namespaces.
+
+# ( RB ) Rolling Binding => Dá acesso a recursos a nivel de namespace
+
+# O termo ( Binding ) é o que faz o atrelamento
+# A role é o que dá o acesso.
+
+# Ex: O cluster ja possui uma (CRB) nativa que dá acesso a leitura ao cluster.
+# Se eu precisar monitorar o cluster , posso criar uma (RB) chamada ( monitoring-ro ) que dará acesso a todos os recursos dentro da namespace monitoring
+```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - RBAC / Create User
+
+```bash
+
+https://kubernetes.io/docs/reference/access-authn-authz/authentication/
+
+https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/#kubernetes-signers
+
+
+# O kubernets só confia em certificados que ele mesmo assinou, no formato mais comum x509
+# podemos criar um (CSR Certificate signing requests) e a CA do k8s assina e confia
+
+# Não se cria um usuario no kubernetes ( Kind User ) isso nao existe. O kubernetes le o certicicado ( CN )
+
+#********************** Criando Certificado para Usuário ***************************
+#
+
+openssl req -nodes \
+  -days 365 \
+  -newkey rsa:2048 \
+  -keyout estagiario.key \
+  -out estagiario.csr \
+  -subj '/CN=estagiario/O=prgs/O=corp' \
+  -addext 'subjectAltName = DNS:estagiario.prgs.corp'
+
+# Observe que ele criou um ( BEGIN CERTIFICATE REQUEST )
+
+cat estagiario.csr
+-----BEGIN CERTIFICATE REQUEST-----
+MIICqjCCAZICAQAwMzETMBEGA1UEAwwKZXN0YWdpYXJpbzENMAsGA1UECgwEcHJn
+czENMAsGA1UECgwEY29ycDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEB
+AJgTlNNSpjtoBRE/RcMWOXoDAW2S3eAgGgRjZeNkocAfSkclfVJ6FwmZ1o4/CNkz
+5jwULCmgXhv//d9gOVPyqyfdDNuBIrTzLrVUxZbU6ZgMyTBvnMOpExuRVYV78Pfo
+wFDSro63ZOHV2t4B6fBn50fpxQ3L3Sa2q01uPB2/1rJg8kCXqX1yiPkkEGhHB18a
+jkdi6J2uvEJ0Obt/cFE7mxsluAuYkNELAv77a2URpdQP1feS9NreUFWYkiQyqfHn
+/ZMSurUkdETO5HthlS4ikL/UaWvkl+vNXaqPPqQMbTejz/m5lMOfeDOA3yXwzaQN
+lDeokPjiDxPqSl2g1eRsGPkCAwEAAaAyMDAGCSqGSIb3DQEJDjEjMCEwHwYDVR0R
+BBgwFoIUZXN0YWdpYXJpby5wcmdzLmNvcnAwDQYJKoZIhvcNAQELBQADggEBAFFg
+GizQtXF2sBjGSgp9hIELjjrwdMUsa7b0y69/E+gu+Iwpe6Y1dhUS5OEMZUmWly1R
+aKx/kAfdfD/9MRZH5nfLGYb8ZdrcOud4c/7juPFCFvM29aEdEKj5bQMMvUlkBhAN
+oEIO74sK7OPqB6DO/NFjcU/71HZ20t0Qe6HIJlYzcbTKt1Qo6xvxFQhvFSb+ZYkR
+jsrW8C/SylGO04XZOzezid1WPTg5hiUYuokGNgqh0efq6n5ExnH1yBbRABoub90f
+d8caVqQbBoQymuKQmfZU5W4kVvnMjiFPUxjwWfoQSHDYNDD61pmCNh5N9EBSze2T
+7wYd79Xz6MlH+gZUe9g=
+-----END CERTIFICATE REQUEST-----
+
+
+# Para me autentica , vou precisar da key e do certificado assinado pelo kubernetes. O arquivo csr é a requisição para assinar o certificado.
+#
+# Criando um certificado para autenticar no kubeconfig
+#
+# Como assinar?
+
+cat <<EOF | k apply -f -
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: estagiario-csr
+spec:
+  request: $(cat estagiario.csr | base64 -w 0)
+  signerName: kubernetes.io/kube-apiserver-client
+  usages:
+  - client auth
+EOF
+
+# Como checar Todas CSR abertas?
+# Ele ficará como pendind até que um admin possa aprovar
+k get csr -A
+NAME             AGE   SIGNERNAME                                    REQUESTOR                        REQUESTEDDURATION   CONDITION
+csr-p76zx        94m   kubernetes.io/kube-apiserver-client-kubelet   system:node:prgs-control-plane   <none>              Approved,Issued
+estagiario-csr   8s    kubernetes.io/kube-apiserver-client           kubernetes-admin                 <none>              Pending
+
+# Aqui é onde ele assina o certificado.
+k certificate approve estagiario-csr
+
+k get csr -A
+NAME             AGE   SIGNERNAME                                    REQUESTOR                        REQUESTEDDURATION   CONDITION
+csr-p76zx        94m   kubernetes.io/kube-apiserver-client-kubelet   system:node:prgs-control-plane   <none>              Approved,Issued
+estagiario-csr   49s   kubernetes.io/kube-apiserver-client           kubernetes-admin                 <none>              Approved,Issued
+
+
+# Extrair certificao
+k get csr estagiario-csr -o yaml
+
+# Como checar se o certificao foi assinado pelo k8s?
+# Issuer CN=Kubernertes
+# Subjetct CN = estagiario
+k get csr estagiario-csr -o json | jq -r '.status.certificate' | base64 -d | openssl x509 -text
+
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            50:1d:6b:9c:b1:99:75:42:c9:bb:34:c5:f9:d7:ed:50
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: CN=kubernetes
+        Validity
+            Not Before: Jan 22 13:47:18 2026 GMT
+            Not After : Jan 22 13:47:18 2027 GMT
+        Subject: O=corp + O=prgs, CN=estagiario
+
+k get csr estagiario-csr -o json | jq -r '.status.certificate' | base64 -d > estagiario.crt
+
+#************************** Configurando o Context *********************************
+#
+
+
+
+```
+
 
 [Índice](#-menu)
 
