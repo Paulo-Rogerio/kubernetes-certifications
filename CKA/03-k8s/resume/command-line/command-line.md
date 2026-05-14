@@ -6970,21 +6970,23 @@ EOF
 
 # Como checar Todas CSR abertas?
 # Ele ficará como pendind até que um admin possa aprovar
-k get csr -A
+k get csr
 NAME             AGE   SIGNERNAME                                    REQUESTOR                        REQUESTEDDURATION   CONDITION
 csr-p76zx        94m   kubernetes.io/kube-apiserver-client-kubelet   system:node:prgs-control-plane   <none>              Approved,Issued
 estagiario-csr   8s    kubernetes.io/kube-apiserver-client           kubernetes-admin                 <none>              Pending
 
 # Aqui é onde ele assina o certificado.
+# Assinando Certificado
 k certificate approve estagiario-csr
+certificatesigningrequest.certificates.k8s.io/estagiario-csr approved
 
-k get csr -A
+k get csr
 NAME             AGE   SIGNERNAME                                    REQUESTOR                        REQUESTEDDURATION   CONDITION
 csr-p76zx        94m   kubernetes.io/kube-apiserver-client-kubelet   system:node:prgs-control-plane   <none>              Approved,Issued
 estagiario-csr   49s   kubernetes.io/kube-apiserver-client           kubernetes-admin                 <none>              Approved,Issued
 
 
-# Extrair certificao
+# Extrair certificado
 k get csr estagiario-csr -o yaml
 
 # Como checar se o certificao foi assinado pelo k8s?
@@ -7006,11 +7008,311 @@ Certificate:
 
 k get csr estagiario-csr -o json | jq -r '.status.certificate' | base64 -d > estagiario.crt
 
-#************************** Configurando o Context *********************************
+-----BEGIN CERTIFICATE-----
+MIIDNzCCAh+gAwIBAgIQd1D0Xk4vcPWqO3CXPjq2FTANBgkqhkiG9w0BAQsFADAV
+MRMwEQYDVQQDEwprdWJlcm5ldGVzMB4XDTI2MDUxNDEzMjcyNloXDTI3MDUxNDEz
+MjcyNlowMTEaMAsGA1UEChMEY29ycDALBgNVBAoTBHByZ3MxEzARBgNVBAMTCmVz
+dGFnaWFyaW8wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCTVUNpLq8I
+uYUx1pTige4vDsLHcC61L26Z2c0A1fXPPmIN9C98fBO7uQSpFBLW/3EQbvR9Aol/
+QyINq5m9pGWlQI+MkGosoe8ONH2t4LLZN8f9FyDDYBfYfaY9pSia8WBlhoAICgM0
+qkQdKwuaxQttGuikazWUj1zCfWnvZxI1tYFew0IiepMVyRJg+XXJsBDDDOcXprxG
+VMrcvcqhISZ35dw72SZEJ4oQUdYn8MW5fQQstXqimW9221KiAZ04Z1PoBXMOkPIp
+ut8QXh1LsKpeqF1HSUAlFsP7dhuHZLADIPrtAw+2hc/LRydEj9BkTANXECJgiP3U
+yr1QEzaPebrPAgMBAAGjZzBlMBMGA1UdJQQMMAoGCCsGAQUFBwMCMAwGA1UdEwEB
+/wQCMAAwHwYDVR0jBBgwFoAUEw5qGh+nrYPiEz2gCIb3yIWqKFAwHwYDVR0RBBgw
+FoIUZXN0YWdpYXJpby5wcmdzLmNvcnAwDQYJKoZIhvcNAQELBQADggEBAH6GHtip
+KU/DsOG1N8ru+pUZY8uwNQd1KTCkhTb0X5XmRnE9op6vxr4J98e0i1uIfAqRdl58
+HUyP9A7pm/JO+1UcDAM1ZsbXOSBhAp4dHsTA/2gKmXsPUsj2lbpm1AkapjDIWPnV
+s/MFq3l+aBmZ7uYZUxbOTT8qKUlmppCNXQmhGq9F8nopFidH+g0d7cyXSS4VbT47
+teu8gT7s9EKIgmqxbbsPtKsNMKco3Av/NIxQO+n8CfQIxJbXKWIrwFky9XKH8aXv
+fbR8AOYbxaKbGmBC01eczfMdPAC/dWXYw/VoZeS3lgF6kpl9w6JvNO3EI0IoKAha
+R6zl6qw7CWOuxNI=
+-----END CERTIFICATE-----
+
+
+#**************** Configurando Nova Credencial Estagiário **************************
 #
+# Check o current Context
+kubectl config current-context
+kind-prgs
+
+# Backup Config
+cp ~/.kube/config{,.bkp}
+
+# O arquivo ~/.kube/config guarda:
+#
+👉 clusters
+👉 usuários (credentials/certificados)
+👉 contexts
+
+# Um context é a combinação de:
+#
+👉 cluster
+👉 usuário
+👉 namespace padrão
+
+# Aqui é onde se cria um novo usuário no Kubeconfig
+# Esse usuário ( estagiário ) usará seus certificados para autenticar.
+# Definindo no kube/config as credencias do estagiário
+kubectl config set-credentials estagiario --client-certificate=$(pwd)/estagiario.crt --client-key=$(pwd)/estagiario.key
+User "estagiario" set.
+
+# O que acontece internamente
+# O kubeconfig ganha algo parecido com:
+
+users:
+- name: estagiario
+  user:
+    client-certificate: /caminho/estagiario.crt
+    client-key: /caminho/estagiario.key
+
+# Criando um Context chamado ( estagiário )
+kubectl config set-context estagiario --cluster kind-prgs --namespace default --user estagiario
+
+# O que isso gera?
+contexts:
+- context:
+    cluster: kind-prgs
+    namespace: default
+    user: estagiario
+  name: estagiario
+
+# Trocando para o contexto
+kubectl config use-context estagiario
+Switched to context "estagiario".
+
+Error from server (Forbidden): nodes is forbidden: User "estagiario" cannot list resource "nodes" in API group "" at the cluster scope
+
+# Isso significa:
+✅ autenticação funcionou
+❌ autorização falhou
+
+# Check o contexto
+kubectl config current-context
+estagiario
+
+# Como checar todos os contexts existentes e qual está em uso.
+kubectl config get-contexts
+CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
+*         estagiario                    kind-prgs    estagiario         default
+          kind-prgs                     kind-prgs    kind-prgs
+          kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
+
+# OBs.:
+# Os arquivos .kube/config estão sendo referenciado por um path ( /caminho/certificado )
+# Caso queira definir no próprio .kube/config
+# O resultado é o mesmo
+#
+cp ~/.kube/config{,.kind}
+
+export base64_cert=$(base64 -w 0 <<< $(cat estagiario.crt))
+export base64_key=$(base64 -w 0 <<< $(cat estagiario.key))
+
+kubectl config set-credentials estagiario --client-certificate=/tmp/estagiario.crt --client-key=/tmp/estagiario.key
+sed -i "s/client-certificate: \/tmp\/estagiario.crt/client-certificate-data: ${base64_cert}/" ~/.kube/config
+sed -i "s/client-key: \/tmp\/estagiario.key/client-key-data: ${base64_key}/" ~/.kube/config
+
+#**************** Configurando Autorização para Estagiário *************************
+#
+https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles
+https://kubernetes.io/docs/reference/access-authn-authz/rbac/#clusterrole-example
+
+# Quais resources?
+k api-resources
+NAME                                SHORTNAMES                        APIVERSION                        NAMESPACED   KIND
+bindings                                                              v1                                true         Binding
+componentstatuses                   cs                                v1                                false        ComponentStatus
+configmaps                          cm                                v1                                true         ConfigMap
+endpoints                           ep                                v1                                true         Endpoints
+events                              ev                                v1                                true         Event
+limitranges                         limits                            v1                                true         LimitRange
+namespaces                          ns                                v1                                false        Namespace
+...
+...
+...
+
+# Todo o recurso namespaced pode ser vinculado a uma Role, restringindo apenas por namespace.
+k api-resources | grep true
+
+# Listar todos recurso namespaced
+k api-resources --namespaced
+
+# Volte para contexto que tem previlégios
+kubectl config use-context kind-prgs
+Switched to context "kind-prgs".
+
+# Quais cluster roles existentes?
+k get clusterrole
+NAME                                                                   CREATED AT
+admin                                                                  2026-05-14T13:28:04Z
+argo-cd-argocd-application-controller                                  2026-05-14T13:34:17Z
+argo-cd-argocd-notifications-controller                                2026-05-14T13:34:17Z
+argo-cd-argocd-server                                                  2026-05-14T13:34:17Z
+cluster-admin                                                          2026-05-14T13:28:04Z
+edit                                                                   2026-05-14T13:28:04Z
+kindnet                                                                2026-05-14T13:28:07Z
+kubeadm:get-nodes                                                      2026-05-14T13:28:05Z
+...
+...
+...
+
+# Se eu der permissão a nivel de cluster eu dou permissão em todas as namespaces.
+
+cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: estagiario-ro
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["list"]
+EOF
+
+k get clusterrole estagiario-ro
+NAME            CREATED AT
+estagiario-ro   2026-05-14T14:09:20Z
+
+# Volte para contexto estagiário
+kubectl config use-context estagiario
+Switched to context "estagiario".
+
+# Teste .... Ainda com erros?
+k get pods -A
+Error from server (Forbidden): pods is forbidden: User "estagiario" cannot list resource "pods" in API group "" at the cluster scope
 
 
+# Porque continua dando erro?
+👉 Apenas criamos a ClusterRole, agora temos que fazer o binding para conceder a ação ( list ).
 
+
+# Volte para contexto que tem previlégios
+kubectl config use-context kind-prgs
+Switched to context "kind-prgs".
+
+cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: estagiario-ro
+subjects:
+- kind: User
+  name: estagiario
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: estagiario-ro
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
+k get clusterrolebindings estagiario-ro
+NAME            ROLE                        AGE
+estagiario-ro   ClusterRole/estagiario-ro   39s
+
+# Volte para contexto estagiário
+kubectl config use-context estagiario
+Switched to context "estagiario".
+
+kubectl config get-contexts
+CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
+*         estagiario                    kind-prgs    estagiario         default
+          kind-prgs                     kind-prgs    kind-prgs
+          kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
+
+# Lista os nodes
+k get nodes
+NAME                 STATUS   ROLES           AGE   VERSION
+prgs-control-plane   Ready    control-plane   46m   v1.34.0
+
+# Consigo listar os Pods?
+# List Nodes , mas os Pods não tenho permisão?
+k get pods -A
+Error from server (Forbidden): pods is forbidden: User "estagiario" cannot list resource "pods" in API group "" at the cluster scope
+
+# Volte para context com previlégios
+kubectl config use-context kind-prgs
+Switched to context "kind-prgs".
+
+kubectl config get-contexts
+CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
+          estagiario                    kind-prgs    estagiario         default
+*         kind-prgs                     kind-prgs    kind-prgs
+          kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
+
+# Existe um "ClusterRoleBinding" chamado "view" , que dará permissão de leitura para todos objetos do cluster
+# Não da acesso a secrets ( Checar na documentação )
+
+cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: estagiario-ro
+subjects:
+- kind: User
+  name: estagiario
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
+# Não é possível alterar
+The ClusterRoleBinding "estagiario-ro" is invalid: roleRef: Invalid value: {"APIGroup":"rbac.authorization.k8s.io","Kind":"ClusterRole","Name":"view"}: cannot change roleRef
+
+k get clusterrolebindings estagiario-ro
+k delete clusterrolebindings estagiario-ro
+
+✅ Reaplique o manifesto
+
+# Volte para context com previlégios
+kubectl config use-context estagiario
+Switched to context "estagiario".
+
+kubectl config get-contexts
+CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
+*         estagiario                    kind-prgs    estagiario         default
+          kind-prgs                     kind-prgs    kind-prgs
+          kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
+
+# Execute a criação novamente
+# Esse ClusterRole ( view ) , não consegue ver os nodes.
+
+# Essa RBAC não permite ver os nodes
+k get nodes
+Error from server (Forbidden): nodes is forbidden: User "estagiario" cannot list resource "nodes" in API group "" at the cluster scope
+
+# Consigo listar todos os Pods
+k get pods -A
+NAMESPACE            NAME                                                        READY   STATUS    RESTARTS   AGE
+argocd               argo-cd-argocd-application-controller-0                     1/1     Running   0          47m
+argocd               argo-cd-argocd-applicationset-controller-65f795bdf4-c7tc5   1/1     Running   0          47m
+argocd               argo-cd-argocd-dex-server-76c9c5f56b-22rfq                  1/1     Running   0          47m
+argocd               argo-cd-argocd-notifications-controller-7d746d6f96-dj8q5    1/1     Running   0          47m
+argocd               argo-cd-argocd-redis-9c859c655-f6sqt                        1/1     Running   0          47m
+argocd               argo-cd-argocd-repo-server-6d9f79976f-rfb52                 1/1     Running   0          47m
+argocd               argo-cd-argocd-server-66b994c4fd-696cv                      1/1     Running   0          47m
+argocd               gateway-nginx-7b76ff4574-b66r5                              1/1     Running   0          47m
+kube-system          coredns-66bc5c9577-8wvsv                                    1/1     Running   0          54m
+kube-system          coredns-66bc5c9577-pt4fh                                    1/1     Running   0          54m
+kube-system          etcd-prgs-control-plane                                     1/1     Running   0          54m
+kube-system          kindnet-mmlt7                                               1/1     Running   0          54m
+kube-system          kube-apiserver-prgs-control-plane                           1/1     Running   0          54m
+kube-system          kube-controller-manager-prgs-control-plane                  1/1     Running   0          54m
+kube-system          kube-proxy-j4t4v                                            1/1     Running   0          54m
+kube-system          kube-scheduler-prgs-control-plane                           1/1     Running   0          54m
+kube-system          metrics-server-fcf6b4bd6-hpwvw                              1/1     Running   0          52m
+local-path-storage   local-path-provisioner-7b8c8ddbd6-2llx5                     1/1     Running   0          54m
+metallb-system       metallb-controller-765c495b75-6t24q                         1/1     Running   0          53m
+metallb-system       metallb-speaker-7zzvt                                       4/4     Running   0          53m
+nginx-gateway        ngf-nginx-gateway-fabric-76fc67668f-b8g7w                   1/1     Running   0          51m
+
+
+# Se tentar deletar....
+# Sem permissão.
+k delete pod -n nginx-gateway ngf-nginx-gateway-fabric-76fc67668f-b8g7w
+Error from server (Forbidden): pods "ngf-nginx-gateway-fabric-76fc67668f-b8g7w" is forbidden: User "estagiario" cannot delete resource "pods" in API group "" in the namespace "nginx-gateway
 ```
 
 
