@@ -29,6 +29,7 @@
 - [Create Object - Manutenção em Membros do Cluster](#-create-object---manutenção-em-membros-do-cluster)
 - [Create Object - External Name](#-create-object---external-name)
 - [Create Object - Trafic Policy](#-create-object---trafic-policy)
+- [Create Object - Estratégias Deploy](#-create-object---estratégias-deploy)
 - [Create Object - Deploy Canary](#-create-object---deploy-canary)
 - [Create Object - Deploy Blue Green](#-create-object---deploy-blue-green)
 - [Create Object - Ingress Controller](#-create-object---ingress-controller)
@@ -47,7 +48,12 @@
 - [Create Object - Network Policies](#-create-object---network-policies)
 - [Create Object - RBAC / CRB / RB](#-create-object---rbac--crb--rb)
 - [Create Object - RBAC / Create User](#-create-object---rbac--create-user)
-
+- [Create Object - RBAC / Create Context](#-create-object---rbac--create-context)
+- [Create Object - RBAC / Configurando Autorização](#-create-object---rbac--configurando-autorização)
+- [Create Object - Role ServiceAccount + RolingBindgings](#-create-object---role-serviceaccount--rolingbindgings)
+- [Create Object - Affinity](#-create-object---affinity)
+- [Cluster Upgrade - Ferramentas](#-cluster-upgrade---ferramentas)
+- [Explorando Documentação - Kubectl](#-explorando-documentação---kubectl)
 
 # 🚀 Command Line - Contexts
 
@@ -2493,6 +2499,43 @@ apk add curl
 while true; do curl -I http://10.96.247.192; done
 ```
 [Índice](#-menu)
+
+# 🚀 Create Object - Estratégias Deploy
+
+```bash
+Deployment   => Aplicação stateless ( Aplicação escaláveis )
+
+                           -----------
+                           Deployment
+                           -----------
+                                |
+                ________________|_____________
+                |               |             |
+                |               |             |
+           ReplicaSet1     ReplicaSet2     ReplicaSet3
+                |               |             |
+                |               |             |
+          -----------------------------------------------
+           |    |   |       |   |   |      |   |    |
+           |    |   |       |   |   |      |   |    |
+         Pod1 Pod2 Pod3   Pod1 Pod2 Pod3  Pod1 Pod2 Pod3
+
+# Como Deployment interagi com os replicaset?
+O deployments orquestra os replicaset, e são os replicaset que cria os pods. Os Replicaset defini a quantidade de replicas que estaram rodando.
+
+# O que é um Rolling Update?
+E um termo usado quando vou atualizar meus produtos ( pods ). Ex: Meu manifesto ( Deployment )
+
+O Deployment cria 1 replicaset com 3 pods, agora preciso trocar a imagem do manifesto.
+
+Ao aplicar o deployment irá criará outro replicaset ( replicaset2 ) com 3 novos Pods isso acontece de forma gradativa.
+
+Existe outras formas de deploy Ex: canary, mas nesse formato ( rolling Update ) o Replicaset1 remove (-) um pod a medida que o Replicaset2 adiciona (+) um pod.
+
+Isso permite eu fazer um UNDO para outro replicaset
+```
+[Índice](#-menu)
+
 
 # 🚀 Create Object - Deploy Canary
 
@@ -7028,7 +7071,13 @@ teu8gT7s9EKIgmqxbbsPtKsNMKco3Av/NIxQO+n8CfQIxJbXKWIrwFky9XKH8aXv
 fbR8AOYbxaKbGmBC01eczfMdPAC/dWXYw/VoZeS3lgF6kpl9w6JvNO3EI0IoKAha
 R6zl6qw7CWOuxNI=
 -----END CERTIFICATE-----
+```
 
+[Índice](#-menu)
+
+# 🚀 Create Object - RBAC / Create Context
+
+```bash
 
 #**************** Configurando Nova Credencial Estagiário **************************
 #
@@ -7111,6 +7160,13 @@ export base64_key=$(base64 -w 0 <<< $(cat estagiario.key))
 kubectl config set-credentials estagiario --client-certificate=/tmp/estagiario.crt --client-key=/tmp/estagiario.key
 sed -i "s/client-certificate: \/tmp\/estagiario.crt/client-certificate-data: ${base64_cert}/" ~/.kube/config
 sed -i "s/client-key: \/tmp\/estagiario.key/client-key-data: ${base64_key}/" ~/.kube/config
+```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - RBAC / Configurando Autorização
+
+```bash
 
 #**************** Configurando Autorização para Estagiário *************************
 #
@@ -7315,6 +7371,219 @@ k delete pod -n nginx-gateway ngf-nginx-gateway-fabric-76fc67668f-b8g7w
 Error from server (Forbidden): pods "ngf-nginx-gateway-fabric-76fc67668f-b8g7w" is forbidden: User "estagiario" cannot delete resource "pods" in API group "" in the namespace "nginx-gateway
 ```
 
+[Índice](#-menu)
+
+# 🚀 Create Object - Role ServiceAccount + RolingBindgings
+
+```bash
+
+# Implementar Roles e Service Account
+# Um cenário onde não se usa usuário para autenticar, o RBAC é feito por dentro dos pods de um cluster.
+#
+# Criar uma service account
+#
+
+# E um recurso vinculado ao namespace
+k api-resources | grep sa
+serviceaccounts                     sa                                v1                                true         ServiceAccount
+
+k create sa kubectl-sa --dry-run=client -o yaml
+k create sa kubectl-sa
+
+# Check
+k get sa
+NAME      SECRETS   AGE
+default      0         8m18s
+kubectl-sa   0         14s
+
+# Criando um Pod e Adicionando a ServiceAccount
+k neat <<< $(k run --image bitnami/kubectl kubectl --dry-run=client -o yaml)
+
+
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: kubectl
+  name: kubectl
+spec:
+  serviceAccountName: kubectl-sa
+  containers:
+  - image: bitnami/kubectl
+    name: kubectl
+    command: [ "/bin/sh", "-c", "--" ]
+    args: [ "echo 'Running....'; sleep 40;" ]
+EOF
+
+# Conectando no Pod e executando comandos do Kubectl
+k exec -it kubectl -- bash
+
+I have no name! [ / ]$ kubectl get pods
+Error from server (Forbidden): pods is forbidden: User "system:serviceaccount:default:kubectl-sa" cannot list resource "pods" in API group "" in the namespace "default"
+
+I have no name! [ / ]$ kubectl get nodes
+Error from server (Forbidden): nodes is forbidden: User "system:serviceaccount:default:kubectl-sa" cannot list resource "nodes" in API group "" at the cluster scope
+
+I have no name! [ / ]$ ls /var/run/secrets/kubernetes.io/serviceaccount/token
+I have no name! [ / ]$ cat /var/run/secrets/kubernetes.io/serviceaccount/token
+ZMOIdLaU3Gm0VcXZdInXJHvP9xGx4JhKWSbWerbFBwt1Um_G8OsEsNBtBeMa28lrWxx7nDo8c98IzHAgug6xeQwI.....
+
+#********************************** Criando a Role *********************************
+# Como o Pod se autentica?
+#
+# Preciso agora criar uma Role ( Vou dar acesso apenas a namespace )
+# Obs.: Se quero restringir apenas a uma namespace, minha "Role" deve ser criada dentro dessa namespace.
+
+k get ns
+NAME                 STATUS   AGE
+argocd               Active   17m
+default              Active   24m
+kube-node-lease      Active   24m
+kube-public          Active   24m
+kube-system          Active   24m
+local-path-storage   Active   24m
+metallb-system       Active   23m
+nginx-gateway        Active   20m
+
+# Imagine que queira dar permissao aos pods da namespace "argocd" , entao crio uma role e
+# uma rolebinding dentro dessa namespace.
+
+# Checo as Roles existentes.
+k get role -A
+NAMESPACE            NAME                                             CREATED AT
+argocd               argo-cd-argocd-application-controller            2026-05-15T09:09:47Z
+argocd               argo-cd-argocd-applicationset-controller         2026-05-15T09:09:47Z
+argocd               argo-cd-argocd-dex-server                        2026-05-15T09:09:47Z
+argocd               argo-cd-argocd-notifications-controller          2026-05-15T09:09:47Z
+argocd               argo-cd-argocd-redis-secret-init                 2026-05-15T09:05:53Z
+argocd               argo-cd-argocd-repo-server                       2026-05-15T09:09:47Z
+argocd               argo-cd-argocd-server                            2026-05-15T09:09:47Z
+kube-public          kubeadm:bootstrap-signer-clusterinfo             2026-05-15T08:58:47Z
+kube-public          system:controller:bootstrap-signer               2026-05-15T08:58:47Z
+kube-system          extension-apiserver-authentication-reader        2026-05-15T08:58:47Z
+kube-system          kube-proxy                                       2026-05-15T08:58:48Z
+kube-system          kubeadm:kubelet-config                           2026-05-15T08:58:47Z
+kube-system          kubeadm:nodes-kubeadm-config                     2026-05-15T08:58:47Z
+kube-system          system::leader-locking-kube-controller-manager   2026-05-15T08:58:47Z
+kube-system          system::leader-locking-kube-scheduler            2026-05-15T08:58:47Z
+kube-system          system:controller:bootstrap-signer               2026-05-15T08:58:47Z
+kube-system          system:controller:cloud-provider                 2026-05-15T08:58:47Z
+kube-system          system:controller:token-cleaner                  2026-05-15T08:58:47Z
+local-path-storage   local-path-provisioner-role                      2026-05-15T08:58:50Z
+metallb-system       metallb-controller                               2026-05-15T08:59:08Z
+metallb-system       metallb-pod-lister                               2026-05-15T08:59:08Z
+nginx-gateway        ngf-nginx-gateway-fabric-cert-generator          2026-05-15T09:02:35Z
+
+
+# Criando a Role dentro do namespace ( kube-system )
+cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prgs:kubectl-role
+  namespace: kube-system
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list"]
+EOF
+
+k get role -n kube-system prgs:kubectl-role
+NAME                CREATED AT
+prgs:kubectl-role   2026-05-15T09:26:29Z
+
+#**************************** Criando a RoleBinding *********************************
+#
+# OBS.:
+# Recursos criados em seus respectivos namespaces, deve ser informados.
+subjects:
+- kind: ServiceAccount
+  name: kubectl-sa      # Nome da service account
+  namespace: default    # Name Space onde esse SA está localizada
+
+
+cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prgs:kubectl-rolebinding
+  namespace: kube-system
+subjects:
+- kind: ServiceAccount
+  name: kubectl-sa
+  namespace: default
+roleRef:
+  kind: Role
+  name: prgs:kubectl-role
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
+k get rolebinding -n kube-system prgs:kubectl-rolebinding
+NAME                       ROLE                     AGE
+prgs:kubectl-rolebinding   Role/prgs:kubectl-role   35s
+
+#**************************** Testando Autenticação *********************************
+#
+
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: kubectl
+  name: kubectl
+spec:
+  serviceAccountName: kubectl-sa
+  containers:
+  - image: bitnami/kubectl
+    name: kubectl
+    command: [ "/bin/sh", "-c", "--" ]
+    args: [ "echo 'Running....'; sleep 40;" ]
+EOF
+
+k exec -it kubectl -- bash
+I have no name! [ / ]$ kubectl get pods -n kube-system
+NAME                                         READY   STATUS    RESTARTS   AGE
+coredns-66bc5c9577-44xks                     1/1     Running   0          21m
+coredns-66bc5c9577-tks9c                     1/1     Running   0          21m
+etcd-prgs-control-plane                      1/1     Running   0          21m
+kindnet-r572p                                1/1     Running   0          21m
+kube-apiserver-prgs-control-plane            1/1     Running   0          21m
+kube-controller-manager-prgs-control-plane   1/1     Running   0          21m
+kube-proxy-xlh8z                             1/1     Running   0          21m
+kube-scheduler-prgs-control-plane            1/1     Running   0          21m
+metrics-server-fcf6b4bd6-wtnzq               1/1     Running   0          20m
+
+
+I have no name! [ / ]$ kubectl get pods -A
+Error from server (Forbidden): pods is forbidden: User "system:serviceaccount:default:kubectl-sa" cannot list resource "pods" in API group "" at the cluster scope
+
+#********************************* E os Jobs ****************************************
+#
+
+I have no name! [ / ]$ kubectl get jobs -n kube-system
+Error from server (Forbidden): jobs.batch is forbidden: User "system:serviceaccount:default:kubectl-sa" cannot list resource "jobs" in API group "batch" in the namespace "kube-system"
+
+cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prgs:kubectl-role
+  namespace: kube-system
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list"]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["list"]
+EOF
+
+I have no name! [ / ]$ kubectl get jobs -n kube-system
+No resources found in kube-system namespace.
+
+```
 
 [Índice](#-menu)
 
@@ -7362,13 +7631,10 @@ tolerations:
 | NoExecute  | Não agenda + remove | Agenda + permanece | Agenda + remove após tempo |
 
 
-
-
 # Definir no manifesto os workloads que pode-se usar.
 # Como os workers tem label de worker, entao os pods só serão agendados nos worker.
 nodeSelector:
   node-role.kubernetes.io/worker: ""
-
 
 
 kubectl patch daemonset xxx -p '
@@ -7386,39 +7652,9 @@ spec:
 ```
 [Índice](#-menu)
 
-# 🚀 Estratégias Deploy
+# 🚀 Cluster Upgrade - Ferramentas
 
 ```bash
-Deployment   => Aplicação stateless ( Aplicação escaláveis )
-
-                           -----------
-                           Deployment
-                           -----------
-                                |
-                ________________|_____________
-                |               |             |
-                |               |             |
-           ReplicaSet1     ReplicaSet2     ReplicaSet3
-                |               |             |
-                |               |             |
-          -----------------------------------------------
-           |    |   |       |   |   |      |   |    |
-           |    |   |       |   |   |      |   |    |
-         Pod1 Pod2 Pod3   Pod1 Pod2 Pod3  Pod1 Pod2 Pod3
-
-# Como Deployment interagi com os replicaset?
-O deployments orquestra os replicaset, e são os replicaset que cria os pods. Os Replicaset defini a quantidade de replicas que estaram rodando.
-
-# O que é um Rolling Update?
-E um termo usado quando vou atualizar meus produtos ( pods ). Ex: Meu manifesto ( Deployment )
-
-O Deployment cria 1 replicaset com 3 pods, agora preciso trocar a imagem do manifesto.
-
-Ao aplicar o deployment irá criará outro replicaset ( replicaset2 ) com 3 novos Pods isso acontece de forma gradativa.
-
-Existe outras formas de deploy Ex: canary, mas nesse formato ( rolling Update ) o Replicaset1 remove (-) um pod a medida que o Replicaset2 adiciona (+) um pod.
-
-Isso permite eu fazer um UNDO para outro replicaset
 ```
 [Índice](#-menu)
 
