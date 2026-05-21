@@ -52,7 +52,9 @@
 - [Create Object - RBAC / Configurando Autorização](#-create-object---rbac--configurando-autorização)
 - [Create Object - Role ServiceAccount + RolingBindgings](#-create-object---role-serviceaccount--rolingbindgings)
 - [Create Object - Affinity](#-create-object---affinity)
-- [Cluster Upgrade - Ferramentas](#-cluster-upgrade---ferramentas)
+- [Cluster Upgrade - Ferramentas e Boas Práticas](#-cluster-upgrade---ferramentas-e-boas-práticas)
+- [Cluster Upgrade - Control Plane / Masters](#-cluster-upgrade---control-plane--masters)
+- [Cluster Upgrade - Control Data / Workers](#-cluster-upgrade---control-data--workers)
 - [Explorando Documentação - Kubectl](#-explorando-documentação---kubectl)
 
 # 🚀 Command Line - Contexts
@@ -7619,7 +7621,7 @@ tolerations:
 # Impede que novos Pods sejam agendados
 # Remove Pods que já estão rodando e não toleram o taint
 
-# 👉 O Pod:
+👉 O Pod:
 
 # Pode ser agendado
 # Não será removido
@@ -7652,10 +7654,547 @@ spec:
 ```
 [Índice](#-menu)
 
-# 🚀 Cluster Upgrade - Ferramentas
+# 🚀 Cluster Upgrade - Ferramentas e Boas Práticas
 
 ```bash
+# Para esse laboratório vamos usar Vms provisionadas via KVM
+# Cluster atual rodando na versao 1.34
+# Control Plane => master01
+# Control Data  => worker01
+
+# OBS.:
+# Sempre uma minor por vez
+#
+# Cuidado com as APIs deprecada
+
+https://kubernetes.io/docs/reference/using-api/deprecation-guide/
+
+
+k get nodes
+NAME       STATUS   ROLES           AGE   VERSION
+master01   Ready    control-plane   87d   v1.34.4
+worker01   Ready    worker          87d   v1.34.4
+
+# kubenet
+# Ajuda a mapear as APIs deprecadas
+https://github.com/doitintl/kube-no-trouble
+
+sh -c "$(curl -sSL https://git.io/install-kubent)"
+kubent --help
+
+# Vai me mostra uma lista de coisas que podem dar problema.
+# Faz um dump e te mostra as mudancas
+# Faça a mudanca das versoes das api antes do upgrade
+
+# Quero atualizar para 1.35
+kubent -t 1.35
+10:44AM INF >>> Kube No Trouble `kubent` <<<
+10:44AM INF version 0.7.3 (git sha 57480c07b3f91238f12a35d0ec88d9368aae99aa)
+10:44AM INF Initializing collectors and retrieving data
+10:44AM INF Target K8s version is 1.35.0
+10:45AM INF Retrieved 5 resources from collector name=Cluster
+10:45AM INF Retrieved 43 resources from collector name="Helm v3"
+10:45AM INF Loaded ruleset name=custom.rego.tmpl
+10:45AM INF Loaded ruleset name=deprecated-1-16.rego
+10:45AM INF Loaded ruleset name=deprecated-1-22.rego
+10:45AM INF Loaded ruleset name=deprecated-1-25.rego
+10:45AM INF Loaded ruleset name=deprecated-1-26.rego
+10:45AM INF Loaded ruleset name=deprecated-1-27.rego
+10:45AM INF Loaded ruleset name=deprecated-1-29.rego
+10:45AM INF Loaded ruleset name=deprecated-1-32.rego
+10:45AM INF Loaded ruleset name=deprecated-future.rego
+
+# Observe que passou liso, entao o cluster não vai quebrar no processo de Upgrade.
+
+#************************ Como Simular kubent Com Mudancas **************************
+#
+# Pegue a versao o flow suportada
+kubectl api-resources | grep flow
+flowschemas                                      flowcontrol.apiserver.k8s.io/v1   false        FlowSchema
+prioritylevelconfigurations                      flowcontrol.apiserver.k8s.io/v1   false        PriorityLevelConfiguration
+
+# O flowcontrol.apiserver.k8s.io é o mecanismo de API Priority and Fairness (APF) do Kubernetes.
+#
+# Ele controla:
+👉 quem pode consumir a API
+👉 quanto cada cliente pode consumir
+👉 como a fila de requisições é organizada
+👉 proteção contra overload do kube-apiserver
+
+# Em resumo:
+👉 O APF impede que um cliente “afogue” a API do Kubernetes.
+
+# Supondo que esteja rodando o cluster na 1.31 e quisesse atualizar para 1.32
+kubent -t 1.32
+4:54PM INF >>> Kube No Trouble `kubent` <<<
+4:54PM INF version 0.7.3 (git sha 57480c07b3f91238f12a35d0ec88d9368aae99aa)
+4:54PM INF Initializing collectors and retrieving data
+4:54PM INF Target K8s version is 1.32.0
+4:54PM INF Retrieved 15 resources from collector name=Cluster
+4:54PM INF Retrieved 33 resources from collector name="Helm v3"
+4:54PM INF Loaded ruleset name=custom.rego.tmpl
+4:54PM INF Loaded ruleset name=deprecated-1-16.rego
+4:54PM INF Loaded ruleset name=deprecated-1-22.rego
+4:54PM INF Loaded ruleset name=deprecated-1-25.rego
+4:54PM INF Loaded ruleset name=deprecated-1-26.rego
+4:54PM INF Loaded ruleset name=deprecated-1-27.rego
+4:54PM INF Loaded ruleset name=deprecated-1-29.rego
+4:54PM INF Loaded ruleset name=deprecated-1-32.rego
+4:54PM INF Loaded ruleset name=deprecated-future.rego
+__________________________________________________________________________________________
+>>> Deprecated APIs removed in 1.32 <<<
+------------------------------------------------------------------------------------------
+KIND         NAMESPACE     NAME          API_VERSION                            REPLACE_WITH (SINCE)
+FlowSchema   <undefined>   cilium-pods   flowcontrol.apiserver.k8s.io/v1beta3   flowcontrol.apiserver.k8s.io/v1 (1.32.0)
+
+
+#******************************* Dump Manifestos ************************************
+#
+https://github.com/msfidelis/kubedump
+
 ```
+[Índice](#-menu)
+
+# 🚀 Cluster Upgrade - Control Plane / Masters
+
+```bash
+
+# Produtos Deployados No momento do Upgrade
+k get nodes -o wide
+NAME       STATUS   ROLES           AGE   VERSION   INTERNAL-IP     EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION       CONTAINER-RUNTIME
+master01   Ready    control-plane   89d   v1.34.4   10.100.100.11   <none>        Ubuntu 22.04.5 LTS   5.15.0-177-generic   containerd://1.7.28
+worker01   Ready    worker          89d   v1.34.4   10.100.100.20   <none>        Ubuntu 22.04.5 LTS   5.15.0-171-generic   containerd://1.7.28
+
+k get pods -A
+NAMESPACE            NAME                                                        READY   STATUS      RESTARTS        AGE
+default              my-job-ggqs6                                                0/1     Completed   0               76d
+default              my-job2-jjp4r                                               0/1     Completed   0               76d
+default              my-job3-x2ht7                                               0/1     Completed   0               76d
+default              nginx-0                                                     1/1     Running     4 (107s ago)    78d
+default              nginx-1                                                     1/1     Running     4 (107s ago)    78d
+default              nginx-paulo-78455bbb4-kx5w5                                 1/1     Running     2 (107s ago)    75d
+kube-flannel         kube-flannel-ds-qxqqp                                       1/1     Running     7 (108s ago)    89d
+kube-flannel         kube-flannel-ds-zzgvm                                       1/1     Running     7 (107s ago)    89d
+kube-system          coredns-66bc5c9577-7vrjp                                    1/1     Running     7 (108s ago)    89d
+kube-system          coredns-66bc5c9577-lnjr9                                    1/1     Running     7 (108s ago)    89d
+kube-system          etcd-master01                                               1/1     Running     7 (108s ago)    89d
+kube-system          kube-apiserver-master01                                     1/1     Running     7 (108s ago)    89d
+kube-system          kube-controller-manager-master01                            1/1     Running     7 (108s ago)    89d
+kube-system          kube-proxy-fg27m                                            1/1     Running     7 (107s ago)    89d
+kube-system          kube-proxy-zf2fv                                            1/1     Running     7 (108s ago)    89d
+kube-system          kube-scheduler-master01                                     1/1     Running     7 (108s ago)    89d
+kube-system          metrics-server-755bdffd6c-trrcm                             1/1     Running     7 (108s ago)    89d
+local-path-storage   local-path-storage-local-path-provisioner-f555d4fc6-qrlqp   1/1     Running     3 (107s ago)    76d
+metallb-system       metallb-controller-765c495b75-c757j                         1/1     Running     7 (108s ago)    89d
+metallb-system       metallb-speaker-lsp9j                                       4/4     Running     28 (108s ago)   89d
+metallb-system       metallb-speaker-rhs68                                       4/4     Running     28 (107s ago)   89d
+
+
+
+https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+
+# Para esse laboratório o Cluster foi criado via kubeadm, pois no exame será abordado esse cenário.
+#
+# Todos os comandos listados abaixo devem ser executados no master ( control plane )
+#
+# Mostra as versoes disponiveis
+apt list -a kubeadm
+Listing... Done
+kubeadm/unknown 1.34.8-1.1 amd64 [upgradable from: 1.34.4-1.1]
+kubeadm/unknown 1.34.7-1.1 amd64
+kubeadm/unknown 1.34.6-1.1 amd64
+kubeadm/unknown 1.34.5-1.1 amd64
+kubeadm/unknown,now 1.34.4-1.1 amd64 [installed,upgradable to: 1.34.8-1.1]
+kubeadm/unknown 1.34.3-1.1 amd64
+kubeadm/unknown 1.34.2-1.1 amd64
+kubeadm/unknown 1.34.1-1.1 amd64
+kubeadm/unknown 1.34.0-1.1 amd64
+
+# Meu repositório aponta para 1.34, então os upgrades de Minio Version fica confinado a essa versão.
+
+# Atuallizar minha lista de repositorio.
+# Estou emitindo os comandos logado como root
+
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.35/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.35/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+apt-get update -y
+
+# Liste novamente as versões disponíveis
+apt list -a kubeadm
+Listing... Done
+kubeadm/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+kubeadm/unknown 1.35.4-1.1 amd64
+kubeadm/unknown 1.35.3-1.1 amd64
+kubeadm/unknown 1.35.2-1.1 amd64
+kubeadm/unknown 1.35.1-1.1 amd64
+kubeadm/unknown 1.35.0-1.1 amd64
+kubeadm/now 1.34.4-1.1 amd64 [installed,upgradable to: 1.35.5-1.1]
+
+# Ao logar na máquina o próprio Ubuntu que mostra que ele precisam ser atualizado.
+
+Expanded Security Maintenance for Applications is not enabled.
+
+44 updates can be applied immediately.
+To see these additional updates run: apt list --upgradable
+
+apt list --upgradable
+
+Listing... Done
+apparmor/jammy-updates 3.0.4-2ubuntu2.5 amd64 [upgradable from: 3.0.4-2ubuntu2.4]
+cloud-init/jammy-updates 25.3-0ubuntu1~22.04.1 all [upgradable from: 25.2-0ubuntu1~22.04.1]
+containerd/jammy-updates 2.2.1-0ubuntu1~22.04.1 amd64 [upgradable from: 1.7.28-0ubuntu1~22.04.1]
+coreutils/jammy-updates 8.32-4.1ubuntu1.3 amd64 [upgradable from: 8.32-4.1ubuntu1.2]
+cri-tools/unknown 1.35.0-1.1 amd64 [upgradable from: 1.34.0-1.1]
+distro-info-data/jammy-updates 0.52ubuntu0.12 all [upgradable from: 0.52ubuntu0.11]
+iproute2/jammy-updates 5.15.0-1ubuntu2.1 amd64 [upgradable from: 5.15.0-1ubuntu2]
+kubeadm/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+kubectl/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+kubelet/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+kubernetes-cni/unknown 1.8.0-1.1 amd64 [upgradable from: 1.7.1-1.1]
+
+# Se simplismente rodar o upgrade será ignorado os pacotes ( kubeadm kubectl kubelet )
+# POis os mesmos estão marcado como ( Hold ), para não atualizar.
+# Nessa etapa garanto o upgrade de outros pacotes
+apt upgrade
+
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+Calculating upgrade... Done
+Get another security update through Ubuntu Pro with 'esm-apps' enabled:
+  containerd
+Learn more about Ubuntu Pro at https://ubuntu.com/pro
+The following NEW packages will be installed:
+  linux-headers-5.15.0-179 linux-headers-5.15.0-179-generic linux-image-5.15.0-179-generic linux-modules-5.15.0-179-generic netplan-generator python3-netplan
+The following packages have been kept back:
+  kubeadm kubectl kubelet
+The following packages will be upgraded:
+  apparmor cloud-init containerd coreutils cri-tools distro-info-data iproute2 kubernetes-cni landscape-common libapparmor1 libldap-2.5-0 libldap-common libnetplan0 libnftables1
+  libnss-systemd libpam-systemd libsystemd0 libudev1 linux-headers-generic linux-headers-virtual linux-image-virtual linux-virtual lshw netplan.io nftables python3-attr runc snapd
+  sosreport systemd systemd-sysv systemd-timesyncd tzdata ubuntu-advantage-tools ubuntu-minimal ubuntu-pro-client ubuntu-pro-client-l10n ubuntu-server ubuntu-standard udev
+40 upgraded, 6 newly installed, 0 to remove and 3 not upgraded.
+4 standard LTS security updates
+Need to get 188 MB of archives.
+After this operation, 195 MB of additional disk space will be used.
+Do you want to continue? [Y/n] Y
+
+# Os pacotes não foram atualizados
+kubectl version
+Client Version: v1.34.4
+Kustomize Version: v5.7.1
+Server Version: v1.34.4
+
+# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
+# - kubelet.service
+# - containerd.service
+
+# Listar os pacotes a serem atualzidos
+apt list --upgradable
+Listing... Done
+kubeadm/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+kubectl/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+kubelet/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+
+# Como checar os pacotes marcados como Hold
+# Ao emitir o comando abaixo, os pacotes iniciados com ( hi ) estão marcados para não serem atualziados.
+dpkg -l | grep kube
+hi  kubeadm                          1.34.4-1.1                              amd64        Command-line utility for administering a Kubernetes cluster
+hi  kubectl                          1.34.4-1.1                              amd64        Command-line utility for interacting with a Kubernetes cluster
+hi  kubelet                          1.34.4-1.1                              amd64        Node agent for Kubernetes clusters
+ii  kubernetes-cni                   1.7.1-1.1                               amd64        Binaries required to provision kubernetes container networking
+
+# Devo marcar todos como unhold?
+# NÃO !!!
+# Obs.: Nesse primeiro momento apenas o kubeadm
+
+apt-mark unhold kubeadm
+Canceled hold on kubeadm.
+
+# Ao ficar marcado com unhold seu status muda para ( ii )
+dpkg -l | grep kube
+ii  kubeadm                          1.34.4-1.1                              amd64        Command-line utility for administering a Kubernetes cluster
+hi  kubectl                          1.34.4-1.1                              amd64        Command-line utility for interacting with a Kubernetes cluster
+hi  kubelet                          1.34.4-1.1                              amd64        Node agent for Kubernetes clusters
+ii  kubernetes-cni                   1.7.1-1.1                               amd64        Binaries required to provision kubernetes container networking
+
+# Atualizando kubeadm
+apt install kubeadm
+
+# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
+# - kubelet.service
+# - containerd.service
+
+kubeadm version
+kubeadm version: &version.Info{Major:"1", Minor:"35", EmulationMajor:"", EmulationMinor:"", MinCompatibilityMajor:"", MinCompatibilityMinor:"", GitVersion:"v1.35.5", GitCommit:"6636cbce3bbef91ff61d36658757179426f9e1b2", GitTreeState:"clean", BuildDate:"2026-05-12T09:53:04Z", GoVersion:"go1.25.9", Compiler:"gc", Platform:"linux/amd64"}
+
+# kubeadm upgrade --help
+kubeadm upgrade plan
+COMPONENT   NODE       CURRENT   TARGET
+kubelet     master01   v1.34.4   v1.35.5
+kubelet     worker01   v1.34.4   v1.35.5
+
+Upgrade to the latest stable version:
+
+COMPONENT                 NODE       CURRENT   TARGET
+kube-apiserver            master01   v1.34.4   v1.35.5
+kube-controller-manager   master01   v1.34.4   v1.35.5
+kube-scheduler            master01   v1.34.4   v1.35.5
+kube-proxy                           1.34.4    v1.35.5
+CoreDNS                              v1.12.1   v1.13.1
+etcd                      master01   3.6.5-0   3.6.6-0
+
+You can now apply the upgrade by executing the following command:
+
+	kubeadm upgrade apply v1.35.5
+
+# Upgrade Now
+kubeadm upgrade apply v1.35.5
+[upgrade] Reading configuration from the "kubeadm-config" ConfigMap in namespace "kube-system"...
+[upgrade] Use 'kubeadm init phase upload-config kubeadm --config your-config-file' to re-upload it.
+[upgrade/preflight] Running preflight checks
+[upgrade] Running cluster health checks
+[upgrade/preflight] You have chosen to upgrade the cluster version to "v1.35.5"
+[upgrade/versions] Cluster version: v1.34.4
+[upgrade/versions] kubeadm version: v1.35.5
+[upgrade] Are you sure you want to proceed? [y/N]: y
+[upgrade/preflight] Pulling images required for setting up a Kubernetes cluster
+[upgrade/preflight] This might take a minute or two, depending on the speed of your internet connection
+[upgrade/preflight] You can also perform this action beforehand using 'kubeadm config images pull'
+[upgrade/control-plane] Upgrading your static Pod-hosted control plane to version "v1.35.5" (timeout: 5m0s)...
+[upgrade/staticpods] Writing new Static Pod manifests to "/etc/kubernetes/tmp/kubeadm-upgraded-manifests4021411400"
+[upgrade/staticpods] Preparing for "etcd" upgrade
+[upgrade/staticpods] Renewing etcd-server certificate
+[upgrade/staticpods] Renewing etcd-peer certificate
+[upgrade/staticpods] Renewing etcd-healthcheck-client certificate
+...
+...
+[addons] Applied essential addon: CoreDNS
+[addons] Applied essential addon: kube-proxy
+[upgrade] SUCCESS! A control plane node of your cluster was upgraded to "v1.35.5".
+
+[upgrade] Now please proceed with upgrading the rest of the nodes by following the right order.
+
+
+# Mesmo após o Upgrade ainda mostra a versão antiga
+kubectl get nodes
+NAME       STATUS   ROLES           AGE   VERSION
+master01   Ready    control-plane   89d   v1.34.4
+worker01   Ready    worker          89d   v1.34.4
+
+# Atualizando o Cluster
+# Esse parametro é necessário porque está usando emptyDir (storage local efêmero).
+kubectl drain master01 --ignore-daemonsets --delete-emptydir-data
+
+Warning: ignoring DaemonSet-managed Pods: kube-flannel/kube-flannel-ds-qxqqp, kube-system/kube-proxy-qm6qq, metallb-system/metallb-speaker-lsp9j
+evicting pod metallb-system/metallb-controller-765c495b75-c757j
+evicting pod kube-system/metrics-server-755bdffd6c-trrcm
+pod/metallb-controller-765c495b75-c757j evicted
+pod/metrics-server-755bdffd6c-trrcm evicted
+node/master01 drained
+
+# Atualize os demias pacotes
+apt-mark unhold kubectl kubelet
+Canceled hold on kubectl.
+Canceled hold on kubelet.
+
+# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
+# - kubelet.service
+# - containerd.service
+apt install kubectl kubelet
+apt-mark hold kubectl kubelet kubeadm
+
+
+kubectl version
+Client Version: v1.35.5
+Kustomize Version: v5.7.1
+Server Version: v1.35.5
+
+# Agora sim Reinici o Servico
+systemctl restart kubelet
+
+kubectl get nodes
+NAME       STATUS                     ROLES           AGE   VERSION
+master01   Ready,SchedulingDisabled   control-plane   89d   v1.35.5
+worker01   Ready                      worker          89d   v1.34.4
+
+# No processo de Upgrade o kubernets marca o node para não receber schedule.
+kubectl uncordon master01
+node/master01 uncordoned
+
+# Check
+kubectl get nodes
+NAME       STATUS   ROLES           AGE   VERSION
+master01   Ready    control-plane   89d   v1.35.5
+worker01   Ready    worker          89d   v1.34.4
+
+```
+
+[Índice](#-menu)
+
+# 🚀 Cluster Upgrade - Control Data / Workers
+
+```bash
+
+# De forma semelhante que foi feito o upgrade no Control Plane, será seguido aqui:
+# - checar pacotes unhold
+# - atualizar S.O
+# - marcar inicialmente apenas kubeadm com unhold
+# - atualizar images ( kubeadm upgrade )
+# - drain
+# - atualizar demais componentes ( kubect e kubelet )
+# - uncordon
+# - restart
+
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.35/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.35/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
+apt-get update -y
+
+
+# Liste as versões disponíveis
+apt list -a kubeadm
+Listing... Done
+kubeadm/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+kubeadm/unknown 1.35.4-1.1 amd64
+kubeadm/unknown 1.35.3-1.1 amd64
+kubeadm/unknown 1.35.2-1.1 amd64
+kubeadm/unknown 1.35.1-1.1 amd64
+kubeadm/unknown 1.35.0-1.1 amd64
+kubeadm/now 1.34.4-1.1 amd64 [installed,upgradable to: 1.35.5-1.1]
+
+# Como checar os pacotes marcados como Hold
+# Ao emitir o comando abaixo, os pacotes iniciados com ( hi ) estão marcados para não serem atualziados.
+dpkg -l | grep kube
+hi  kubeadm                          1.34.4-1.1                              amd64        Command-line utility for administering a Kubernetes cluster
+hi  kubectl                          1.34.4-1.1                              amd64        Command-line utility for interacting with a Kubernetes cluster
+hi  kubelet                          1.34.4-1.1                              amd64        Node agent for Kubernetes clusters
+ii  kubernetes-cni                   1.7.1-1.1                               amd64        Binaries required to provision kubernetes container networking
+
+# Atuallize o S.O
+apt upgrade
+
+# Listar os pacotes a serem atualzidos
+# Aqui deve mostrar apenas os pacotes ( hold )
+apt list --upgradable
+Listing... Done
+kubeadm/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+kubectl/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+kubelet/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
+
+# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
+# - kubelet.service
+# - containerd.service
+
+# Devo marcar todos como unhold?
+# NÃO !!!
+# Obs.: Nesse primeiro momento apenas o kubeadm
+apt-mark unhold kubeadm
+Canceled hold on kubeadm.
+
+# Atualizando kubeadm
+apt install kubeadm
+
+# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
+# - kubelet.service
+# - containerd.service
+
+kubeadm version
+kubeadm version: &version.Info{Major:"1", Minor:"35", EmulationMajor:"", EmulationMinor:"", MinCompatibilityMajor:"", MinCompatibilityMinor:"", GitVersion:"v1.35.5", GitCommit:"6636cbce3bbef91ff61d36658757179426f9e1b2", GitTreeState:"clean", BuildDate:"2026-05-12T09:53:04Z", GoVersion:"go1.25.9", Compiler:"gc", Platform:"linux/amd64"}
+
+# Diferente do control plane que tem o plan , aqui deve-se emitir diretamente o upgrade node.
+# kubeadm upgrade
+kubeadm upgrade node
+[upgrade] Reading configuration from the "kubeadm-config" ConfigMap in namespace "kube-system"...
+[upgrade] Use 'kubeadm init phase upload-config kubeadm --config your-config-file' to re-upload it.
+W0521 06:14:53.191140   37001 utils.go:69] The recommended value for "bindAddress" in "KubeProxyConfiguration" is: ::; the provided value is: 0.0.0.0
+[upgrade/preflight] Running pre-flight checks
+[upgrade/preflight] Skipping prepull. Not a control plane node.
+[upgrade/control-plane] Skipping phase. Not a control plane node.
+[upgrade/kubeconfig] Skipping phase. Not a control plane node.
+...
+...
+
+# Ataulize os demais componentes.
+apt-mark unhold kubectl kubelet
+
+# Obs.:
+# Conectar no controlPlane e fazer o drain no worker01
+#
+kubectl drain worker01 --ignore-daemonsets --delete-emptydir-data
+evicting pod metallb-system/metallb-controller-765c495b75-4rfdm
+evicting pod default/my-job-ggqs6
+evicting pod default/my-job2-jjp4r
+evicting pod default/my-job3-x2ht7
+evicting pod default/nginx-0
+evicting pod default/nginx-1
+evicting pod default/nginx-paulo-78455bbb4-kx5w5
+evicting pod kube-system/coredns-7d764666f9-9n9gk
+evicting pod kube-system/coredns-7d764666f9-d7v9j
+evicting pod kube-system/metrics-server-755bdffd6c-sn8g4
+evicting pod local-path-storage/local-path-storage-local-path-provisioner-f555d4fc6-qrlqp
+...
+...
+error when evicting pods/"nginx-1" -n "default" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+error when evicting pods/"nginx-0" -n "default" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
+
+# Tenho Pods com PDB habilitado.
+kubectl get pdb -A
+NAMESPACE   NAME        MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+default     nginx-pdb   N/A             0                 0                     76d
+
+# Deletar PDB
+kubectl delete pdb nginx-pdb -n default
+
+kubectl drain worker01 --ignore-daemonsets --delete-emptydir-data
+node/worker01 already cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-flannel/kube-flannel-ds-zzgvm, kube-system/kube-proxy-gp4kn, metallb-system/metallb-speaker-rhs68
+evicting pod default/nginx-1
+evicting pod default/nginx-0
+pod/nginx-0 evicted
+pod/nginx-1 evicted
+node/worker01 drained
+
+# Atualize os pacotes do Worker01
+apt install kubectl kubelet
+
+# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
+# - kubelet.service
+# - containerd.service
+
+dpkg -l | grep kube
+ii  kubeadm                          1.35.5-1.1                                       amd64        Command-line utility for administering a Kubernetes cluster
+ii  kubectl                          1.35.5-1.1                                       amd64        Command-line utility for interacting with a Kubernetes cluster
+ii  kubelet                          1.35.5-1.1                                       amd64        Node agent for Kubernetes clusters
+ii  kubernetes-cni                   1.8.0-1.1                                        amd64        Binaries required to provision kubernetes container networking
+
+# Marque os pacotes novamente com hold
+apt-mark hold kubectl kubelet kubeadm
+kubectl set on hold.
+kubelet set on hold.
+kubeadm set on hold.
+
+# Agora sim Reinici o Servico
+systemctl restart kubelet
+
+# Obs.:
+# Os comandos abaixo deve ser executado no control plane
+kubectl get nodes
+NAME       STATUS                     ROLES           AGE   VERSION
+master01   Ready,SchedulingDisabled   control-plane   89d   v1.35.5
+worker01   Ready                      worker          89d   v1.34.4
+
+# No processo de Upgrade o kubernets marca o node para não receber schedule.
+kubectl uncordon worker01
+node/worker01 uncordoned
+
+# Check
+kubectl get nodes
+NAME       STATUS   ROLES           AGE   VERSION
+master01   Ready    control-plane   89d   v1.35.5
+worker01   Ready    worker          89d   v1.34.4
+```
+
 [Índice](#-menu)
 
 # 🚀 Explorando Documentação - Kubectl
