@@ -51,7 +51,11 @@
 - [Create Object - RBAC / Create Context](#-create-object---rbac--create-context)
 - [Create Object - RBAC / Configurando Autorização](#-create-object---rbac--configurando-autorização)
 - [Create Object - Role ServiceAccount + RolingBindgings](#-create-object---role-serviceaccount--rolingbindgings)
-- [Create Object - Affinity](#-create-object---affinity)
+- [Create Object - Affinity / Node-Selector Labels](#-create-object---affinity--node-selector-labels)
+- [Create Object - Affinity / Node-Affinity](#-create-object---affinity--node-affinity)
+- [Create Object - Affinity / Pod-Affinity](#-create-object---affinity--pod-affinity)
+- [Create Object - Affinity / PodAntiAffinity](#-create-object---affinity--podantiaffinity)
+- [Create Object - Affinity / Tolerations](#-create-object---affinity--tolerations)
 - [Cluster Upgrade - Ferramentas e Boas Práticas](#-cluster-upgrade---ferramentas-e-boas-práticas)
 - [Cluster Upgrade - Control Plane / Masters](#-cluster-upgrade---control-plane--masters)
 - [Cluster Upgrade - Control Data / Workers](#-cluster-upgrade---control-data--workers)
@@ -7589,10 +7593,432 @@ No resources found in kube-system namespace.
 
 [Índice](#-menu)
 
-# 🚀 Create Object - Affinity
+# 🚀 Create Object - Affinity / Node-Selector Labels
+
+```bash
+# O Node Selector funciona como uma regra de agendamento no Kubernetes.
+#
+# Quando um workload (como Pod, Deployment, DaemonSet ou StatefulSet) é criado, a requisição é enviada para o kube-apiserver, que armazena o objeto no etcd.
+#
+# Em seguida, o kube-scheduler identifica que existe um Pod sem node definido (Pending) e avalia em qual node ele pode ser executado.
+#
+# Durante essa análise, o scheduler considera diversos critérios definidos no YAML e no cluster, como:
+
+👉 nodeSelector
+👉 nodeAffinity
+👉 taints e tolerations
+👉 recursos disponíveis no node (CPU, Memória)
+👉 políticas de scheduling
+
+# Após escolher o node mais adequado, o scheduler atualiza o Pod informando em qual node ele deve rodar.
+#
+# Então o ReplicaSet (ou outro controller, como StatefulSet/DaemonSet) garante que os Pods necessários sejam criados, e o kubelet do node selecionado recebe a instrução para iniciar os containers.
+#
+
+k get pods -n kube-system kube-scheduler-master01
+NAME                      READY   STATUS    RESTARTS      AGE
+kube-scheduler-master01   1/1     Running   0            3h23m
+
+# Listar todas as labels
+kubectl get nodes --show-labels | tr ',' '\n'
+NAME       STATUS   ROLES           AGE   VERSION   LABELS
+master01   Ready    control-plane   89d   v1.35.5   beta.kubernetes.io/arch=amd64
+beta.kubernetes.io/os=linux
+kubernetes.io/arch=amd64
+kubernetes.io/hostname=master01
+kubernetes.io/os=linux
+node-role.kubernetes.io/control-plane=
+node.kubernetes.io/exclude-from-external-load-balancers=
+worker01   Ready    worker          89d   v1.35.5   beta.kubernetes.io/arch=amd64
+beta.kubernetes.io/os=linux
+kubernetes.io/arch=amd64
+kubernetes.io/hostname=worker01
+kubernetes.io/os=linux
+node-role.kubernetes.io/worker=
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: postgres
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      nodeSelector:
+        prgs/postgres: "true"
+      containers:
+      - image: nginx
+        name: postgres
+EOF
+
+#
+k get pods postgres-64f4bd66b8-tgnwj
+NAME                        READY   STATUS    RESTARTS   AGE
+postgres-64f4bd66b8-tgnwj   0/1     Pending   0          19s
+
+# O status ficará assim como pending , pois não tem essa label definda.
+#
+# Definindo Label
+#
+kubectl label node worker01 prgs/postgres=true
+
+# Listando todos Pods após criação da label.
+k get pods
+NAME                          READY   STATUS              RESTARTS      AGE
+nginx-0                       1/1     Running             1 (25m ago)   3h11m
+nginx-1                       1/1     Running             1 (25m ago)   3h5m
+nginx-paulo-78455bbb4-82vkz   1/1     Running             1 (25m ago)   3h14m
+postgres-64f4bd66b8-tgnwj     0/1     ContainerCreating   0             8m54s
+```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - Affinity / Node-Affinity
 
 ```bash
 
+https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+
+# Node Afinity => é mais flexivel !!!
+# Utilizado quando quero dar preferencia para rodar em determinado worker,
+# mas caso ele seja deployado em outro worker não tem problemas.
+#
+# Como é uma regra de "required" ele ficará em pendind se não bater na regra.
+#
+# Comportamento do node selector
+
+#************ Affinity - Comportamento Semelhante NodeSelector ***********************
+#
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: postgres
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: prgs/postgres
+                operator: In
+                values:
+                - uma-label-inexistente
+      containers:
+      - image: nginx
+        name: postgres
+EOF
+
+k get pods -A
+NAME                          READY   STATUS    RESTARTS      AGE
+nginx-0                       1/1     Running   1 (34m ago)   3h19m
+nginx-1                       1/1     Running   1 (34m ago)   3h14m
+nginx-paulo-78455bbb4-82vkz   1/1     Running   1 (34m ago)   3h23m
+postgres-5b48bf944f-f5xl9     0/1     Pending   0             1s
+
+# OBS.: Mesmo comportamento do Node Selector
+k describe pod postgres-5b48bf944f-f5xl9
+
+Conditions:
+  Type           Status
+  PodScheduled   False
+Volumes:
+  kube-api-access-vkhw9:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason            Age   From               Message
+  ----     ------            ----  ----               -------
+  Warning  FailedScheduling  28s   default-scheduler  0/2 nodes are available: 1 node(s) didn't match Pod's node affinity/selector, 1 node(s) had untolerated taint(s). no new claims to deallocate, preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+
+#****************** Affinity - Tenta Schedular no Node Correto ***********************
+#
+# Ele irá tentar schedular o Pod no Node que tem a label "prgs/postgres", se não achar, ele joga em qualquer um
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: postgres
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: prgs/postgres
+                operator: In
+                values:
+                - uma-label-inexistente
+      containers:
+      - image: nginx
+        name: postgres
+EOF
+
+# - weight: 1
+#  preference:
+#
+# Esse wight é o peso como ele é um array eu consigo mensurar qual terá mais preferencia para deploy.
+#
+# O conceito de weight no nodeAffinity serve para definir uma preferência do scheduler
+# preferred → preferência, não obrigação
+
+cat <<EOF | kaf -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 5
+            preference:
+              matchExpressions:
+              - key: prgs/apps
+                operator: In
+                values:
+                - "true"
+          - weight: 6
+            preference:
+              matchExpressions:
+              - key: prgs/postgres
+                operator: In
+                values:
+                - "true"
+      containers:
+      - image: nginx
+        name: nginx
+EOF
+
+```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - Affinity / Pod-Affinity
+
+```bash
+
+https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#an-example-of-a-pod-that-uses-pod-affinity
+
+#
+# PodAntiAffinity é uma regra usada para evitar que determinados Pods sejam executados próximos uns dos outros.
+#
+# Ela é muito utilizada para:
+# - alta disponibilidade
+# - distribuição de carga
+# - evitar ponto único de falha
+
+# Pegar na doc pois a sintaxe é puck e garantir as labels pois ela é a chave.
+#
+# Vamos deployar postgres no worker do postgres e nao quero o pod do frontend no mesmo worker
+
+# Definindo Label
+#
+kubectl label node worker01 prgs/postgres=true
+kubectl label node worker01 app=database
+
+# Criando Deployment
+# A label será usada para fazer match no afinity do deployment do backend
+#
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: database
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      nodeSelector:
+        prgs/postgres: "true"
+      containers:
+      - image: nginx
+        name: postgres
+EOF
+
+# Listar as labels deste pod
+pod=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}' | grep '^postgres-')
+
+k get pod $pod --show-labels
+NAME                        READY   STATUS    RESTARTS   AGE   LABELS
+postgres-684cb45d6-hbwth   1/1     Running   0          6s    app=database,pod-template-hash=684cb45d6
+
+# Quero que a aplicação rode próximo do banco, no mesmo worker.
+#
+# Check
+kubectl get nodes --show-labels | grep -o app=database
+app=database
+
+# Criando Deployment
+#
+# topologyKey: prgs/postgres
+# O que isso significa...
+# o Pod deve ficar no mesmo node onde existe um Pod com Label prgs/postgres
+# O topologyKey NÃO é um valor arbitrário qualquer.
+# Ele precisa referenciar uma label existente nos nodes, e todos os nodes envolvidos precisam possuir essa label.
+#
+# topologyKey usa somente a CHAVE da label do node.
+# O podAffinity não procura nodes com label app=database.
+#
+# Ele procura:
+# Pods com app=database
+#
+# e depois usa o topologyKey para descobrir em qual “domínio/topologia” esse Pod está.
+#
+cat <<EOF | kaf -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: backend
+  name: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - database
+            topologyKey: prgs/postgres
+      containers:
+      - image: nginx
+        name: backend
+EOF
+
+k get pods
+NAME                       READY   STATUS    RESTARTS   AGE
+backend-58fd97f655-bqfgd   1/1     Running   0          13s
+postgres-684cb45d6-hbwth   1/1     Running   0          53s
+```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - Affinity / PodAntiAffinity
+
+```bash
+#****************** Affinity - Frontend Rodando em Outro Node  ***********************
+#
+# Como não tenho outro node , vou remover a regra que evitar usar o node ( Control Plane ) para schedular Pods.
+#
+kubectl taint nodes master01 node-role.kubernetes.io/control-plane:NoSchedule-
+
+cat <<EOF | kaf -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: frontend
+  name: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - database
+            topologyKey: prgs/postgres
+      containers:
+      - image: nginx
+        name: frontend
+EOF
+
+
+k get pod -o wide
+NAME                        READY   STATUS    RESTARTS   AGE   IP             NODE       NOMINATED NODE   READINESS GATES
+backend-58fd97f655-bqfgd    1/1     Running   0          13m   10.244.1.163   worker01   <none>           <none>
+frontend-67c8c6b765-rvg4s   1/1     Running   0          80s   10.244.0.50    master01   <none>           <none>
+postgres-684cb45d6-hbwth    1/1     Running   0          13m   10.244.1.162   worker01   <none>           <none>
+```
+
+[Índice](#-menu)
+
+# 🚀 Create Object - Affinity / Tolerations
+
+```bash
 | Tipo             | Comportamento           |
 | ---------------- | ----------------------- |
 | NoSchedule       | Não agenda novos Pods   |
@@ -7651,7 +8077,57 @@ spec:
               - key: node-role.kubernetes.io/worker
                 operator: Exists
 '
+
+
+# Voltar o padrao, para nao permitir que pods seja agendados no control plane
+kubectl taint nodes master01 node-role.kubernetes.io/control-plane:NoSchedule
+
+# Na prática para garantir que o frontend não rode nos pod da aplicação posso forcar a amizade.
+
+cat <<EOF | kaf -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: frontend
+  name: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - database
+            topologyKey: prgs/postgres
+      containers:
+      - image: nginx
+        name: frontend
+EOF
+
+# Listando todos os Pods
+k get pod -o wide
+NAME                       READY   STATUS    RESTARTS   AGE   IP             NODE       NOMINATED NODE   READINESS GATES
+backend-58fd97f655-bqfgd   1/1     Running   0          19m   10.244.1.163   worker01   <none>           <none>
+frontend-d646846c6-9jczm   1/1     Running   0          8s    10.244.0.51    master01   <none>           <none>
+postgres-684cb45d6-hbwth   1/1     Running   0          20m   10.244.1.162   worker01   <none>           <none>
 ```
+
 [Índice](#-menu)
 
 # 🚀 Cluster Upgrade - Ferramentas e Boas Práticas
@@ -7789,7 +8265,7 @@ metallb-system       metallb-controller-765c495b75-c757j                        
 metallb-system       metallb-speaker-lsp9j                                       4/4     Running     28 (108s ago)   89d
 metallb-system       metallb-speaker-rhs68                                       4/4     Running     28 (107s ago)   89d
 
-
+https://docs.aws.amazon.com/eks/latest/userguide/update-cluster.html
 
 https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 
