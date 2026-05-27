@@ -8668,7 +8668,7 @@ node/worker01 uncordoned
 kubectl get nodes
 NAME       STATUS   ROLES           AGE   VERSION
 master01   Ready    control-plane   89d   v1.35.5
-worker01   Ready    worker          89d   v1.34.4
+worker01   Ready    worker          89d   v1.35.5
 ```
 
 [Índice](#-menu)
