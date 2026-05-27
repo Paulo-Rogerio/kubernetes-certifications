@@ -56,9 +56,13 @@
 - [Create Object - Affinity / Pod-Affinity](#-create-object---affinity--pod-affinity)
 - [Create Object - Affinity / PodAntiAffinity](#-create-object---affinity--podantiaffinity)
 - [Create Object - Affinity / Tolerations](#-create-object---affinity--tolerations)
+- [Create Object - Affinity / Pod Topology Spread Constraints](#-create-object---affinity--pod-topology-spread-constraints)
 - [Cluster Upgrade - Ferramentas e Boas Práticas](#-cluster-upgrade---ferramentas-e-boas-práticas)
 - [Cluster Upgrade - Control Plane / Masters](#-cluster-upgrade---control-plane--masters)
 - [Cluster Upgrade - Control Data / Workers](#-cluster-upgrade---control-data--workers)
+- [Dicas - CrashLoopBackOff](#-dicas---crashloopbackoff)
+- [Dicas - ImagePullBackOff](#-dicas---imagepullbackoff)
+- [Dicas - Node NotReady](#-dicas---node-notready)
 - [Explorando Documentação - Kubectl](#-explorando-documentação---kubectl)
 
 # 🚀 Command Line - Contexts
@@ -8130,6 +8134,162 @@ postgres-684cb45d6-hbwth   1/1     Running   0          20m   10.244.1.162   wor
 
 [Índice](#-menu)
 
+# 🚀 Create Object - Affinity / Pod Topology Spread Constraints
+
+```bash
+
+# Define regras onde o próprio scheduler irá distribuir os workloads em diferentes nodes.
+
+https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+
+https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#example-multiple-topologyspreadconstraints
+
+# Suponhamos que temos um deplyment com 3 replicas, quero que ele seja distribuidos em 3 nodes
+#
+# Posso usar essa mesma analogia para zonas de disponibilidades, onde posso garantir que terei replicas rodando em multi az.
+#
+us-east-1a
+us-east-1b
+us-east-1c
+
+spec:
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: zone
+    whenUnsatisfiable: DoNotSchedule
+
+# maxSkew => Suponhamos que temos 2 nodes e meu deployment irá schedular 5 REPLICAS.
+# Na pr[atica isso quer dizer que terei 1 pod rodando por node, entao 3 pods NAO serão deployados.
+#
+# Outro cenário => Meu "maxSkew" definido como 2, terei 2 pods por node e 1 pod ficará como pending.
+#
+# Quanto maior esse numero mais soft seu deployment será em termos de como será feito o schedule
+#
+# topologyKey: kubernetes.io/hostname ( Garante que essa label será unica por node )
+# Em cloud é interessante colocar por zona de disponibilidade
+
+# Imagina um cenario com um deployment com 10 replicas, o padrão do k8s é criar outro replicaset
+# e geralmente ele baixa 2 pods e cria 2 pods.
+#
+# O problema é que tanto o Deployment antigo quanto o novo possuem a mesma label (app=nginx).
+# Durante um rolling update, o scheduler pode considerar pods de revisões diferentes
+# como pertencentes ao mesmo grupo ao calcular o skew do topologySpreadConstraints,
+# já que ambos compartilham as mesmas labels.
+
+# Sem essa configuração, os pods antigos e novos podem influenciar mutuamente
+# a distribuição, causando um balanceamento inesperado durante o rollout.
+
+matchLabelKeys:
+  - pod-template-hash
+
+# Ao utilizar matchLabelKeys com pod-template-hash, o scheduler passa a considerar
+# apenas pods que possuem o mesmo valor de pod-template-hash (ou seja, da mesma revisão do Deployment)
+# ao calcular o skew. Assim, os pods da nova versão não interferem no balanceamento
+# dos pods da versão antiga, e vice-versa.
+
+
+cat <<EOF | kaf -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: frontend
+  name: frontend
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      topologySpreadConstraints:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels:
+                app: frontend
+            matchLabelKeys:
+              - pod-template-hash
+      containers:
+      - image: alpine
+        name: frontend
+        command:
+          - sleep
+          - "9999999999999"
+EOF
+
+# So tenho 2 nodes ( workers )
+kgn
+NAME                 STATUS   ROLES             AGE    VERSION
+prgs-control-plane   Ready    control-plane     139m   v1.32.0
+prgs-worker          Ready    worker-apps       139m   v1.32.0
+prgs-worker2         Ready    worker-postgres   139m   v1.32.0
+
+
+# Só fez 2 deploy
+k get pod
+NAME                        READY   STATUS    RESTARTS   AGE
+frontend-77876bddc7-hcz94   0/1     Pending   0          4m41s
+frontend-77876bddc7-jsmr9   0/1     Pending   0          4m41s
+frontend-77876bddc7-qct74   0/1     Pending   0          4m41s
+frontend-77876bddc7-s7x78   1/1     Running   0          4m41s
+frontend-77876bddc7-x6f4c   1/1     Running   0          4m41s
+
+# Outro exemplo
+# 3 pods por node, então irá deployar 6 pods e 4 pods ficaram como pending por falta de worker
+
+cat <<EOF | kaf -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: frontend
+  name: frontend
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      topologySpreadConstraints:
+          - maxSkew: 3
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels:
+                app: frontend
+            matchLabelKeys:
+              - pod-template-hash
+      containers:
+      - image: alpine
+        name: frontend
+        command:
+          - sleep
+          - "9999999999999"
+EOF
+
+# Ao fazer o describe pode-se notar que tentou usar o control-plane, mas devido a uma regra de afinidade ( toleration )
+# nenhum pod pode ser schedulado nos control-plane.
+k describe pod frontend-c86867df9-fnjdr
+  Warning  FailedScheduling  3m31s  default-scheduler  0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 2 node(s) didn't match pod topology spread constraints. preemption: 0/3 nodes are available: 1 Preemption is not helpful for scheduling, 2 No preemption victims found for incoming pod.
+
+
+kubectl rollout restart deploy
+
+k rollout restart deployment/frontend
+k rollout restart -n default deployment frontend
+```
+
+[Índice](#-menu)
+
 # 🚀 Cluster Upgrade - Ferramentas e Boas Práticas
 
 ```bash
@@ -8669,6 +8829,181 @@ kubectl get nodes
 NAME       STATUS   ROLES           AGE   VERSION
 master01   Ready    control-plane   89d   v1.35.5
 worker01   Ready    worker          89d   v1.35.5
+```
+
+[Índice](#-menu)
+
+# 🚀 Dicas - CrashLoopBackOff
+
+```bash
+https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
+
+https://kubernetes.io/docs/concepts/containers/images/#imagepullbackoff
+
+# Geralmente causado por problema na aplicação ( problema no container ),
+# O processo startado pelo command está retornando alguma coisa diferente de 0
+# E um tipo de erro que consegue ser mostrado nos logs do Pod.
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: chashloop
+  name: chashloop
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: chashloop
+  template:
+    metadata:
+      labels:
+        app: chashloop
+    spec:
+      containers:
+      - image: alpine
+        name: chashloop
+        command:
+          - ls
+          - -l
+          - abacate
+EOF
+
+k get pod
+chashloop-5c5b77669f-6xxdj   0/1     CrashLoopBackOff   1 (4s ago)   20s
+chashloop-5c5b77669f-hbrfz   0/1     CrashLoopBackOff   1 (3s ago)   20s
+chashloop-5c5b77669f-qqsp5   0/1     CrashLoopBackOff   1 (1s ago)   20s
+
+
+# Describe no Pod
+k describe pod chashloop-5c5b77669f-qqsp5
+
+# O describe irá mostrar o status do container, e o comando que ele ta executando
+
+Controlled By:  ReplicaSet/chashloop-5c5b77669f
+Containers:
+  chashloop:
+    Container ID:  containerd://7c2b4f285e1c1f0f92b410c53135f8b7866bb5f7efe97436220259243b2fe587
+    Image:         alpine
+    Image ID:      docker.io/library/alpine@sha256:56fa17d2a7e7f168a043a2712e63aed1f8543aeafdcee47c58dcffe38ed51099
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      ls
+      -l
+      abacate
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Fri, 24 Jan 2025 11:07:48 -0300
+      Finished:     Fri, 24 Jan 2025 11:07:48 -0300
+    Ready:          False
+
+
+# Os logs podem ser consultados tbm
+
+k logs chashloop-5c5b77669f-qqsp5
+ls: abacate: No such file or directory
+```
+
+[Índice](#-menu)
+
+# 🚀 Dicas - ImagePullBackOff
+
+```bash
+# Não consegue fazer o pull da imagem
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: imagepullerror
+  name: imagepullerror
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: imagepullerror
+  template:
+    metadata:
+      labels:
+        app: imagepullerror
+    spec:
+      containers:
+      - image: alpine:paulera
+        name: imagepullerror
+        command:
+          - sleep
+          - infinity
+EOF
+
+
+k get pod -o wide
+NAME                              READY   STATUS         RESTARTS   AGE   IP            NODE          NOMINATED NODE   READINESS GATES
+imagepullerror-7bfdbb568d-52kgd   0/1     ErrImagePull   0          11s   10.244.1.10   prgs-worker   <none>           <none>
+imagepullerror-7bfdbb568d-82w45   0/1     ErrImagePull   0          11s   10.244.1.9    prgs-worker   <none>           <none>
+imagepullerror-7bfdbb568d-dbk5b   0/1     ErrImagePull   0          11s   10.244.1.8    prgs-worker   <none>           <none>
+
+# OBS.: Como ele não transicionou 1/1 o pod nao gera log, entao devo fazer por describe para identificar o que rolou.
+
+k describe pod imagepullerror-7bfdbb568d-dbk5b
+
+iled to resolve reference "docker.io/library/alpine:paulera": docker.io/library/alpine:paulera: not found
+  Warning  Failed     22s (x4 over 2m3s)  kubelet            Error: ErrImagePull
+  Normal   BackOff    10s (x6 over 2m3s)  kubelet            Back-off pulling image "alpine:paulera"
+  Warning  Failed     10s (x6 over 2m3s)  kubelet            Error: ImagePullBackOff
+
+# Erros + comuns
+👉  Certificado https do registry privado
+👉  Se o registry usa um certificado auto assinado, esse certificado deve ser importado para dentro do node.
+👉  Autenticação
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+data:
+  .dockerconfigjson: xxxxxxxxxxxxxx=
+kind: Secret
+metadata:
+  creationTimestamp: null
+  name: regcred
+  namespace: web
+type: kubernetes.io/dockerconfigjson
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: web
+  name: web-deploy
+  namespace: web
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      containers:
+      - name: web
+        image: registry.meudominio.com/app-web:1.0.0
+        imagePullPolicy: Always
+EOF
+```
+
+[Índice](#-menu)
+
+# 🚀 Dicas - Node NotReady
+
+```bash
 ```
 
 [Índice](#-menu)
