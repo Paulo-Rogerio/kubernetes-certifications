@@ -28,6 +28,6 @@
 
 ## 🚀 Cheatsheet
 
-- [Cheatsheet - Exam Day](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/03-k8s/cheatsheet/exam-day/exam-day-guide.md)
+- [Cheatsheet - Exam Day](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/cheatsheet/exam-guide.md)
 
 ## 🚀 Simulated
