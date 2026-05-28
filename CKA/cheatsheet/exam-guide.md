@@ -1,5 +1,8 @@
 # 🚀 Setup, Shortcuts & First 5 Minutes
 
+
+- [Home Page](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main)
+
 ---
 
 ## ⏰ Quick Stats (CKA v1.35)
@@ -41,7 +44,6 @@ Run through this the day before your exam:
 - [ ] Well-lit room 👉  proctor must see your face, hands, and workspace
 - [ ] Private, quiet space (no coffee shops, open offices, etc.)
 - [ ] You must stay within the camera frame throughout
-
 
 ---
 
@@ -139,3 +141,35 @@ k config current-contexts
 k config get-contexts
 k config use-context <cluster-name>
 ```
+
+## 🕐 Time Management Strategy
+
+The exam is **2 hours** for 15–20 tasks.
+
+| Strategy | Detail |
+|----------|--------|
+| **Budget per task** | ~6–8 minutes on average |
+| **Skip and return** | Flag hard questions, return after easier ones |
+| **Partial credit** | Exists — incomplete answers still score points |
+| **High-weight tasks** | Do these first if confident |
+| **Cluster upgrade** | Time-consuming — plan carefully |
+| **Verify your work** | Always run `kubectl get`/`describe` to confirm |
+
+### Time allocation by domain weight
+
+| Domain | Weight | Suggested Time |
+|--------|--------|---------------|
+| Troubleshooting | 30% | ~36 min |
+| Cluster Architecture | 25% | ~30 min |
+| Services & Networking | 20% | ~24 min |
+| Workloads & Scheduling | 15% | ~18 min |
+| Storage | 10% | ~12 min |
+
+**3-pass approach:**
+1. **First pass (60 min):** Solve everything under 5 min — skip the rest
+2. **Second pass (45 min):** Return to flagged questions, use docs
+3. **Buffer (15 min):** Final verification pass
+
+---
+
+[Top](#-setup-shortcuts--first-5-minutes)
