@@ -1,7 +1,7 @@
 # 🚀 Setup, Shortcuts & First 5 Minutes
 
 
-- [Home Page](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main)
+- [Home Page](https://github.com/Paulo-Rogerio/kubernetes-certifications)
 
 ---
 
