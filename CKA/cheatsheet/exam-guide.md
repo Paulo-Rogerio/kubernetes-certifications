@@ -101,6 +101,22 @@ You may open **one additional browser tab** pointing to:
 - `https://kubernetes.io/blog`
 - `https://helm.sh/docs`
 
+## 📚 Kubernetes Docs Bookmarks
+
+One browser tab allowed. Know these paths:
+
+| Topic | URL Path |
+|-------|----------|
+| kubectl cheatsheet | `/docs/reference/kubectl/quick-reference/` |
+| RBAC | `/docs/reference/access-authn-authz/rbac/` |
+| Network Policies | `/concepts/services-networking/network-policies/` |
+| PersistentVolumes | `/concepts/storage/persistent-volumes/` |
+| Scheduling | `/concepts/scheduling-eviction/` |
+| kubeadm install | `/setup/production-environment/tools/kubeadm/install-kubeadm/` |
+| Ingress | `/concepts/services-networking/ingress/` |
+
+Use `Ctrl+F` in Firefox to search within any docs page.
+
 No other websites, notes, or books are allowed.
 
 ## ⚡⚡⚡ First 5 Minutes of the Exam ⚡⚡⚡
@@ -131,8 +147,31 @@ cat > ~/.vimrc <<EOF
 set tabstop=2
 set expandtab
 set shiftwidth=2
+syntax on
 EOF
 ```
+
+Exemples:
+
+| Action | Comando |
+| ------ | ------- |
+| **Save + Exit** | `:wq` |
+| **Exit without saving** | `:q!` |
+| **Copy line** | `yy` |
+| **Delete line** | `dd` |
+| **Paste** | `p` |
+| **Undo** | `u` |
+| **Find** | `/` |
+| **Replace** | `:%s/x/y/g` |
+| **Identify** | `>` or `<`  |
+| **Top Line** | `gg` |
+| **Last line** | `G` |
+| **Select** | `v` |
+| **Select line** | `V` |
+| **Select block** | `Ctrl+v` |
+| **Comment** | `:s/^/# /` |
+| **Describe** | `:s/# //` |
+
 
 ## 🚀 3) Manager Context
 
@@ -140,6 +179,72 @@ EOF
 k config current-contexts
 k config get-contexts
 k config use-context <cluster-name>
+```
+
+## ⚙️ Imperative Commands Quick Reference
+
+```bash
+# Pods
+k run nginx --image=nginx
+k run busybox --image=busybox --restart=Never -- sleep 3600
+
+# Deployments
+k create deploy app --image=nginx --replicas=3
+
+# Services
+k expose deploy app --port=80 --target-port=8080
+k create svc clusterip my-svc --tcp=80:8080
+
+# ConfigMaps & Secrets
+k create configmap cm --from-literal=key=value
+k create secret generic sec --from-literal=key=value --from-file=./file
+
+# RBAC
+k create role r --verb=get,list --resource=pods
+k create rolebinding rb --role=r --user=username
+k create clusterrole cr --verb=get --resource=pods
+k create clusterrolebinding crb --clusterrole=cr --user=username
+
+# Scale / Image update
+k scale deploy app --replicas=5
+k set image deploy/app nginx=nginx:1.26
+
+# Generate YAML without applying
+k run nginx --image=nginx $do > pod.yaml
+k create deploy app --image=nginx $do > deploy.yaml
+```
+
+---
+
+## 🔑 Essential kubectl One-Liners for Speed
+
+```bash
+# Delete fast (no grace period)
+k delete pod my-pod $now
+
+# Switch namespace quickly
+k config set-context --current --namespace=my-namespace
+
+# Switch cluster context (required per task!)
+k config use-context <context-name>
+
+# Get all resources in a namespace
+k get all -n my-namespace
+
+# Check events (great for debugging)
+k get events --sort-by='.lastTimestamp' -n my-namespace
+
+# Explain resource fields without docs
+k explain pod.spec.containers.livenessProbe
+k explain deployment.spec.strategy
+k explain networkpolicy.spec
+
+# Check RBAC
+k auth can-i create pods --as=<user> -n <ns>
+
+# Check available API versions for a resource
+k api-resources | grep ingress
+k api-versions | grep networking
 ```
 
 ## 🕐 Time Management Strategy
@@ -171,5 +276,27 @@ The exam is **2 hours** for 15–20 tasks.
 3. **Buffer (15 min):** Final verification pass
 
 ---
+
+## 🧠 Common Exam Mistakes to Avoid
+
+| Mistake | Prevention |
+|---------|-----------|
+| Wrong namespace | Always check task context; use `-n <namespace>` |
+| Wrong cluster context | Run `k config use-context <ctx>` before each task |
+| Forgetting `sudo -i` | Always escalate on worker nodes |
+| Not verifying work | After every task, run `k get`/`describe` to confirm |
+| Editing wrong file | Double-check paths: `/etc/kubernetes/manifests/` |
+| Accidentally closing tab | Use `Ctrl+Alt+W` — see keyboard shortcuts table above |
+| Running out of time | Skip, flag, come back — partial credit beats nothing |
+| Tabs in YAML | Always use 2 spaces, never tabs |
+| Forgetting `--restart=Never` | Required for one-off pods: `k run test --image=busybox --restart=Never` |
+
+---
+
+## 📞 Support
+
+If you have issues during check-in or the exam:
+- Login to [trainingsupport.linuxfoundation.org](https://trainingsupport.linuxfoundation.org) with your LF account
+- The proctor can assist with technical issues during check-in
 
 [Top](#-setup-shortcuts--first-5-minutes)
