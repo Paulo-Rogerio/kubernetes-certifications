@@ -127,7 +127,7 @@ No other websites, notes, or books are allowed.
 source <(kubectl completion bash)
 complete -F __start_kubectl k
 alias k=kubectl
-k version --short
+k version
 ```
 
 ```bash
@@ -178,7 +178,7 @@ Exemples:
 ## 🚀 3) Manager Context
 
 ```bash
-k config current-contexts
+k config current-context
 k config get-contexts
 k config use-context <cluster-name>
 ```
@@ -191,13 +191,20 @@ k config use-context <cluster-name>
 # Pods
 k run nginx --image=nginx
 k run busybox --image=busybox --restart=Never -- sleep 3600
+k exec -it busybox -- sh
 
 # Deployments
 k create deploy app --image=nginx --replicas=3
 
 # Services
-k expose deploy app --port=80 --target-port=8080
-k create svc clusterip my-svc --tcp=80:8080
+# --targe-port => Porta que o container expoe, definido no Dockerfile da imagem.
+# --port       => Porta que o service vai escutar
+# --tcp        => <Porta que o service vai escutar>:<Porta que container expoe>
+k expose deploy app --port=8080 --target-port=80
+k create svc clusterip app --tcp=8080:80
+
+# Debug
+k port-forward svc/app 8181:8080
 
 # ConfigMaps & Secrets
 k create configmap cm --from-literal=key=value

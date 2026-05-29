@@ -39,7 +39,7 @@
 - [Create Object - ConfigMap Vs Secrets](#-create-object---configmap-vs-secrets)
 - [Create Object - ConfigMap](#-create-object---configmap)
 - [Create Object - ConfigMap Vhost Ingress](#-create-object---configmap-vhost-ingress)
-- [Create Object - Types Secrets](#-create-object---types-secrets)
+- [Create Object - Secrets](#-create-object---secrets)
 - [Create Object - Storage PV / PVC / StorageClass](#-create-object---storage-pv--pvc--storageclass--accessmode)
 - [Create Object - Reclaim Policy PVC / StorageClass](#-create-object---reclaim-policy-pvc--storageclass)
 - [Create Object - HPA / VPA](#-create-object---hpa--vpa)
@@ -50,7 +50,7 @@
 - [Create Object - RBAC / Create User](#-create-object---rbac--create-user)
 - [Create Object - RBAC / Create Context](#-create-object---rbac--create-context)
 - [Create Object - RBAC / Configurando Autorização](#-create-object---rbac--configurando-autorização)
-- [Create Object - Role ServiceAccount + RolingBindgings](#-create-object---role-serviceaccount--rolingbindgings)
+- [Create Object - RBAC / Role ServiceAccount + RolingBindgings](#-create-object---rbac--role-serviceaccount--rolingbindgings)
 - [Create Object - Affinity / Node-Selector Labels](#-create-object---affinity--node-selector-labels)
 - [Create Object - Affinity / Node-Affinity](#-create-object---affinity--node-affinity)
 - [Create Object - Affinity / Pod-Affinity](#-create-object---affinity--pod-affinity)
@@ -85,7 +85,7 @@ KUBECONFIG=~/.kube/config:~/.kube/kube_outro_cluster_config kubectl config view 
 # AWS ( EKS )
 aws eks update-kubeconfig --dry-run --name paulo --region us-east-2
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Command Line - Nodes
 
@@ -122,7 +122,7 @@ done
 kubectl cordon worker01
 kubectl uncordon worker01
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Command Line - Explorando API
 
@@ -205,7 +205,7 @@ k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash
 k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash -c "pwd; ls"
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Pod
 
@@ -247,7 +247,7 @@ k patch svc demo -p '{"spec":{"ports":[{"port":80,"targetPort":80,"nodePort":300
 # Adicione a entrada
 # - --service-node-port-range=20000-40000
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - StaticPod
 
@@ -270,7 +270,7 @@ systemctl status kubelet
 
 # Usando especificamente pelo controlplane. Por ser estático dentro do worker , NÃO É ESCALAVEL.
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Init Containers
 
@@ -346,7 +346,7 @@ Error from server (BadRequest): container "nginx" in pod "nginx" is waiting to s
 k logs nginx -c waitfordns -f
 Clone repo....
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Replace Entrypoint
 
@@ -389,7 +389,7 @@ spec:
     args: [ "while true; do sleep 30; done;" ]
 EOF
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Multi Containers
 
@@ -425,7 +425,7 @@ k logs multicontainers -c debug
 k exec -it multicontainers -c debug -- sh
 ps fax
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Acessando Pod Sem Kubectl Via Nsenter
 
@@ -464,7 +464,7 @@ crictl inspect dfa92a11e4461 | jq -r '.info.pid'
 nsenter -t 148192 -n ls /
 nsenter -t 148192 -n curl localhost
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Pod Lifecycle
 
@@ -524,7 +524,7 @@ kubectl delete pod pod-lifecycle -n default
 # terminationGracePeriodSeconds: 60 com um valor que satisfaça minha necessidade.
 
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Namespace
 
@@ -546,7 +546,7 @@ k create ns familia
 k neat <<< $(k create ns familia --dry-run=client -o yaml)
 k neat <<< $(k create ns familia --dry-run=client -o yaml)
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Deployment
 
@@ -589,7 +589,7 @@ spec:
 
 k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | k apply -f -
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Scale Deployment
 
@@ -597,7 +597,7 @@ k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o y
 k scale --help
 k scale deployment nginx-paulo --replicas 10
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Request Limits
 
@@ -675,7 +675,7 @@ k top nodes
 # Memoria:
 # É informada em M/G ex: 500M
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Resources Limits
 
@@ -741,7 +741,7 @@ spec:
             memory: 512M
 
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - ReplicaSet
 
@@ -833,7 +833,7 @@ spec:
 k get pod -l app=nginx-paulo
 k get pod -n kube-system -l k8s-app=kube-dns
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - ReplicaSet Rollout
 
@@ -907,7 +907,7 @@ k get rs nginx-paulo-78455bbb4 -o yaml | grep deployment.kubernetes.io/revision
 # Reiniciar todos os Pods do Deployment nginx-paulo
 k rollout restart deployment/nginx-paulo
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Rollout maxSurge / maxUnavailable
 
@@ -969,7 +969,7 @@ spec:
       - image: nginx
         name: nginx
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Liveness / Readness Probes
 
@@ -1107,7 +1107,7 @@ k explain deployment.spec.template.spec.containers.env
 
 https://12factor.net/
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Daemonset
 
@@ -1235,7 +1235,7 @@ nginx-paulo   1         1         1       1            1           node-role.kub
 k explain daemonset --recursive | less
 k explain daemonset.spec
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Statefullset
 
@@ -1532,7 +1532,7 @@ Source:
 Events:            <none>
 #=============================================================================
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - PDB / PodDisruptionBudget
 
@@ -1627,7 +1627,7 @@ NAME       STATUS   ROLES           AGE   VERSION
 master01   Ready    control-plane   12d   v1.34.4
 worker01   Ready    worker          12d   v1.34.4
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Jobs
 
@@ -1723,7 +1723,7 @@ my-job2   Complete             1/1           6s         6s
 # Pegue o Id do Pod gerado pelo Job
 k logs $(k get pods -l job-name=my-job2 -o name)
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - CronJobs
 
@@ -1761,7 +1761,7 @@ k logs my-cronjob-29546778-4fr8t
 # Pegando dinamicament
 kubectl logs $(kubectl get jobs --sort-by=.metadata.creationTimestamp -o name | tail -1)
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Services Tipos
 
@@ -2006,7 +2006,7 @@ Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
 Name:      nginx-1.nginx
 Address 1: 10.244.2.14 nginx-1.nginx.default.svc.cluster.local
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Ipvs Vs Iptables
 
@@ -2231,7 +2231,7 @@ egrep 'KUBE-SVC-2CMXP7HKUVJN7L6M' /tmp/iptables
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.6:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-C4VXQDW52UV45WW3
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.2.6:80" -j KUBE-SEP-UOZCNMEBPO5JGMU4
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Manutenção em Membros do Cluster
 
@@ -2282,7 +2282,7 @@ NAME      READY   STATUS    RESTARTS   AGE
 nginx-0   1/1     Running   0          12m
 nginx-1   1/1     Running   0          7m53s
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - External Name
 
@@ -2347,7 +2347,7 @@ url-remota.default.svc.cluster.local is an alias for paulo-rogerio.github.io.
 
 k delete svc url-remota
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Trafic Policy
 
@@ -2509,7 +2509,7 @@ kubectl run -i --tty --image alpine apline --restart=Never --rm
 apk add curl
 while true; do curl -I http://10.96.247.192; done
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Estratégias Deploy
 
@@ -2545,7 +2545,7 @@ Existe outras formas de deploy Ex: canary, mas nesse formato ( rolling Update ) 
 
 Isso permite eu fazer um UNDO para outro replicaset
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 
 # 🚀 Create Object - Deploy Canary
@@ -2671,7 +2671,7 @@ Content-Length: 191
 Connection: close
 Content-Type: text/html
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Deploy Blue Green
 
@@ -2792,7 +2792,7 @@ Server: nginx/1.27.3
 Server: nginx/1.27.3
 Server: nginx/1.27.3
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Ingress Controller
 
@@ -3007,7 +3007,7 @@ Etag: "69d4ec68-380"
 Last-Modified: Tue, 07 Apr 2026 11:37:12 GMT
 Server: nginx/1.29.8
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Ingress Nginx Rewrite
 
@@ -3281,7 +3281,7 @@ spec:
 # Annotations (dependem do controller) - rotas extras
 # Annotations customizam o comportamento do Ingress
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Ingress Múltiplos Paths
 
@@ -3376,7 +3376,7 @@ curl 172.17.0.240 -I -H "Host: nginx.demo.com"
 curl 172.17.0.240 -I -H "Host: httpd.demo.com"
 
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Ingress Error 503
 
@@ -3441,7 +3441,7 @@ k patch svc httpd -p '{"spec":{"selector":{"app":"ui"}}}'
 k patch svc httpd -p '{"spec":{"selector":{"app":"httpd"}}}'
 
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Ingress TLS
 
@@ -3630,7 +3630,7 @@ etag: "69d4ec68-380"
 accept-ranges: bytes
 strict-transport-security: max-age=31536000; includeSubDomains
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - ConfigMap Vs Secrets
 
@@ -3651,7 +3651,7 @@ strict-transport-security: max-age=31536000; includeSubDomains
 # Obs.: Secret não está encripitado, está apenas encodado ( base64 )
 
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - ConfigMap
 
@@ -4003,13 +4003,13 @@ k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
   </h1>
 </html>
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - ConfigMap Vhost Ingress
 
+```bash
 k expose deployment nginx --type=ClusterIP --port=80 --target-port=80 --dry-run=client -o yaml
 
-```bash
 cat <<EOF | k apply -f -
 apiVersion: v1
 kind: ConfigMap
@@ -4261,17 +4261,17 @@ k exec nginx-66d8fc6cdb-s9x7q -- bash -c "ls /usr/share/nginx/html"
 index.html
 index2.html
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
-# 🚀 Create Object - Types Secrets
+# 🚀 Create Object - Secrets
 
 ```bash
 k create secret --help
 
 # Available Commands:
-#   docker-registry   Cria um secret para ser utilizado com o Docker registry
-#   generic           Cria uma secret "from a local file", directory, or literal value
-#   tls               Cria uma secret do tipo TLS
+# docker-registry     Creates a secret to be used with the Docker Registry
+# generic             Creates a secret "from a local file", directory, or literal value
+# tls                 Creates a TLS type secret
 
 k create secret generic credentials --from-literal=username=admin
 k get secrets
@@ -4279,8 +4279,6 @@ k get secrets
 base64 -d <<< $(k get secrets credentials -o=jsonpath='{.data.username}') && echo
 
 https://kubernetes.io/docs/concepts/configuration/secret/#secret-types
-
-# Ao criar uma secret é importante checar o tipo na documentação acima, e criar conforme o k8s espera.
 
 apiVersion: v1
 kind: Secret
@@ -4291,10 +4289,32 @@ stringData:
   username: admin # required field for kubernetes.io/basic-auth
   password: t0p-Secret # required field for kubernetes.io/basic-auth
 
+#================================ Secrets From File =================================
+#
+echo "password" > key.txt
+
+# Define key name
+k create secret generic sec-file-01 --from-file=password=./key.txt
+k get secrets
+k describe secrets sec-file-01
+base64 -d <<< $(k get secrets sec-file-01 -o=jsonpath='{.data.password}')
+
+# Since the key was not provided, the filename becomes the key.
+k create secret generic sec-file-02 --from-file=./key.txt
+k get secrets
+k describe secrets sec-file-02
+base64 -d <<< $(k get secrets sec-file-02 -o=jsonpath='{.data.key\.txt}')
+
+# Mixing key name with file
+k create secret generic sec-file-03 --from-literal=key=value --from-file=./key.txt
+k get secrets
+k describe secrets sec-file-03
+base64 -d <<< $(k get secrets sec-file-03 -o=jsonpath='{.data.key\.txt}')
+base64 -d <<< $(k get secrets sec-file-03 -o=jsonpath='{.data.key}')
 
 #================================ Secrets Encode ====================================
 #
-# Ao criar um secret base64 lembra de rodar assim , para não ter quebra de linha
+# Generating a secret type manifest with encoded data
 #
 echo -n "segredo" | base64
 
@@ -4387,11 +4407,12 @@ EOF
 
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- ls /
 
-# Montou-se um diretorio ( /segredo ), e la dentro os arquivos
+# Mount directory ( /segredo ), e la dentro os arquivos
+# Mount the directory ( /segredo ) and within this directory ( /segredo ) the file (username).
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- cat /segredo/username && echo
 admin
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Storage PV / PVC / StorageClass / AccessMode
 
@@ -4873,7 +4894,7 @@ accessModes:
 # Longhorn (com RWX habilitado)
 # GlusterFS
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Reclaim Policy PVC / StorageClass
 
@@ -5634,7 +5655,7 @@ nginx-7b98f58f85-4trx6-10.txt
 
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - HPA / VPA
 
@@ -6375,7 +6396,7 @@ apk add curl
 while true; do curl -I nginx-service; done
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - CNI
 
@@ -6544,7 +6565,7 @@ docker exec prgs-control-plane bash -c "ip link"
     link/ether 6a:7b:2e:1f:68:11 brd ff:ff:ff:ff:ff:ff link-netns cni-bab69db5-ed3d-ef0e-4aae-2c8fc10d3c25
 
 # Ao ver essa informação ( veth82067b25@if2 ), esse @if2 significa que:
-- a outra ponta do par veth possui índice 2 dentro do namespace do pod.
+- a outra ponta do par veth possui Menu 2 dentro do namespace do pod.
 
 # Inspecionando CNI ( cni-aa5c9c4e-2a72-db95-c2b8-ef261bf21dc2 )
 # Ex:
@@ -6593,7 +6614,7 @@ done <<< ${cnis}
 cni-bab69db5-ed3d-ef0e-4aae-2c8fc10d3c25 - 10.244.0.32
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - DNS
 
@@ -6783,7 +6804,7 @@ PING vault.interno.prgs.corp (192.168.56.56): 56 data bytes
 
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Network Policies
 
@@ -6916,7 +6937,7 @@ kubectl describe networkpolicy allow-dns
 
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - RBAC / CRB / RB
 
@@ -6955,7 +6976,7 @@ kubectl describe networkpolicy allow-dns
 # Se eu precisar monitorar o cluster , posso criar uma (RB) chamada ( monitoring-ro ) que dará acesso a todos os recursos dentro da namespace monitoring
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - RBAC / Create User
 
@@ -7084,7 +7105,7 @@ R6zl6qw7CWOuxNI=
 -----END CERTIFICATE-----
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - RBAC / Create Context
 
@@ -7173,7 +7194,7 @@ sed -i "s/client-certificate: \/tmp\/estagiario.crt/client-certificate-data: ${b
 sed -i "s/client-key: \/tmp\/estagiario.key/client-key-data: ${base64_key}/" ~/.kube/config
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - RBAC / Configurando Autorização
 
@@ -7382,9 +7403,9 @@ k delete pod -n nginx-gateway ngf-nginx-gateway-fabric-76fc67668f-b8g7w
 Error from server (Forbidden): pods "ngf-nginx-gateway-fabric-76fc67668f-b8g7w" is forbidden: User "estagiario" cannot delete resource "pods" in API group "" in the namespace "nginx-gateway
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
-# 🚀 Create Object - Role ServiceAccount + RolingBindgings
+# 🚀 Create Object - RBAC / Role ServiceAccount + RolingBindgings
 
 ```bash
 
@@ -7596,7 +7617,7 @@ No resources found in kube-system namespace.
 
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Affinity / Node-Selector Labels
 
@@ -7685,7 +7706,7 @@ nginx-paulo-78455bbb4-82vkz   1/1     Running             1 (25m ago)   3h14m
 postgres-64f4bd66b8-tgnwj     0/1     ContainerCreating   0             8m54s
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Affinity / Node-Affinity
 
@@ -7849,7 +7870,7 @@ EOF
 
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Affinity / Pod-Affinity
 
@@ -7968,7 +7989,7 @@ backend-58fd97f655-bqfgd   1/1     Running   0          13s
 postgres-684cb45d6-hbwth   1/1     Running   0          53s
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Affinity / PodAntiAffinity
 
@@ -8019,7 +8040,7 @@ frontend-67c8c6b765-rvg4s   1/1     Running   0          80s   10.244.0.50    ma
 postgres-684cb45d6-hbwth    1/1     Running   0          13m   10.244.1.162   worker01   <none>           <none>
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Affinity / Tolerations
 
@@ -8133,7 +8154,7 @@ frontend-d646846c6-9jczm   1/1     Running   0          8s    10.244.0.51    mas
 postgres-684cb45d6-hbwth   1/1     Running   0          20m   10.244.1.162   worker01   <none>           <none>
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Create Object - Affinity / Pod Topology Spread Constraints
 
@@ -8289,7 +8310,7 @@ k rollout restart deployment/frontend
 k rollout restart -n default deployment frontend
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Cluster Upgrade - Ferramentas e Boas Práticas
 
@@ -8390,7 +8411,7 @@ FlowSchema   <undefined>   cilium-pods   flowcontrol.apiserver.k8s.io/v1beta3   
 https://github.com/msfidelis/kubedump
 
 ```
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Cluster Upgrade - Control Plane / Masters
 
@@ -8667,7 +8688,7 @@ worker01   Ready    worker          89d   v1.34.4
 
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Cluster Upgrade - Control Data / Workers
 
@@ -8832,7 +8853,7 @@ master01   Ready    control-plane   89d   v1.35.5
 worker01   Ready    worker          89d   v1.35.5
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Dicas - CrashLoopBackOff
 
@@ -8910,7 +8931,7 @@ k logs chashloop-5c5b77669f-qqsp5
 ls: abacate: No such file or directory
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Dicas - ImagePullBackOff
 
@@ -9000,14 +9021,14 @@ spec:
 EOF
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Dicas - Node NotReady
 
 ```bash
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 # 🚀 Explorando Documentação - Kubectl
 
@@ -9023,7 +9044,7 @@ k explain deployment.spec.template
 k explain deployment.spec.template.spec.containers
 ```
 
-[Índice](#-menu)
+[Menu](#-menu)
 
 
 # 🚀 Plugins
