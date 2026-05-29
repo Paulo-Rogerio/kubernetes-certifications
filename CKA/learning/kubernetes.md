@@ -6953,6 +6953,7 @@ kubectl describe networkpolicy allow-dns
 ( Usuário kubeconfig )-----|
                             ------ (  RB ) Rolling Binding         => Monitoring ( ro )
 
+🇧🇷
 # Auth ( Processo que verifica se vc é diz quem ser )
 #
 # Ex: Usuário irá interagir com o cluster por meio do kubectl, mas os mesmo comandos as mesmas chamadas
@@ -6974,6 +6975,9 @@ kubectl describe networkpolicy allow-dns
 
 # Ex: O cluster ja possui uma (CRB) nativa que dá acesso a leitura ao cluster.
 # Se eu precisar monitorar o cluster , posso criar uma (RB) chamada ( monitoring-ro ) que dará acesso a todos os recursos dentro da namespace monitoring
+
+🇺🇸
+
 ```
 
 [Menu](#-menu)
