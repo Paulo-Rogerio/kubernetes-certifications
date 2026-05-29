@@ -173,6 +173,8 @@ Exemples:
 | **Describe** | `:s/# //` |
 
 
+<summary><strong>Syllabus and Study Notes</strong></summary>
+
 ## 🚀 3) Manager Context
 
 ```bash
