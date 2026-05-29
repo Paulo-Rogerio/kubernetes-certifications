@@ -138,7 +138,7 @@ export now="--force --grace-period 0"
 # Uso: k delete pod x $now
 ```
 
-## 🚀 2) Learn Vim
+## 🚀 2) Learning Vim
 
 Define input in **.vimrc**
 
@@ -173,7 +173,7 @@ Exemples:
 | **Describe** | `:s/# //` |
 
 
-> ![weight](https://img.shields.io/badge/Exam%20Weight-25%25-4A90D9?style=flat-square) &nbsp; 📖 [Learn Kubernetes](../learning/kubernetes.md.md)
+> 📖 [Learn Kubernetes](../learning/kubernetes.md)
 
 ## 🚀 3) Manager Context
 
@@ -182,6 +182,8 @@ k config current-contexts
 k config get-contexts
 k config use-context <cluster-name>
 ```
+
+> 📖 [Learn Kubernetes](../learning/kubernetes.md)
 
 ## ⚙️ Imperative Commands Quick Reference
 
@@ -216,7 +218,7 @@ k run nginx --image=nginx $do > pod.yaml
 k create deploy app --image=nginx $do > deploy.yaml
 ```
 
----
+> 📖 [Learn Kubernetes](../learning/kubernetes.md)
 
 ## 🔑 Essential kubectl One-Liners for Speed
 
