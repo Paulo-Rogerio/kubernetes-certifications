@@ -173,7 +173,7 @@ Exemples:
 | **Describe** | `:s/# //` |
 
 
-<summary><strong>Syllabus and Study Notes</strong></summary>
+> ![weight](https://img.shields.io/badge/Exam%20Weight-25%25-4A90D9?style=flat-square) &nbsp; 📖 [Learn Kubernetes](../learning/kubernetes.md.md)
 
 ## 🚀 3) Manager Context
 
