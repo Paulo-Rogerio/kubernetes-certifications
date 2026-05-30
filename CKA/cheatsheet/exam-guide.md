@@ -212,9 +212,53 @@ k create secret generic sec --from-literal=key=value --from-file=./file
 
 # RBAC
 k create role r --verb=get,list --resource=pods
-k create rolebinding rb --role=r --user=username
-k create clusterrole cr --verb=get --resource=pods
-k create clusterrolebinding crb --clusterrole=cr --user=username
+k create rolebinding rb --role=r --user=r
+k create clusterrole cr --verb=get,list --resource=pods
+k create clusterrolebinding crb --clusterrole=cr --user=r
+
+openssl req -nodes \
+  -days 365 \
+  -newkey rsa:2048 \
+  -keyout /tmp/r.key \
+  -out /tmp/r.csr \
+  -subj '/CN=r/O=prgs/O=corp' \
+  -addext 'subjectAltName = DNS:r.prgs.corp'
+
+cat <<EOF | k apply -f -
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: r-csr
+spec:
+  request: $(cat /tmp/r.csr | base64 -w 0)
+  signerName: kubernetes.io/kube-apiserver-client
+  usages:
+  - client auth
+EOF
+
+k certificate approve r-csr
+k get csr
+k get csr r-csr -o json | jq -r '.status.certificate' | base64 -d > /tmp/r.crt
+
+k config set-credentials r --client-certificate=/tmp/r.crt --client-key=/tmp/r.key
+k config set-context r --cluster kind-prgs --namespace default --user r
+k auth can-i get pods --as=r
+k auth can-i list pods --as=r
+k config get-contexts
+k config use-context r
+k auth whoami
+
+base64_cert=$(base64 -w 0 <<< $(cat /tmp/r.crt))
+base64_key=$(base64 -w 0 <<< $(cat /tmp/r.key))
+sed -i "s/client-certificate: \/tmp\/r.crt/client-certificate-data: ${base64_cert}/" ~/.kube/config
+sed -i "s/client-key: \/tmp\/r.key/client-key-data: ${base64_key}/" ~/.kube/config
+
+k get clusterrole cr -o yaml
+
+k delete role r
+k delete rolebinding rb
+k delete clusterrole cr
+k delete clusterrolebinding crb
 
 # Scale / Image update
 k scale deploy app --replicas=5

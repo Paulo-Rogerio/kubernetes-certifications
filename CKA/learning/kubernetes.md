@@ -4407,8 +4407,8 @@ EOF
 
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- ls /
 
-# Mount directory ( /segredo ), e la dentro os arquivos
 # Mount the directory ( /segredo ) and within this directory ( /segredo ) the file (username).
+
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- cat /segredo/username && echo
 admin
 ```
@@ -6945,7 +6945,7 @@ kubectl describe networkpolicy allow-dns
 
 # RBAC ( Role Based Access Control )
 #
-# Role => Função que te dá acesso a alguma coisa.
+# Role => A function that gives you access to something.
 
            AUTH            |        Authorization
 -------------------------------------------------------------
@@ -6953,35 +6953,33 @@ kubectl describe networkpolicy allow-dns
 ( Usuário kubeconfig )-----|
                             ------ (  RB ) Rolling Binding         => Monitoring ( ro )
 
-🇧🇷
-# Auth ( Processo que verifica se vc é diz quem ser )
+# Auth (Process that verifies who you are)
 #
-# Ex: Usuário irá interagir com o cluster por meio do kubectl, mas os mesmo comandos as mesmas chamadas
-# podem ser realizadas por algum pod que esteja em execução e se esse POD tiver previlégio usando ( services accounts ),
-# ele poderá efetivar alteraçoes no cluster.
+# Example: A user will interact with the cluster via kubectl, but the same commands and calls
+# can be performed by a running pod, and if that pod has privileges using (service accounts),
+# it can make changes to the cluster.
 
-# Todas as chamadas sejam feitas por um usuário ( kubectl ), dentro ou fora do cluster irão passar pelo api-server.
+# All calls made by a user (kubectl), inside or outside the cluster, will go through the api-server.
 #
-# Ao passar pelo api-server é necessário ser uma chamada de API, entao como esse acesso é autenticado , conseguimos
-# mapear as permissões que podem ser realizado.
+# When going through the api-server, it must be an API call, so since this access is authenticated, we can
+# map the permissions that can be granted.
 
-# ( CRB ) Cluster Rolling Binding => Dá acesso a recursos a nivel do cluster inteiro, não por namespace.
-# Ex: Se eu der permissão para usuário ler os services, o usuário poderá ler todos todos os services de todos namespaces.
+# (CRB) Cluster Rolling Binding
+# Gives access to resources at the cluster-wide level, not by namespace.
+# Example:
+# If I give a user permission to read the services, the user will be able to read all services from all namespaces.
 
-# ( RB ) Rolling Binding => Dá acesso a recursos a nivel de namespace
+# (RB) Rolling Binding
+# Provides access to resources at the namespace level
+# The term (Binding) is what creates the binding.
+# The role is what grants access.
 
-# O termo ( Binding ) é o que faz o atrelamento
-# A role é o que dá o acesso.
-
-# Ex: O cluster ja possui uma (CRB) nativa que dá acesso a leitura ao cluster.
-# Se eu precisar monitorar o cluster , posso criar uma (RB) chamada ( monitoring-ro ) que dará acesso a todos os recursos dentro da namespace monitoring
-
-🇺🇸
+# Ex: The cluster already has a native (CRB) that provides read access to the cluster.
+# If I need to monitor the cluster, I can create a (RB) called (monitoring-ro) that will give access to all resources within the monitoring namespace.
 
 ```
 
 [Menu](#-menu)
-
 # 🚀 Create Object - RBAC / Create User
 
 ```bash
@@ -6990,11 +6988,11 @@ https://kubernetes.io/docs/reference/access-authn-authz/authentication/
 
 https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/#kubernetes-signers
 
+# Kubernetes only trusts certificates that it has signed itself, in the most common x509 format.
+# We can create a (CSR - Certificate Signing Request) and the Kubernetes CA signs and trusts it.
+# You don't create a user in Kubernetes (Kind User), that doesn't exist.
+# Kubernetes reads the certificate (CN).
 
-# O kubernets só confia em certificados que ele mesmo assinou, no formato mais comum x509
-# podemos criar um (CSR Certificate signing requests) e a CA do k8s assina e confia
-
-# Não se cria um usuario no kubernetes ( Kind User ) isso nao existe. O kubernetes le o certicicado ( CN )
 
 #********************** Criando Certificado para Usuário ***************************
 #
@@ -7007,7 +7005,7 @@ openssl req -nodes \
   -subj '/CN=estagiario/O=prgs/O=corp' \
   -addext 'subjectAltName = DNS:estagiario.prgs.corp'
 
-# Observe que ele criou um ( BEGIN CERTIFICATE REQUEST )
+# Create CSR ( BEGIN CERTIFICATE REQUEST )
 
 cat estagiario.csr
 -----BEGIN CERTIFICATE REQUEST-----
@@ -7029,11 +7027,11 @@ d8caVqQbBoQymuKQmfZU5W4kVvnMjiFPUxjwWfoQSHDYNDD61pmCNh5N9EBSze2T
 -----END CERTIFICATE REQUEST-----
 
 
-# Para me autentica , vou precisar da key e do certificado assinado pelo kubernetes. O arquivo csr é a requisição para assinar o certificado.
+# To authenticate, I will need the key and the certificate signed by Kubernetes. The CSR file is the request to sign the certificate.
 #
-# Criando um certificado para autenticar no kubeconfig
+# Creating a certificate to authenticate with kubeconfig
 #
-# Como assinar?
+# How to sign?
 
 cat <<EOF | k apply -f -
 apiVersion: certificates.k8s.io/v1
@@ -7047,15 +7045,16 @@ spec:
   - client auth
 EOF
 
-# Como checar Todas CSR abertas?
-# Ele ficará como pendind até que um admin possa aprovar
+# How to check all open CSRs?
+# It will remain pending until an admin can approve it
+
 k get csr
 NAME             AGE   SIGNERNAME                                    REQUESTOR                        REQUESTEDDURATION   CONDITION
 csr-p76zx        94m   kubernetes.io/kube-apiserver-client-kubelet   system:node:prgs-control-plane   <none>              Approved,Issued
 estagiario-csr   8s    kubernetes.io/kube-apiserver-client           kubernetes-admin                 <none>              Pending
 
-# Aqui é onde ele assina o certificado.
-# Assinando Certificado
+# This is where he signs the certificate.
+# Signing Certificate
 k certificate approve estagiario-csr
 certificatesigningrequest.certificates.k8s.io/estagiario-csr approved
 
@@ -7065,10 +7064,10 @@ csr-p76zx        94m   kubernetes.io/kube-apiserver-client-kubelet   system:node
 estagiario-csr   49s   kubernetes.io/kube-apiserver-client           kubernetes-admin                 <none>              Approved,Issued
 
 
-# Extrair certificado
+# Extract certificate
 k get csr estagiario-csr -o yaml
 
-# Como checar se o certificao foi assinado pelo k8s?
+# How to check if the certificate was signed by k8s?
 # Issuer CN=Kubernertes
 # Subjetct CN = estagiario
 k get csr estagiario-csr -o json | jq -r '.status.certificate' | base64 -d | openssl x509 -text
@@ -7085,6 +7084,7 @@ Certificate:
             Not After : Jan 22 13:47:18 2027 GMT
         Subject: O=corp + O=prgs, CN=estagiario
 
+# It is necessary to extract the certificates signed by Kubernetes.
 k get csr estagiario-csr -o json | jq -r '.status.certificate' | base64 -d > estagiario.crt
 
 -----BEGIN CERTIFICATE-----
@@ -7117,33 +7117,33 @@ R6zl6qw7CWOuxNI=
 
 #**************** Configurando Nova Credencial Estagiário **************************
 #
-# Check o current Context
-kubectl config current-context
+# Check the current Context
+k config current-context
 kind-prgs
 
 # Backup Config
 cp ~/.kube/config{,.bkp}
 
-# O arquivo ~/.kube/config guarda:
+# The ~/.kube/config file stores:
 #
 👉 clusters
-👉 usuários (credentials/certificados)
+👉 users (credentials/certificados)
 👉 contexts
 
-# Um context é a combinação de:
+# A context is the combination of:
 #
 👉 cluster
 👉 usuário
 👉 namespace padrão
 
-# Aqui é onde se cria um novo usuário no Kubeconfig
-# Esse usuário ( estagiário ) usará seus certificados para autenticar.
-# Definindo no kube/config as credencias do estagiário
-kubectl config set-credentials estagiario --client-certificate=$(pwd)/estagiario.crt --client-key=$(pwd)/estagiario.key
+# This is where you create a new user in Kubeconfig
+# This user ( estagiário ) will use your certificates to authenticate.
+# Setting the ( estagiário ) credentials in kubeconfig
+k config set-credentials estagiario --client-certificate=$(pwd)/estagiario.crt --client-key=$(pwd)/estagiario.key
 User "estagiario" set.
 
-# O que acontece internamente
-# O kubeconfig ganha algo parecido com:
+# What happens internally?
+# The kubeconfig file injects an entry for the intern user into the config.
 
 users:
 - name: estagiario
@@ -7151,10 +7151,10 @@ users:
     client-certificate: /caminho/estagiario.crt
     client-key: /caminho/estagiario.key
 
-# Criando um Context chamado ( estagiário )
-kubectl config set-context estagiario --cluster kind-prgs --namespace default --user estagiario
+# Creating a Context called ( estagiario )
+k config set-context estagiario --cluster kind-prgs --namespace default --user estagiario
 
-# O que isso gera?
+# What does this generate?
 contexts:
 - context:
     cluster: kind-prgs
@@ -7162,31 +7162,35 @@ contexts:
     user: estagiario
   name: estagiario
 
-# Trocando para o contexto
-kubectl config use-context estagiario
+# Switching to context
+k config use-context estagiario
 Switched to context "estagiario".
 
+# Can I read existing nodes?
+k get nodes
 Error from server (Forbidden): nodes is forbidden: User "estagiario" cannot list resource "nodes" in API group "" at the cluster scope
 
-# Isso significa:
-✅ autenticação funcionou
-❌ autorização falhou
+# This means:
+✅ authentication worked
+❌ authorization failed
 
-# Check o contexto
+# Check the contexto
 kubectl config current-context
 estagiario
 
-# Como checar todos os contexts existentes e qual está em uso.
+# How to check all existing contexts and which one is in use?
 kubectl config get-contexts
 CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
 *         estagiario                    kind-prgs    estagiario         default
           kind-prgs                     kind-prgs    kind-prgs
           kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
 
+# Who am I after Kubernetes authenticates me
+k auth whoami
+
 # OBs.:
-# Os arquivos .kube/config estão sendo referenciado por um path ( /caminho/certificado )
-# Caso queira definir no próprio .kube/config
-# O resultado é o mesmo
+# The .kube/config files are being referenced by a path ( /path/certificate )
+# If you want to define the certificate and key in base64 format in .kube/config, perform the procedures below:
 #
 cp ~/.kube/config{,.kind}
 
@@ -7194,6 +7198,7 @@ export base64_cert=$(base64 -w 0 <<< $(cat estagiario.crt))
 export base64_key=$(base64 -w 0 <<< $(cat estagiario.key))
 
 kubectl config set-credentials estagiario --client-certificate=/tmp/estagiario.crt --client-key=/tmp/estagiario.key
+
 sed -i "s/client-certificate: \/tmp\/estagiario.crt/client-certificate-data: ${base64_cert}/" ~/.kube/config
 sed -i "s/client-key: \/tmp\/estagiario.key/client-key-data: ${base64_key}/" ~/.kube/config
 ```
@@ -7204,13 +7209,13 @@ sed -i "s/client-key: \/tmp\/estagiario.key/client-key-data: ${base64_key}/" ~/.
 
 ```bash
 
-#**************** Configurando Autorização para Estagiário *************************
+#**************** Configuring Authorization for Estagiário *************************
 #
 https://kubernetes.io/docs/reference/access-authn-authz/rbac/
 https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles
 https://kubernetes.io/docs/reference/access-authn-authz/rbac/#clusterrole-example
 
-# Quais resources?
+# What resources?
 k api-resources
 NAME                                SHORTNAMES                        APIVERSION                        NAMESPACED   KIND
 bindings                                                              v1                                true         Binding
@@ -7224,17 +7229,17 @@ namespaces                          ns                                v1        
 ...
 ...
 
-# Todo o recurso namespaced pode ser vinculado a uma Role, restringindo apenas por namespace.
+# Listing every namespaced resource can be linked to a Role.
 k api-resources | grep true
 
-# Listar todos recurso namespaced
+# List all namespaced resource
 k api-resources --namespaced
 
-# Volte para contexto que tem previlégios
-kubectl config use-context kind-prgs
+# Return to context that has privileges
+k config use-context kind-prgs
 Switched to context "kind-prgs".
 
-# Quais cluster roles existentes?
+# What cluster roles exist?
 k get clusterrole
 NAME                                                                   CREATED AT
 admin                                                                  2026-05-14T13:28:04Z
@@ -7249,7 +7254,7 @@ kubeadm:get-nodes                                                      2026-05-1
 ...
 ...
 
-# Se eu der permissão a nivel de cluster eu dou permissão em todas as namespaces.
+# If I give permission at the cluster level, I give permission in all namespaces.
 
 cat <<EOF | kubectl apply -f -
 apiVersion: rbac.authorization.k8s.io/v1
@@ -7266,21 +7271,22 @@ k get clusterrole estagiario-ro
 NAME            CREATED AT
 estagiario-ro   2026-05-14T14:09:20Z
 
-# Volte para contexto estagiário
-kubectl config use-context estagiario
+# Return to estagiário context
+k config use-context estagiario
 Switched to context "estagiario".
 
-# Teste .... Ainda com erros?
+# Test ....
+# Still having errors?
 k get pods -A
 Error from server (Forbidden): pods is forbidden: User "estagiario" cannot list resource "pods" in API group "" at the cluster scope
 
 
-# Porque continua dando erro?
-👉 Apenas criamos a ClusterRole, agora temos que fazer o binding para conceder a ação ( list ).
+# Why does it keep giving errors?
+👉 We just created the ClusterRole, now we have to do the binding to grant the action ( list ) Nodes.
 
 
-# Volte para contexto que tem previlégios
-kubectl config use-context kind-prgs
+# Return to context that has privileges
+k config use-context kind-prgs
 Switched to context "kind-prgs".
 
 cat <<EOF | kubectl apply -f -
@@ -7302,38 +7308,38 @@ k get clusterrolebindings estagiario-ro
 NAME            ROLE                        AGE
 estagiario-ro   ClusterRole/estagiario-ro   39s
 
-# Volte para contexto estagiário
-kubectl config use-context estagiario
+# Return to intern context
+k config use-context estagiario
 Switched to context "estagiario".
 
-kubectl config get-contexts
+k config get-contexts
 CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
 *         estagiario                    kind-prgs    estagiario         default
           kind-prgs                     kind-prgs    kind-prgs
           kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
 
-# Lista os nodes
+# List the nodes
 k get nodes
 NAME                 STATUS   ROLES           AGE   VERSION
 prgs-control-plane   Ready    control-plane   46m   v1.34.0
 
-# Consigo listar os Pods?
-# List Nodes , mas os Pods não tenho permisão?
+# Can I list the Pods?
+# List Nodes yes, but I don't have permission to Pods?
 k get pods -A
 Error from server (Forbidden): pods is forbidden: User "estagiario" cannot list resource "pods" in API group "" at the cluster scope
 
-# Volte para context com previlégios
-kubectl config use-context kind-prgs
+# Return to privileged context
+k config use-context kind-prgs
 Switched to context "kind-prgs".
 
-kubectl config get-contexts
+k config get-contexts
 CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
           estagiario                    kind-prgs    estagiario         default
 *         kind-prgs                     kind-prgs    kind-prgs
           kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
 
-# Existe um "ClusterRoleBinding" chamado "view" , que dará permissão de leitura para todos objetos do cluster
-# Não da acesso a secrets ( Checar na documentação )
+# There is a "ClusterRoleBinding" called "view" , which will give read permission to all objects in the cluster
+# Does not give access to secrets (Check the documentation)
 
 cat <<EOF | kubectl apply -f -
 apiVersion: rbac.authorization.k8s.io/v1
@@ -7350,16 +7356,17 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 EOF
 
-# Não é possível alterar
+# It is not possible to change an existing ClusterRoleBinding.
 The ClusterRoleBinding "estagiario-ro" is invalid: roleRef: Invalid value: {"APIGroup":"rbac.authorization.k8s.io","Kind":"ClusterRole","Name":"view"}: cannot change roleRef
 
+# Delete ClusterRoleBinding
 k get clusterrolebindings estagiario-ro
 k delete clusterrolebindings estagiario-ro
 
-✅ Reaplique o manifesto
+✅ Reapply the manifest
 
-# Volte para context com previlégios
-kubectl config use-context estagiario
+# Return to privileged context ( estagiário )
+k config use-context estagiario
 Switched to context "estagiario".
 
 kubectl config get-contexts
@@ -7368,14 +7375,14 @@ CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPAC
           kind-prgs                     kind-prgs    kind-prgs
           kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
 
-# Execute a criação novamente
-# Esse ClusterRole ( view ) , não consegue ver os nodes.
+# Run the build again
+✅ This ClusterRole ( view ) cannot see the nodes.
+✅ This RBAC does not allow us to see the nodes
 
-# Essa RBAC não permite ver os nodes
 k get nodes
 Error from server (Forbidden): nodes is forbidden: User "estagiario" cannot list resource "nodes" in API group "" at the cluster scope
 
-# Consigo listar todos os Pods
+# I can list all Pods
 k get pods -A
 NAMESPACE            NAME                                                        READY   STATUS    RESTARTS   AGE
 argocd               argo-cd-argocd-application-controller-0                     1/1     Running   0          47m
@@ -7401,8 +7408,8 @@ metallb-system       metallb-speaker-7zzvt                                      
 nginx-gateway        ngf-nginx-gateway-fabric-76fc67668f-b8g7w                   1/1     Running   0          51m
 
 
-# Se tentar deletar....
-# Sem permissão.
+# If you try to delete....
+# Without permission.
 k delete pod -n nginx-gateway ngf-nginx-gateway-fabric-76fc67668f-b8g7w
 Error from server (Forbidden): pods "ngf-nginx-gateway-fabric-76fc67668f-b8g7w" is forbidden: User "estagiario" cannot delete resource "pods" in API group "" in the namespace "nginx-gateway
 ```
@@ -7413,13 +7420,13 @@ Error from server (Forbidden): pods "ngf-nginx-gateway-fabric-76fc67668f-b8g7w" 
 
 ```bash
 
-# Implementar Roles e Service Account
-# Um cenário onde não se usa usuário para autenticar, o RBAC é feito por dentro dos pods de um cluster.
+# Implement Roles and Service Account
+# A scenario where a user is not used to authenticate, RBAC is done within the pods of a cluster.
 #
-# Criar uma service account
+# Create a service account
 #
 
-# E um recurso vinculado ao namespace
+# And a resource linked to the namespace
 k api-resources | grep sa
 serviceaccounts                     sa                                v1                                true         ServiceAccount
 
@@ -7432,9 +7439,8 @@ NAME      SECRETS   AGE
 default      0         8m18s
 kubectl-sa   0         14s
 
-# Criando um Pod e Adicionando a ServiceAccount
+# Creating a Pod and Adding the ServiceAccount
 k neat <<< $(k run --image bitnami/kubectl kubectl --dry-run=client -o yaml)
-
 
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -7452,7 +7458,7 @@ spec:
     args: [ "echo 'Running....'; sleep 40;" ]
 EOF
 
-# Conectando no Pod e executando comandos do Kubectl
+# Connecting to the Pod and executing Kubectl commands
 k exec -it kubectl -- bash
 
 I have no name! [ / ]$ kubectl get pods
@@ -7465,11 +7471,11 @@ I have no name! [ / ]$ ls /var/run/secrets/kubernetes.io/serviceaccount/token
 I have no name! [ / ]$ cat /var/run/secrets/kubernetes.io/serviceaccount/token
 ZMOIdLaU3Gm0VcXZdInXJHvP9xGx4JhKWSbWerbFBwt1Um_G8OsEsNBtBeMa28lrWxx7nDo8c98IzHAgug6xeQwI.....
 
-#********************************** Criando a Role *********************************
-# Como o Pod se autentica?
+#********************************** Create The Role *********************************
+# How does Pod authenticate?
 #
-# Preciso agora criar uma Role ( Vou dar acesso apenas a namespace )
-# Obs.: Se quero restringir apenas a uma namespace, minha "Role" deve ser criada dentro dessa namespace.
+# I now need to create a Role (I will only give access to namespace)
+# Note: If I want to restrict it to just one namespace, my "Role" must be created within that namespace.
 
 k get ns
 NAME                 STATUS   AGE
@@ -7482,10 +7488,10 @@ local-path-storage   Active   24m
 metallb-system       Active   23m
 nginx-gateway        Active   20m
 
-# Imagine que queira dar permissao aos pods da namespace "argocd" , entao crio uma role e
-# uma rolebinding dentro dessa namespace.
+# Imagine that you want to give permission to pods in the "argocd" namespace, then I create a role and
+# a rolebinding within this namespace.
 
-# Checo as Roles existentes.
+# Check existing Roles.
 k get role -A
 NAMESPACE            NAME                                             CREATED AT
 argocd               argo-cd-argocd-application-controller            2026-05-15T09:09:47Z
@@ -7512,8 +7518,8 @@ metallb-system       metallb-pod-lister                               2026-05-15
 nginx-gateway        ngf-nginx-gateway-fabric-cert-generator          2026-05-15T09:02:35Z
 
 
-# Criando a Role dentro do namespace ( kube-system )
-cat <<EOF | kubectl apply -f -
+# Creating the Role within the namespace ( kube-system )
+cat <<EOF | k apply -f -
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -7529,17 +7535,17 @@ k get role -n kube-system prgs:kubectl-role
 NAME                CREATED AT
 prgs:kubectl-role   2026-05-15T09:26:29Z
 
-#**************************** Criando a RoleBinding *********************************
+#**************************** Create the RoleBinding *********************************
 #
 # OBS.:
-# Recursos criados em seus respectivos namespaces, deve ser informados.
+# Resources created in their respective namespaces must be informed.
 subjects:
 - kind: ServiceAccount
-  name: kubectl-sa      # Nome da service account
-  namespace: default    # Name Space onde esse SA está localizada
+  name: kubectl-sa      # Name the service account
+  namespace: default    # NameSpace where this SA is located
 
 
-cat <<EOF | kubectl apply -f -
+cat <<EOF | k apply -f -
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -7559,10 +7565,9 @@ k get rolebinding -n kube-system prgs:kubectl-rolebinding
 NAME                       ROLE                     AGE
 prgs:kubectl-rolebinding   Role/prgs:kubectl-role   35s
 
-#**************************** Testando Autenticação *********************************
+#********************************* Test Autenticação *********************************
 #
-
-cat <<EOF | kubectl apply -f -
+cat <<EOF | k apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -7595,13 +7600,13 @@ metrics-server-fcf6b4bd6-wtnzq               1/1     Running   0          20m
 I have no name! [ / ]$ kubectl get pods -A
 Error from server (Forbidden): pods is forbidden: User "system:serviceaccount:default:kubectl-sa" cannot list resource "pods" in API group "" at the cluster scope
 
-#********************************* E os Jobs ****************************************
+#********************************* And the Jobs ****************************************
 #
 
 I have no name! [ / ]$ kubectl get jobs -n kube-system
 Error from server (Forbidden): jobs.batch is forbidden: User "system:serviceaccount:default:kubectl-sa" cannot list resource "jobs" in API group "batch" in the namespace "kube-system"
 
-cat <<EOF | kubectl apply -f -
+cat <<EOF | k apply -f -
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
