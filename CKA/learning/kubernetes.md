@@ -923,36 +923,35 @@ k rollout restart deployment/nginx-paulo
 # 🚀 Create Object - Rollout maxSurge / maxUnavailable
 
 ```bash
-# Por padrao o rollout sobe 25% dos pods ( nova release ) e a medida que esse pods ficam health,
-# ele vai matando proporcionalmente a mesma quantidade ( 25% ) do replicaset antigo.
+# By default, the rollout increases 25% of the pods (new release) and as these pods become healthy,
+# it kills proportionally the same amount (25%) of the old replicaset.
 
-# Resumo:
-# Comeca 25% dos pods novos
-# Termina 25% dos pods velhos
+# Summary:
+# Starts 25% of new pods
+# Finish 25% of old pods
 
-# Imagine que temos 100 Pod rodando, ele iria nesse cenário subir 25% a mais ou seja, eu teria 125 Pod rodando.
-# E quando esses novos pods estirem health ai sim ele mataria os 25 Pods antigos.
+# Imagine that we have 100 Pod running, in this scenario it would go up 25% more, that is, I would have 125 Pod running.
+# And when these new pods reach health, then yes, it would kill the 25 old Pods.
+# Suppose you want to customize this rollout when a new release goes live, and have the following characteristic:
 
-# Suponhamos que queira personalizar esse rollout quando uma nova release entrar no ar, e ter a seguinte característica:
+# What I need to keep in mind is:
 
-# O que preciso ter em mente é:
+# maxSurge => Maximum number of pods that can be scheduled for rollout above the desired level, that is, if desired, it is 100
+# this option would upload 100 new pods.
+# Being:
+# 100 Pods ( old replicaset ) + 100 Pods ( new replicaset ) = 200 Pods
 
-# maxSurge => Numero maximo de pods que podem ser agendados para rollout acima do desejado, ou seja, se desejado e 100
-# essa opçao subiriria 100 novos pods.
-# Sendo:
-# 100 Pods ( replicaset velho ) + 100 Pods ( replicaset novo) = 200 Pods
+# maxUnavailable => Number of pods that can be unavailable during a rollout.
+# If set to 0 , it does not drop any pods until the new ones become heath.
 
-# maxUnavailable => Numero de pods que podem ficar indisponiveis durant um rollout.
-# Se definido para 0 , ele não derruba nenhum pod até que os novos fiquem heath.
-
-# Objeto que trata a estrategia de deploy ( Documentação )
+# Object that handles the deployment strategy (Documentation)
 k explain deployment.spec.strategy
 k explain deployment.spec.strategy.rollingUpdate
 
 
-# Boa estratégia
-# Não derruba nenhum pod enquanto algum do novo replicaset fique heath
-# Faz 1 a 1 ( replace )
+# Good strategy
+# Do not drop any pod while any of the new replicaset remains heath
+# Make it 1 to 1 (replace)
 
 apiVersion: apps/v1
 kind: Deployment
@@ -985,19 +984,19 @@ spec:
 # 🚀 Create Object - Liveness / Readness Probes
 
 ```bash
-#=================================================
-# ReadinessProbe => Pronto para receber o trafego.
-#=================================================
+#==================================================
+# ReadinessProbe => Ready to receive traffic.
+#==================================================
 #
-# O Ready garante que uma consulta get em alguma rota "/health" responda com status code 200 para comecar a receber trafego, então o Pod é transacionado para 1/1. Isso acontece no startup do pod.
+# Ready guarantees that a get query on some "/health" route responds with status code 200 to start receiving traffic, so the Pod is transacted to 1/1. This happens at pod startup.
 
-#=================================================
-# LivenessProbe => Garante que a aplicação ainda está viva.
-#=================================================
+#==================================================
+# LivenessProbe => Ensures that the application is still alive.
+#==================================================
 #
-# O Live garantir que a applicação continue viva live, monitora essa rota "/health" durante o tempo de vida do pod.
-# Se a app travar por algum motivo e esse cara que transaciona o pod para 0/1.
-# Nesse momento o pod é reiniciado para voltar ficar 1/1
+# Live, to ensure that the application remains live, monitors this "/health" route for the lifetime of the pod.
+# If the app crashes for some reason and this guy who transacts the pod to 0/1.
+# At this point the pod is restarted to return to 1/1
 
 
 k explain deployment.spec.template.spec.containers
@@ -1008,7 +1007,7 @@ k explain deployment.spec.template.spec.containers.readinessProbe.httpGet
 
 k explain deployment.spec.template.spec.containers.livenessProbe
 
-# Simulando Cenario - Readness
+# Simulating Scenario - Readness
 
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
@@ -1042,9 +1041,9 @@ spec:
             port: 80
 EOF
 
-# Apesar de estar Running o pod nao ficará disponivel até que esteja 1/1
-# Porque ele ficará assim 0/1?
-# Essa rota /health não é uma rota válida, entao esse pod Jamais ficará 1/1
+# Despite being Running, the pod will not be available until it is 1/1
+# Why will it be like 0/1?
+# This /health route is not a valid route, so this pod will never be 1/1
 #
 k get pods
 NAME                           READY   STATUS    RESTARTS   AGE
@@ -1062,7 +1061,7 @@ Events:
   Warning  Unhealthy  74s (x25 over 4m47s)  kubelet            Readiness probe failed: HTTP probe failed with statuscode: 404
 
 
-# A correção é ajustar o path para "/"
+# The fix is ​​to adjust the path to "/"
 
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
@@ -1104,14 +1103,14 @@ k get pods
 NAME                           READY   STATUS    RESTARTS   AGE
 nginx-paulo-699b6ff548-sprc2   1/1     Running   0          59s
 
-# PARA simular o livesproble vamos remover o arquivo html do nginx para gerar error.
+# TO simulate the livesproble we will remove the html file from nginx to generate an error.
 k exec -it nginx-paulo-699b6ff548-sprc2 -- bash -c "rm -f /usr/share/nginx/html/index.html"
 
-# O pod receberá erro no log, e liveness vai tentar 3x e apos isso ele ira reiniciar o Pod.
+# The pod will receive an error in the log, and liveness will try 3x and after that it will restart the Pod.
 k get pods -w
 nginx-paulo-699b6ff548-sprc2   0/1     Running   1 (2s ago)   2m3s
 
-# Boas práticas
+# Good practices
 
 k explain deployment.spec.template.spec.containers
 k explain deployment.spec.template.spec.containers.env
@@ -1124,19 +1123,19 @@ https://12factor.net/
 
 ```bash
 #=====================================================================
-# Características:
-# Daemonset => 1 Pod em cada Node ( Geralmente coletores de logs )
-# Daemonset não se define o numero de replicas no manifestos.
-# Daemonset será igual ao numero de nodes de um cluster.
-# Daemonset não passa pelo kube-scheduler
+# Features:
+# Daemonset => 1 Pod on each Node (Usually log collectors)
+# Daemonset does not define the number of replicas in the manifests.
+# Daemonset will be equal to the number of nodes in a cluster.
+# Daemonset does not pass through kube-scheduler
 #
-# Caso de usos:
-# Coletor de Logs => precisa rodar a nivel de host.
-# CNI             => Roda a nivel do host
-# Patch           => Aplicar um determinado patch
+# Use case:
+# Log Collector => needs to run at host level.
+# CNI => Runs at host level
+# Patch => Apply a particular patch
 #=====================================================================
 
-# Para logs geralmente é montado a pasta /var/log do host dentro do DaemonSet ( pod )
+# For logs, the host's /var/log folder is usually mounted within the DaemonSet ( pod )
 
 kubectl get nodes --show-labels | tr ',' '\n'
 
@@ -1155,8 +1154,8 @@ kubernetes.io/hostname=worker01
 kubernetes.io/os=linux
 node-role.kubernetes.io/worker=
 
-# O label mostra dessa forma ( kubernetes.io/hostname=worker01 ),
-# mas na declaração do yaml definimos assim ( kubernetes.io/hostname: "worker01" )
+# The label shows it like this ( kubernetes.io/hostname=worker01 ),
+# but in the yaml declaration we define it like this ( kubernetes.io/hostname: "worker01" )
 
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
@@ -1192,7 +1191,7 @@ NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR
 nginx-paulo   1         1         1       1            1           kubernetes.io/hostname=worker01   57s
 
 
-# Rodar em Um node especifico.
+# Running specific node.
 k patch daemonset nginx-paulo -p '
 spec:
   template:
@@ -1203,32 +1202,33 @@ spec:
 daemonset.apps/nginx-paulo patched
 
 
-# Mesmo aplicando o patch o k8s manteve as 2 roles declaradas "Node Selector",
-# isso acontece porque o K8s não substitui, ele faz merge ( apenda ). NodeSelector é um AND e não um OR.
+# Even applying the patch, k8s kept the 2 roles declared "Node Selector",
+# this happens because K8s doesn't replace, it merges (append). NodeSelector is an AND and not an OR.
 #
 k get daemonset
 NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                                                     AGE
 nginx-paulo   1         1         1       1            1           kubernetes.io/hostname=worker01,node-role.kubernetes.io/worker=   2m22s
 
 
-# Deixar apenas 1 Node Selector
+# Leave only 1 Node Selector
 k edit daemonsets nginx-paulo
 
-# OBS.:
-# Daemonset o troubleshouting é igual ao um Pod.
-# Daemonset não possui subcomandos de Create. Não possui gerenciador Direto
-# Pode-se cria-lo como um deployment, mas deve-se remover replicas e altera o Kind para DaemonSet
+# NOTE:
+# Daemonset troubleshooting is the same as a Pod.
+# Daemonset does not have Create subcommands.
+# Daemonset does not have a Direct manager.
+# You can create it as a deployment, but you must remove replicas and change the Kind to DaemonSet
 #
-# Isso irá deployar em todos os Nodes
+# This will deploy to all Nodes
 k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | sed 's/Deployment/DaemonSet/;/replicas:/d' | k apply -f -
 
-# Como não foi explicitado em qual node rodar, foi exchedulado o pod nos 2 nodes.
+# As it was not made clear which node to run on, the pod was excheduled on both nodes.
 k get ds
 NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
 nginx-paulo   2         2         2       2            2           <none>          3s
 
 
-# Rodar em Um node especifico ( Patch ).
+# Run on a specific node (Patch).
 k patch daemonset nginx-paulo -p '
 spec:
   template:
@@ -1238,7 +1238,7 @@ spec:
 '
 daemonset.apps/nginx-paulo patched
 
-# Apos aplicado o patch
+# After apply patch
 k get ds
 NAME          DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                     AGE
 nginx-paulo   1         1         1       1            1           node-role.kubernetes.io/worker=   88s
@@ -1251,41 +1251,44 @@ k explain daemonset.spec
 # 🚀 Create Object - Statefullset
 
 ```bash
-# StateFull => Depende totalmente do estado
-# Ex: Uma aplicação que autentica usuarios, e determinado usuário logado tem uma seção conectado em um pod,
-# ao ser redirecionado a outro pod, essa sessão autenticada, pode não funcionar.
+# StateFull => Totally depends on the state
+# Ex: An application that authenticates users, and a certain logged in user has a section connected to a pod,
+# when redirected to another pod, this authenticated session may not work.
 #
-# Redis para armazenar a sessão do usuario resolveria essa treta.
+# Redis to store user session would solve this problem.
 #
-# A aplicação depende totalmente de estado.
-# Quanto mais a app usa/depende do sistema de arquivos, mais statefull ela é.
+# The application is completely state dependent.
+# The more the app uses/depends on the file system, the more stateful it is.
 #
-# A tendencia e adequar a aplicação para que ela não dependa desses estados e que possa ser maleável.
+# The tendency is to adapt the application so that it does not depend on these states and can be malleable.
 #
-# OBS.:
-# Statefullset => A escalada tem que ser mais caltelosa ,cada pod tem seu volume, escala na ordem certa Ex: Banco de Dados )
-# Statefullset => É gerido pelo kube-scheduler
-# Statefullset => É um deployment controlado. Ele sempre segue a ordem de subir um e matar um. Sempre um por um.
-# Ex: jenkins, vault
+# NOTE:
+# Statefullset => Escalation has to be more careful, each pod has its volume, scales in the right order Ex: Database
+# Statefullset => It is managed by kube-scheduler
+# Statefullset => It is a controlled deployment. He always follows the order to climb one and kill one. Always one by one.
+# Ex: Jenkins, safe
 #
-# Como identificar um statefullset fazendo um ( k get pods )?
-# Geralmente o nome do pod tem um prefixo ex: jenkins-0
-# Os nomes são sempre previsíveis, se meu deployment chama nginx, os Pods terão nomes: ( nginx-0, nginx-1 )
+# How to identify a statefullset by doing a ( k get pods )?
+# Usually the pod name has a prefix e.g. jenkins-0
+# The names are always predictable, if my deployment calls nginx, the Pods will have names: (nginx-0, nginx-1)
+# Statefullset => Each Pod with its respective PVC
 #
-# Statefullset => Cada Pod com seu respectivo PVC
-# Mesmo que o Pod ( nginx-2 ) morra, quando ele subir novamente, somente ele irá acessar esse dados.
-# nginx-1 => pvc do nginx-1
-# nginx-2 => pvc do nginx-2
-# nginx-3 => pvc do nginx-3
+# Even if the Pod (nginx-2) dies, when it comes up again, only it will access this data.
+# nginx-1 => nginx-1 pvc
+# nginx-2 => nginx-2 pvc
+# nginx-3 => nginx-3 pvc
 #
 #============================================================
-# Um detalhe importante é quando exponho um statefullset, diferentemente de um deploymente que cria-se um service,
-# esse cara trabalha diferente, ele cria um Headless Service ( Diferente de um Service comum não tem IP ),
-# esse cara é um resolvedor de nomes que conhece todas as replicas ( nginx-1, nginx-2, nginx-3 ), ele não tem IP.
-# Esse DNS retorna todos os IPs dos statefull ( nginx-1, nginx-2, nginx-3 ) e o cliente que requisitou escolhe em qual ele quer se conectar.
+# Notes:
+# An important detail is when I expose a statefullset,
+# unlike a deployment when a service is created, this works differently,
+# The service of a statefulset creates a Headless Service (A Service of Type ClusteIP, but WITHOUT IP),
+# This service is a name resolver that knows all replicas (nginx-1, nginx-2, nginx-3), it does not have an IP.
+# This DNS returns all statefull IPs ( nginx-1, nginx-2, nginx-3 ) and the client that requested
+# choose which one he wants to connect to.
 #============================================================
 
-# Instalar Local-Path
+# Install Local-Path
 # https://github.com/rancher/local-path-provisioner/tree/master/deploy/chart/local-path-provisioner
 
 git clone https://github.com/rancher/local-path-provisioner.git
@@ -1293,10 +1296,10 @@ cd local-path-provisioner
 helm install local-path-storage --create-namespace --namespace local-path-storage ./deploy/chart/local-path-provisioner/
 helm list -A
 
-# Listar StorageClass
+# List StorageClass
 k get sc -A
 
-# Check Se StorageClass e default
+# Check StorageClass
 k describe sc -n local-path-storage local-path
 
 k edit sc -n local-path-storage local-path
@@ -1305,21 +1308,22 @@ storageclass.kubernetes.io/is-default-class: true
 # Doc
 # https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/
 
-# Explicando Construção YAML de um PVC
+# Explain YAML construction of a PVC
 k explain statefulsets.spec
 k explain statefulsets.spec.volumeClaimTemplates
 k explain statefulsets.spec.volumeClaimTemplates.spec
 k explain statefulsets.spec.volumeClaimTemplates.metadata
 
-# Modo de acesso ( Link )
+# Access mode (Link)
 k explain statefulsets.spec.volumeClaimTemplates.spec.accessModes
 
-# Recursos Computacionais ( Link )
+# Computational Resources (Link)
 k explain statefulsets.spec.volumeClaimTemplates.spec.resources
 
-#===================================================
-# OBS.: O próprio StatefulSet cria automaticamente os PVCs a partir de volumeClaimTemplates
-#===================================================
+#====================================================
+# NOTE:
+# StatefulSet itself automatically creates PVCs from volumeClaimTemplates
+#====================================================
 
 # Ex:
 volumeClaimTemplates:
@@ -1332,7 +1336,7 @@ volumeClaimTemplates:
         storage: 1G
 
 
-# Agora dentro do spec eu preciso definir como será montado dentro do container
+# Now within the spec I need to define how it will be mounted inside the container
 
 k explain statefulsets.spec.template.spec.containers
 k explain statefulsets.spec.template.spec.containers.volumeMounts
@@ -1345,10 +1349,10 @@ spec:
     - name: nginx-html
       mountPath: "/usr/share/nginx/html"
 
-# OBS.:
-# StatefulSet o troubleshouting é igual ao um Pod.
-# StatefulSet não possui subcomandos de Create. Não possui gerenciador Direto
-# Pode-se cria-lo como um deployment, mas deve-se remover replicas e altera o Kind para StatefulSet
+# NOTE:
+# StatefulSet troubleshooting is the same as a Pod.
+# You can create it as a deployment, but you must change the Kind to StatefulSet
+# StatefulSet has the order of creation and removal of Pods, unlike a Deployment.
 #
 # Veja o guia sobre ( Affinity )
 k taint nodes master01 node-role.kubernetes.io/control-plane=:NoSchedule
@@ -1411,37 +1415,37 @@ NAME      READY   STATUS    RESTARTS   AGE
 nginx-0   1/1     Running   0          92s
 nginx-1   1/1     Running   0          86s
 
-# No kind o path fica armazendo no seguinte lugar (ls /var/local-path-provisioner/)
+# ls /var/local-path-provisioner/
 #
 ssh root@worker01 ls /opt/local-path-provisioner
 pvc-5e022a02-521f-4f6b-906b-870992018639_default_nginx-html-nginx-0
 pvc-e7a97210-ef2c-488b-979a-9ae4bf75ecdd_default_nginx-html-nginx-1
 
-# Observe que não tem Ip atrelado ao service.
-# Ele apenas cria registros DNS individuais para cada Pod
-# nginx-0.nginx.default.svc.cluster.local
-# nginx-1.nginx.default.svc.cluster.local
+# Note that there is no IP linked to the service.
+# It just creates individual DNS records for each Pod
+nginx-0.nginx.default.svc.cluster.local
+nginx-1.nginx.default.svc.cluster.local
 
 k get svc nginx
 NAME    TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
 nginx   ClusterIP   None         <none>        80/TCP    4d4h
 
-# Alimente o ponto de montagem Nginx-0
+# Insert data into Nginx-0 statefulset mount point
 kubectl exec -it nginx-0 -- bash -c "echo 'abacate' > /usr/share/nginx/html/index.html"
 
 # k port-forward pod/<pod-name> <Minha-Porta>:<Porta-App>
 k port-forward pod/nginx-0 8181:80
 
-# Em outro terminal ao fazer um curl sempre obterá a resposta "abacate", pois o forward foi a nivel do Pod.
+# In another terminal, when doing a curl you will always get the response "avocado", as the forward was at the Pod level.
 
-# Alimente o ponto de montagem Nginx-1
+# Insert data into Nginx-1 statefulset mount point
 kubectl exec -it nginx-1 -- bash -c "echo 'morango' > /usr/share/nginx/html/index.html"
 
 k port-forward svc/nginx 8181:80
 
 kubectl exec -it nginx-1 -- bash -c "echo 'abacate' > /usr/share/nginx/html/index.html"
 
-# Nome dos containers
+# Test resolv Name containers
 for i in 0 1; do kubectl exec "nginx-$i" -- sh -c 'hostname'; done
 
 kubectl run -i --tty --image busybox dns-test --restart=Never --rm
@@ -1463,7 +1467,6 @@ Address:	10.96.0.10:53
 Name:	nginx-0.nginx.default.svc.cluster.local
 Address: 10.244.1.50
 
-
 nslookup nginx-1.nginx.default.svc.cluster.local
 Server:		10.96.0.10
 Address:	10.96.0.10:53
@@ -1478,7 +1481,7 @@ bacate
 root@dns-test:/# curl nginx-1.nginx
 morango
 
-# Observer que o serviço faz round-robin entre os 2 statefulset
+# Note: The service does round-robin between the 2 statefulset
 #
 root@dns-test:/# apt update && apt -y install iputils-ping
 
@@ -1494,7 +1497,7 @@ PING nginx.default.svc.cluster.local (10.244.1.56) 56(84) bytes of data.
 
 
 #=============================================================================
-# Caso não crie os PVC antes de criar a regra do Taint, o que aconteceria?
+# If you don't create the PVCs before creating the Taint rule, what would happen?
 #=============================================================================
 
 kgp
@@ -1508,9 +1511,9 @@ Events:
   ----     ------            ----   ----               -------
   Warning  FailedScheduling  3m57s  default-scheduler  0/2 nodes are available: 1 node(s) didn't match PersistentVolume's node affinity, 1 node(s) had untolerated taint(s). no new claims to deallocate, preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
 
-# Possiveis Problemas...
-# PVC accessModes: [ "ReadWriteOnce" ], não possui node afinity explicito no manifesto,
-# entao o PVC poderia facilmente montar 2 volumes distintos no mesmo worker.
+# Possible Problems...
+# PVC accessModes: [ "ReadWriteOnce" ], does not have an explicit affinity node in the manifest,
+# so PVC could not easily mount 2 different volumes on the same worker.
 
 k get pvc
 k describe pvc nginx-html-nginx-1
@@ -1518,7 +1521,7 @@ k get pv
 k describe pv pvc-003a61ee-f231-474a-9902-9300cf230553
 
 # PVC zuado....
-# Problema foi que tem uma regra de afinidade para o PV, mas temos um taint que bloqueia schedule no control-plane
+# The problem was that there is an affinity rule for the PV, but we have a taint that blocks schedule in the control-plane
 k describe pv pvc-003a61ee-f231-474a-9902-9300cf230553
 Name:              pvc-003a61ee-f231-474a-9902-9300cf230553
 Labels:            <none>
@@ -1548,16 +1551,16 @@ Events:            <none>
 # 🚀 Create Object - PDB / PodDisruptionBudget
 
 ```bash
-# É um objeto do cluster que garanti que um POD nunca fique indisponível
-# Mais usado com statefulset
+# It is a cluster object that ensures that a POD is never unavailable
+# Mostly used with statefulset
 
 k api-resources | grep disrup
 poddisruptionbudgets                pdb          policy/v1                         true         PodDisruptionBudget
 
-# Com esse recurso consigo dizer ao k8s que dos 100% dos meus pods quero 90% sempre disponível.
-# Ou quantas replicas indisponível eu posso tolerar, Ex: se tenho 3 replicas , tolero a perca de 2 no máximo.
+# With this feature I can tell k8s that out of 100% of my pods I want 90% always available.
+# Or how many unavailable replicas I can tolerate, Ex: if I have 3 replicas, I can tolerate the loss of 2 at most.
 #
-# Isso é uma proteção contra o node ser drenado
+# This is a protection against the node being drained
 #
 # Doc:
 https://kubernetes.io/docs/tasks/run-application/configure-pdb/
@@ -1565,21 +1568,25 @@ https://kubernetes.io/docs/tasks/run-application/configure-pdb/
 k explain poddisruptionbudget
 k explain poddisruptionbudget.spec
 
-# maxUnavailable => Maximo que aceito como não disponível
-# minAvailable   => Minimo que tem que está disponível
+# maxUnavailable => Maximum that I accept as unavailable
+# minAvailable   => Minimum available
 
-# Listar se tenho PBD habilitado
+# Check if I have PBD enabled
 k get pdb
 
-# Checar as labels do meus pod
+# Check my pod labels
 k get pod --show-labels
 NAME      READY   STATUS    RESTARTS      AGE   LABELS
 nginx-0   1/1     Running   1 (27m ago)   47h   app=nginx,apps.kubernetes.io/pod-index=0,controller-revision-hash=nginx-6cb5bc47cd,statefulset.kubernetes.io/pod-name=nginx-0
 nginx-1   1/1     Running   1 (27m ago)   47h   app=nginx,apps.kubernetes.io/pod-index=1,controller-revision-hash=nginx-6cb5bc47cd,statefulset.kubernetes.io/pod-name=nginx-1
 
-#=======================================================================
-# DESSA FORMA EU NAO ESTOU INFERINDO QUE NENHUM POD FIQUE INDISPONIVEL.
-#=======================================================================
+# List plus Clean
+kubectl get pod --show-labels | tr ',' '\n'
+
+
+#========================================================================
+# THIS WAY I AM NOT INFERRING THAT ANYONE MAY BE UNAVAILABLE.
+#========================================================================
 cat <<EOF | k apply -f -
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -1596,9 +1603,10 @@ k get pdb
 NAME        MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
 nginx-pdb   N/A             0                 0                     6s
 
-# Esse cara aplica o cordon ( Marca o node para nao aceitar novos pods )
-# Depois comeca dar o evict ( Pegar todos os pods rodando nesse worker e jogar para outro node )
-# O pod (statefulset) nao conseguiu ser migrado devido a regra de pdb
+# This guy applies the cordon (Marks the node to not accept new pods)
+# Then start evicting (Get all the pods running on this worker and throw them to another node)
+# The pod (statefulset) could not be migrated due to the pdb rule
+#
 k drain worker01 --ignore-daemonsets --delete-emptydir-data
 node/worker01 cordoned
 Warning: ignoring DaemonSet-managed Pods: kube-flannel/kube-flannel-ds-zzgvm, kube-system/kube-proxy-fg27m, metallb-system/metallb-speaker-rhs68
@@ -1606,22 +1614,22 @@ evicting pod local-path-storage/local-path-storage-local-path-provisioner-f555d4
 evicting pod default/nginx-1
 evicting pod default/nginx-0
 
-# O Node foi marcado para nao receber nenhum schedule
+# The Node was marked not to receive any schedule
 k get nodes
 NAME       STATUS                     ROLES           AGE   VERSION
 master01   Ready                      control-plane   12d   v1.34.4
 worker01   Ready,SchedulingDisabled   worker          12d   v1.34.4
 
-# Pods ainda rodando
+# Pods still running
 k get pods
 NAME      READY   STATUS    RESTARTS      AGE
 nginx-0   1/1     Running   1 (38m ago)   2d
 nginx-1   1/1     Running   1 (38m ago)   2d
 
-# Para resolver eu devo deleta o PDB
+# To solve this I must delete the PDB
 k delete pdb nginx-pdb
 
-# Agora sim consigo fazer o drain
+# Now I can do the drain
 k drain worker01 --ignore-daemonsets --delete-emptydir-data
 node/worker01 already cordoned
 Warning: ignoring DaemonSet-managed Pods: kube-system/kindnet-6vxfh, kube-system/kube-proxy-jrxg8, metallb-system/metallb-speaker-9vkng
@@ -1629,7 +1637,7 @@ evicting pod default/nginx-1
 pod/nginx-1 evicted
 node/worker01 drained
 
-# Apos concluir o processo, garanta que o node possa receber agendamentos de Pod
+# After completing the process, ensure that the node can receive Pod schedules
 k uncordon worker01
 node/worker01 uncordoned
 
@@ -1638,17 +1646,18 @@ NAME       STATUS   ROLES           AGE   VERSION
 master01   Ready    control-plane   12d   v1.34.4
 worker01   Ready    worker          12d   v1.34.4
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Jobs
 
 ```bash
-# Batch Jobs ( Executa 1x só )
-# Job => Executa um Pod => Durante a execução seu status e Running => Após finalizado transita para Completed => Tchau
+# Batch Jobs (Executes 1x only)
+# Job => Executes a Pod => During execution, its status is Running => Once finished, it transitions to Completed => and Bye
 #
 k get job -A
 
-# Sempre é mantido os 3 ultimas execuçoes de cronjobs ( k get pods )
+# The last 3 cronjob executions are always kept (k get pods)
 
 # Doc
 https://kubernetes.io/docs/concepts/workloads/controllers/job/
@@ -1660,7 +1669,7 @@ k explain jobs.spec.ttlSecondsAfterFinished
 k explain jobs.spec.template
 k explain jobs.spec.template.spec.restartPolicy
 
-# Manifesto
+# Manifest
 k neat <<< $(k create job my-job --image=alpine --dry-run=client -o yaml)
 
 apiVersion: batch/v1
@@ -1676,8 +1685,8 @@ spec:
       restartPolicy: Never
 
 #============================================================================================
-# Job é imultável, uma vez criado nao consigo aplicar o manifesto para sobrepor seu conteudo.
-# E necessário deletar o conteudo antigo.
+# Job is immutable, once created I cannot apply the manifest to override its content.
+# It is necessary to delete the old content.
 #
 #============================================================================================
 
@@ -1730,20 +1739,22 @@ my-job2   Running              0/1           5s         5s
 my-job2   SuccessCriteriaMet   0/1           6s         6s
 my-job2   Complete             1/1           6s         6s
 
-# Outra forma de ver o Log
-# Pegue o Id do Pod gerado pelo Job
+# Another way to view the Log
+# Get the Pod Id generated by the Job
 k logs $(k get pods -l job-name=my-job2 -o name)
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - CronJobs
 
 ```bash
-# Se eu precisar executar isso todo os dias?
-# CronJob => Cria o Job => Cria o Pod ( Running ) => Após finalizado transita para Completed
+# If I need to run this every day?
+# CronJob => Create the Job => Create the Pod (Running) => Once finished, it transitions to Completed
 #
-# Exemplo
-# https://github.com/mateusmuller/elasticsearch-delete-indices-7-days
+# Example
+
+https://github.com/mateusmuller/elasticsearch-delete-indices-7-days
 
 k get cronjob -A
 
@@ -1755,8 +1766,8 @@ k get cronjob
 k get job
 k get pods -
 
-# Outra forma de ver o Log
-# Pegue o Id do Pod gerado pelo Job
+# Another way to view the Log
+# Get the Pod Id generated by the Job
 k logs my-cronjob-29546778-4fr8t
 2026-03-06-14:18:01 - Output...
 2026-03-06-14:18:02 - Output...
@@ -1769,35 +1780,35 @@ k logs my-cronjob-29546778-4fr8t
 2026-03-06-14:18:10 - Output...
 2026-03-06-14:18:11 - Output...
 
-# Pegando dinamicament
+# Grabbing dynamically
 kubectl logs $(kubectl get jobs --sort-by=.metadata.creationTimestamp -o name | tail -1)
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Services Tipos
 
 ```bash
-# A comunicação interna dentro do k8s e os acessos não acontece diretamente no Pod.
-# Eu me comunico por meio de um services.
-# Comunicaçao interna ( 2 pods no mesmo namespace se comunicam por meio de service Cluster IP ).
-# Service é a forma como me comunico com cluster seja interno ou externamente.
+# Internal communication within k8s and access does not happen directly in the Pod.
+# Communication happens through a services.
+# Internal communication (2 pods in the same namespace communicate through service Cluster IP).
+# Service is the way I communicate with the cluster, whether internally or externally.
 #
 # DNS Name ( Service Discovery )
 
 # ============================= Cluster IP ========================================
-# Cluster IP é apenas para comunicação interna dentro do cluster.
-# Ao criar o service , vc indica o selector e ele ja sabe para quem enviar a requisição.
-
+# Cluster IP is only for internal communication within the cluster.
+# When creating the service, you indicate the selector and it already knows who to send the request to.
 k get svc kubernetes -o yaml
 
-# name       => Nome do meu serviço ( rails-services ) esse Nome que o cluster faz busca de DNS para descobrir o serviço.
-# port       => A porta que o service do k8s irá escutar
-# targetPort => A porta que a aplicação ouve. Aqui ele redireciona tudo que chega na 80 manda para 3000
-# selector   => Isso que fara match no Deployment, ele que defini onde será enviado a requisição.
-# Isso se da por meio das labels
+# name => Name of my service ( rails-services ) this name that the cluster performs DNS lookup to discover the service.
+# port => The port that the k8s service will listen to
+# targetPort => The port that the application listens to. Here it redirects everything that arrives at 80 and sends it to 3000
+# selector => This is what will match in Deployment, it is what defines where the request will be sent.
+# This is done through labels
 # Ex:
-# --port ( É a porta do service )
-# --target-port ( É a porta do nginx rodando no container )
+--port # (It is the service port)
+--target-port # (It is the nginx port running in the container)
 
 k get pods --show-labels
   selector:
@@ -1834,33 +1845,33 @@ PING mymysql.default.svc.cluster.local (10.108.151.234): 56 data bytes
 PING mymysql (10.108.151.234): 56 data bytes
 
 #************************************************************************
-# Como a resolução de nomes acontece quando estou em outra namespace?
+# How does name resolution happen when I'm in another namespace?
 #************************************************************************
 #
 # Apenas por FQDN
 # Executando Pod no namespace kube-system
 k run --namespace kube-system --image alpine --rm -it teste-curl sh
 
-# Isso ( OK )
+# This (OK)
 ping -c 2 mymysql.default.svc.cluster.local
 
-# Isso ( Não Responde )
+# That (Doesn't Respond)
 ping -c 2 mymysql
 
 #************************************************************************
-# Como criar um service via linha de comando?
+# How to create a service via command line?
 #************************************************************************
 #
-# Criar um deployment
+# Create deployment
 k create deployment --image=nginx nginx-paulo
 k expose deployment nginx-paulo --port=80 --type='ClusterIP' --target-port=80
 
 #************************************************************************
-# Como que um service sabe chegar em um Pod?
+# CoWhat does a service know how to get to a Pod?
 #************************************************************************
 #
-# Por meios dos endpoints
-# Esse comando ( endpoints ) vai ser deprecado em futuras versoes ( 1.33+ )
+# Through endpoints
+# This command (endpoints) will be deprecated in future versions (1.33+)
 k get endpoints nginx
 
 k get endpointslices.discovery.k8s.io
@@ -1874,46 +1885,46 @@ nginx-paulo-hspkj   IPv4          80        10.244.1.129              5m10s
 
 # ============================== Node Port ========================================
 #
-# Pouco usado
+# Little used
 # Range => 30000-32767
-# Se eu escolher a porta 30000, essa porta é aberta em cada um dos nodes.
-# Para acessar eu preciso informar o Ip do Node:Porta Alta
-# Finalidade ( testes e demos )
+# If I choose port 30000, this port is opened on each of the nodes.
+# To access I need to inform the Node IP:Port
+# Purpose (tests and demos)
 
 # ============================== LoadBalancer =====================================
 #
-# Constuma-se ter um L.B por aplicação
-# Se utilizar esse service para expor sua app para mundo, lembre-se que cada endpoint terá seu L.B
-# Ideal para TCP / UDP ( Layer 4 )
+# It is customary to have one L.B per application
+# If you use this service to expose your app to the world, remember that each endpoint will have its L.B.
+# Ideal for TCP/UDP (Layer 4)
 
-# Obs.:
-# Se estou trabalhando na camada de aplicação http ( Layer 7 )
-# o Gateway Api ( Falecido Ingress ) é a melhor alternativa, pois usa-se apenas
-# um único LoabBalancer e cria rotas e endpoints de acesso.
+# Note:
+# If I am working in the http application layer (Layer 7)
+# the Gateway Api e (Deceeded Ingress) is the best alternative, as it is only used
+# a single LoabBalancer and creates access routes and endpoints.
 
 # ============================== External Name ====================================
 #
 # Services => ( CNAME ) => DNS
-# É um service usado para resolver nomes.
-# Suponhamos que use RDS da AWS te entregue uma URL ( Endpoint ), mas vc não quer usar esse DNS que AWS te mandou,
-# pois se ela mudar terá que sair redeployando toda suas apps.
+# It is a service used to resolve names.
+# Suppose you use AWS's RDS to give you a URL (Endpoint), but you don't want to use the DNS that AWS sent you,
+# because if it changes you will have to redeploy all your apps.
 #
-# Então vc pode criar esse service ( External Name ) para criar um DNS válido dentro do Cluster
+# Then you can create this service (External Name) to create a valid DNS within the Cluster
 #
-# Service , seria seu serviço ex: "db" que nada mais é que um cname para ( DNS URL da AWS ),
-# assim quando sua URL de banco mudar voce so muda nesse service e sua app continua igual como antes.
+# Service , it would be your service ex: "db" which is nothing more than a cname for (AWS DNS URL),
+# so when your bank URL changes you only change this service and your app remains the same as before.
 #
-# Toda a parte do services é feito no node
+# All services are done on the node
 
 # ============================== Headless Service =================================
 #
-# Já falamos sobre esse serviço em ( Create Object - Statefullset ), porém aqui vamos trata-lo de forma isolada.
+# We have already talked about this service in (Create Object -Statefullset), but here we will deal with it in isolation.
+#
+# Headless Service, it is a clusterIP without IP, this is used specifically in statefullset and the search is performed by DNS
+#
+# The service continues to be a clusterIp, but I set (ClusterIP to None)
 
-Headless Service, é um clusterIp sem IP, isso é usando expecificamente em statefullset e a busca é realizada por DNS
-
-O serviçe continua sendo um clusterIp , porém defino ( ClusterIP como None )
-
-# Gerando os manifestos
+# Generating the manifests
 k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | sed 's/Deployment/StatefulSet/'
 
 k neat <<< $(k create service clusterip nginx --clusterip="None" --dry-run=client -o yaml)
@@ -1965,13 +1976,13 @@ NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
 kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   78m
 nginx        ClusterIP   None         <none>        80/TCP    28s
 
-# Isso aqui não é um balanceamento de carga, pois eu resolvo direto pro pod.
+# This is not load balancing, as I solve it directly for the pod.
 #
-# A chave para isso funcionar é definir o serviceName
+# The key to this working is to define the serviceName
 spec:
   serviceName: "nginx"
 
-# Para consumir ( Nome do Pod . Nome do Service ) Ex: nginx-0.nginx
+# To consume ( Pod Name . Service Name ) Ex: nginx-0.nginx
 
 kubectl run -i --tty --image alpine dns-test --restart=Never --rm
 
@@ -2030,9 +2041,9 @@ https://kubernetes.io/docs/reference/command-line-tools-reference/kube-proxy/
 
 # =================================== IPVS ========================================
 #
-# Como checar se está usando Iptables ou Ipvs?
-# - Caso esteja usando a interface tem o prefixo ipvs
-# - Aqui as insterfaces tem a nomeclatura ( ipvs )
+# How to check if you are using Iptables or Ipvs?
+# -If you are using ipvs, the interface has the prefix ipvs
+# -Here the interfaces have the name (ipvs)
 ip a
 #
 #
@@ -2045,14 +2056,14 @@ TCP  10.102.184.126:8080 rr ( Esse rr significa Round Robin )
 
 # ================================= Iptables ======================================
 #
-# Cloud Provides ( AWS ) usa iptables para rotear trafego entre os pods
-
-# ================================= Como Alterar ==================================
+# Cloud Provides ( AWS ) uses iptables to route traffic between pods
 #
-# Como alterar o modo de roteamente?
-# O provedor de cloud suporta isso?
+# ================================= How to Change =================================
 #
-# O kube-proxy é configurado por meio de um configmap
+# How to change the routing mode?
+# Does the cloud provider support this?
+#
+# kube-proxy is configured via a configmap
 
 k get cm -n kube-system
 NAME                                                   DATA   AGE
@@ -2064,29 +2075,29 @@ kube-root-ca.crt                                       1      4h13m
 kubeadm-config                                         1      4h13m
 kubelet-config                                         1      4h13m
 
-# Por padrao o kind opera com Iptables
+# By default, kind operates with Iptables
 #
 k neat <<< $(k get cm -n kube-system kube-proxy -o yaml) | grep mode
 mode: iptables
 
-# Garantir que os modulos do kernel estejam habilitados
+# Ensure kernel modules are enabled
 modprobe ip_vs
 modprobe ip_vs_rr
 modprobe ip_vs_wrr
 modprobe ip_vs_sh
 modprobe nf_conntrack
 
-# Quando alterar é necessário reciclar os nodes.
+# Change requires recycling of pods.
 k edit cm -n kube-system kube-proxy -o yaml
 
 kubectl rollout restart daemonset kube-proxy -n kube-system
 
 # ================================= Debug Iptables ==================================
 
-# Por default essa imagem expoe a porta 80
+# By default this image exposes port 80
 k create deployment --image nginx --replicas 3 nginx
 
-# Criando um service do tipo ClusterIP 8080 e redireciona para porta 80
+# Creating a service of type ClusterIP 8080 and redirects to port 80
 kubectl expose deployment nginx --port=8080 --type='ClusterIP' --target-port=80
 
 k get pod -o wide
@@ -2115,7 +2126,7 @@ curl nginx:8080
 
 # =========================== Como Debugar ( ClusterIP ) ==========================
 #
-# A forma de Debug é a mesma , independente do serviço. Deixei separado por service type, apenas para fins de organização.
+# The Debug method is the same, regardless of the service. I left it separated by service type, just for organization purposes.
 #
 docker exec -it prgs-control-plane bash
 
@@ -2125,12 +2136,12 @@ root@prgs-control-plane:/# egrep '10.96.175.117' /tmp/iptables
 -A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
 -A KUBE-SVC-2CMXP7HKUVJN7L6M ! -s 10.244.0.0/16 -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-MARK-MASQ
 
-# Acrescenta regras no final do conjunto de regras
-# iptables -A
+# Add rules at the end of the ruleset
+iptables -A
 
-# Essa regra aqui que faz o redirecionamento
-# Regras de Iptables no Host ( Worker )
-# Pacote destinado ao host 10.96.175.117/32 ( Service ) na port 8080 action ( KUBE-SVC-2CMXP7HKUVJN7L6M )
+# This rule here that does the redirection
+# Iptables Rules on the Host (Worker)
+# Packet destined for host 10.96.175.117/32 (Service) on port 8080 action (KUBE-SVC-2CMXP7HKUVJN7L6M)
 -A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
 
 root@prgs-control-plane:/# egrep 'KUBE-SVC-2CMXP7HKUVJN7L6M' /tmp/iptables
@@ -2141,26 +2152,26 @@ root@prgs-control-plane:/# egrep 'KUBE-SVC-2CMXP7HKUVJN7L6M' /tmp/iptables
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.21:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-OI2S57TQ5WH5FOMC
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.22:80" -j KUBE-SEP-473MVOWGJMIYYUKK
 
-# Esse 10.244.0.0/16 é o CDIR que K8S usará para os Pods
-# Aqui Tudo que vem dessa Chain ( KUBE-SVC-2CMXP7HKUVJN7L6M ) exceto a rede dos Pods vai rolar um Maskared para sair.
+# This 10.244.0.0/16 is the CDIR that K8S will use for the Pods
+# Here Everything that comes from this Chain (KUBE-SVC-2CMXP7HKUVJN7L6M) except the Pod network will be Masked to leave.
 -A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
 -A KUBE-SVC-2CMXP7HKUVJN7L6M ! -s 10.244.0.0/16 -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-MARK-MASQ
 
-# Aqui que Balanceamente Acontece
+# Here That Balancedly Happens
 
-# 30% de das requisições que chegar nesse host vai ser encaminhada para ( 10.244.0.20 ) -m statistic ( módulo de load balancer )
+# 30% of requests that arrive on this host will be forwarded to (10.244.0.20) -m statistic (load balancer module)
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.20:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-BRZDTZFF2SFWJV4H
 
-# 50% das requisicoes que chegarem nesse host vai ser ecaminhada para ( 10.244.0.21 )
+# 50% of requests that arrive at this host will be forwarded to (10.244.0.21)
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.21:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-OI2S57TQ5WH5FOMC
 
-# o restante das % das requisicoes que chegarem nesse host vai ser ecaminhada para ( 10.244.0.22 )
+# the remaining % of requests that arrive at this host will be forwarded to (10.244.0.22)
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.22:80" -j KUBE-SEP-473MVOWGJMIYYUKK
 
 # =========================== Como Debugar ( NodePort ) ===========================
 #
-# --port ( É a porta do service )
-# --target-port ( É a porta do nginx rodando no container )
+--port # (It is the service port)
+--target-port # (It is the nginx port running in the container)
 
 k create deployment --image nginx --replicas 3 nginx
 k expose deployment nginx --type=NodePort --name=nginx --port=80 --target-port=80
@@ -2177,7 +2188,7 @@ docker exec -it prgs-worker2 bash -c "curl localhost:32674"
 # =========================  Local Port  ( Kind ) ===============================
 k delete svc nginx
 
-# Se tiver usando Kind , pode redirecionar a porta do NodePort para sua máquina local
+# If you are using Kind , you can redirect the NodePort port to your local machine
 - role: worker
   kubeadmConfigPatches:
   - |
@@ -2204,8 +2215,8 @@ nginx        NodePort    10.107.225.100   <none>        80:30999/TCP   3s
 
 curl localhost:30999
 
-# ========================= Como Debugar ( LoadBalancer ) =========================
-# O LoadBalancer é trigado pelo cloud-controller ( Esse cara fala com o cloud Provider ( via api ))
+# ============================== Debug ( LoadBalancer ) =========================
+# The LoadBalancer is triggered by the cloud-controller (This guy talks to the cloud Provider (via api))
 
 https://metallb.universe.tf/installation/
 https://metallb.universe.tf/configuration/
@@ -2223,7 +2234,7 @@ iptables-save > /tmp/iptables
 egrep '172.18.255.201' /tmp/iptables
 -A KUBE-SERVICES -d 172.18.255.201/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
 
-# Aqui ele balanceia para o ClusterIp ( KUBE-SVC-2CMXP7HKUVJN7L6M )
+# Here it balances for ClusterIp ( KUBE-SVC-2CMXP7HKUVJN7L6M )
 
 egrep 'KUBE-EXT-2CMXP7HKUVJN7L6M' /tmp/iptables
 :KUBE-EXT-2CMXP7HKUVJN7L6M - [0:0]
@@ -2247,8 +2258,8 @@ egrep 'KUBE-SVC-2CMXP7HKUVJN7L6M' /tmp/iptables
 # 🚀 Create Object - Manutenção em Membros do Cluster
 
 ```bash
-# Daemonset nao pode ser migrado ( 1 pod em cada node )
-# Levar todos os Pods alocados no worker ( prgs-worker2 ) para outro node.
+# Daemonset cannot be migrated (1 pod on each node)
+# Take all Pods allocated to the worker (prgs-worker2) to another node.
 k drain prgs-worker2
 k drain prgs-worker2 --ignore-daemonsets
 k drain prgs-worker2 --ignore-daemonsets --delete-emptydir-data
@@ -2264,22 +2275,22 @@ pod/nginx-1 evicted
 pod/metrics-server-7bb58f4dcb-bxswj evicted
 node/prgs-worker2 drained
 
-# Fazendo manutenção no worker2
-# Nenhum Pode Poderá ser agendado no worker2
+# Maintaining worker2
+# None Can be scheduled on worker2
 k get node
 NAME                 STATUS                     ROLES             AGE    VERSION
 prgs-control-plane   Ready                      control-plane     172m   v1.31.2
 prgs-worker          Ready                      worker-apps       172m   v1.31.2
 prgs-worker2         Ready,SchedulingDisabled   worker-postgres   172m   v1.31.2
 
-# Vai ficar pending pois o stateful set não pode ser migrado para outro node.
-# então devo deleta-lo.
+# It will remain pending as the stateful set cannot be migrated to another node.
+# then I should delete it.
 k get pod -o wide
 NAME      READY   STATUS    RESTARTS   AGE     IP            NODE          NOMINATED NODE   READINESS GATES
 nginx-0   1/1     Running   0          8m3s    10.244.1.26   prgs-worker   <none>           <none>
 nginx-1   0/1     Pending   0          3m32s   <none>        <none>        <none>           <none>
 
-# Apos manutenção eu ressuscito o Host
+# After maintenance I resurrect the Host
 kubectl uncordon prgs-worker2
 
 k get nodes
@@ -2293,6 +2304,7 @@ NAME      READY   STATUS    RESTARTS   AGE
 nginx-0   1/1     Running   0          12m
 nginx-1   1/1     Running   0          7m53s
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - External Name
@@ -2300,21 +2312,20 @@ nginx-1   1/1     Running   0          7m53s
 ```bash
 # ============================== External Name ====================================
 #
-# Esse é um tipo de serviço onde cria-se um CNAME no DNS Server do Kubernetes.
+# This is a type of service where a CNAME is created on the Kubernetes DNS Server.
 #
-# Services => ( CNAME ) => DNS
+# Services => (CNAME) => DNS
 #
-# É um service usado para resolver nomes.
-# Suponhamos que use RDS da AWS te entregue uma URL ( Endpoint ), mas vc não quer usar esse DNS que AWS te mandou,
-# pois se ela mudar terá que sair redeployando toda suas apps.
+# It is a service used to resolve names.
+# Suppose you use AWS's RDS to give you a URL (Endpoint), but you don't want to use the DNS that AWS sent you,
+# because if it changes you will have to redeploy all your apps.
 #
-# Então vc pode criar esse service ( External Name ) para criar um DNS válido dentro do Cluster
+# Then you can create this service (External Name) to create a valid DNS within the Cluster
 #
-# Service , seria seu serviço ex: "db" que nada mais é que um cname para ( DNS URL da AWS ),
-# assim quando sua URL de banco mudar voce so muda nesse service e sua app continua igual como antes.
+# Service , it would be your service ex: "db" which is nothing more than a cname for (AWS DNS URL),
+# so when your bank URL changes you only change this service and your app remains the same as before.
 #
-# Toda a parte do services é feito no node
-
+# All services are done on the node
 k neat <<< $(kubectl create service externalname url-remota --external-name bar.com --dry-run=client -o yaml)
 
 # Result
@@ -2363,70 +2374,72 @@ k delete svc url-remota
 # 🚀 Create Object - Trafic Policy
 
 ```bash
-# Essa feature é interessante quando temos aplicações críticas que requerem performance.
+# This feature is interesting when we have critical applications that require performance.
 #
-# As Traffic Policies, em um cenário com LoadBalancer, funcionam da seguinte forma:
+# Traffic Policies, in a scenario with LoadBalancer, work as follows:
 #
-# As requisições chegam pelo IP externo do LoadBalancer e são recebidas por um Node do cluster.
-# Ao entrar no Node, o tráfego é direcionado para o Service (ClusterIP), e a partir daí o kube-proxy entra em # ação para decidir qual Pod irá atender a requisição.
+# Requests arrive via the LoadBalancer external IP and are received by a Node in the cluster.
+# When entering the Node, traffic is directed to the Service (ClusterIP),
+# From here, kube-proxy comes into action to decide which Pod will fulfill the request.
 #
-# Para visualizar os Pods disponíveis, podemos listar os EndpointSlices:
+# To view the available Pods, we can list the EndpointSlices:
 #
 k get endpointslices.discovery.k8s.io
 NAME         ADDRESSTYPE   PORTS   ENDPOINTS    AGE
 kubernetes   IPv4          6443    172.17.0.2   27m
 
-# Esses endpoints apenas informam quais Pods estão disponíveis para o Service.
+# These endpoints only inform which Pods are available for the Service.
 #
-# Funcionamento do roteamento
+# Routing operation
 #
-# O ponto importante é que, por padrão, o kube-proxy pode encaminhar a requisição para qualquer Pod do cluster, independentemente do Node onde ele esteja rodando.
+# The important point is that, by default, kube-proxy can forward the request to any Pod in the cluster,
+# regardless of the Node it is running on.
 #
-# Ou seja:
+# That is:
 #
-# A requisição pode chegar no Node-A e ser encaminhada para um Pod no Node-B
+# The request can arrive at Node-A and be forwarded to a Pod on Node-B
 #
-# Isso garante maior resiliência e distribuição de carga entre os Pods.
+# This ensures greater resilience and load distribution between Pods.
 #
-# Como isso acontece internamente
+# How does this happen internally
 #
-# O kube-proxy, rodando no Node (não dentro dos Pods), programa regras de iptables no kernel do sistema operacional.
+# The kube-proxy, running on Node (not inside Pods), programs iptables rules into the operating system kernel.
 #
-# Essas regras fazem o balanceamento de carga utilizando probabilidade, por exemplo:
+# These rules load balance using probability, for example:
 #
-# Ex: 33% das requisicoes atendidas por esse Pod.
+# Ex: 33% of requests served by this Pod.
 
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.5:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-IZW656N5ZXYN5BEC
 
-# Isso significa que aproximadamente 33% das requisições serão encaminhadas para esse Pod específico.
+# This means that approximately 33% of requests will be forwarded to this specific Pod.
 #
-# Impacto de rede
+# Network impact
 #
-#Como essa comunicação ocorre dentro da rede do cluster, normalmente (mesma VPC ou datacenter) isso não é um problema relevante.
+# As this communication occurs within the cluster network, normally (same VPC or datacenter) this is not a relevant problem.
 #
-# Porém, pode se tornar um problema quando:
+# However, it can become a problem when:
 #
-# O cluster está distribuído entre múltiplas zonas ou regiões
-# Existe latência significativa entre os Nodes
+# The cluster is distributed across multiple zones or regions
+# There is significant latency between Nodes
 #
-# Nesse caso, uma requisição que chega no Node A pode acabar sendo atendida por um Pod no Node B, gerando:
+# In this case, a request that arrives at Node A may end up being served by a Pod on Node B, generating:
 #
-# Aumento de latência
-# Maior consumo de rede
-# Possível impacto em aplicações sensíveis a tempo de resposta
+# Increased latency
+# Higher network consumption
+# Possible impact on response time sensitive applications
 #
-# Nesse modo:
+# In this mode:
 #
-# O tráfego é encaminhado apenas para Pods locais ao Node
-# Evita tráfego entre Nodes
-# Preserva o IP de origem do cliente
+# Traffic is only forwarded to Pods local to the Node
+# Avoid traffic between Nodes
+# Preserves the client's origin IP
 #
-# Por outro lado:
+# On the other hand:
 #
-# Se não houver Pod local, a requisição pode falhar
-# O balanceamento global entre Pods fica menos eficiente
+# If there is no local Pod, the request may fail
+# Global balancing between Pods becomes less efficient
 #
-# De forma pratica
+# In a practical way
 
 k create deployment --image nginx --replicas 4 nginx
 k expose deployment nginx --type=LoadBalancer --port=80 --target-port=80
@@ -2445,7 +2458,7 @@ nginx-t9tfk   IPv4          80      10.244.0.23,10.244.0.22,10.244.0.24 + 1 more
 kubectl run -i --tty --image alpine apline --restart=Never --rm
 / # apk add curl
 
-# Se eu acessar o Ip do ClusterIP ele irá rotear o tráfego entre todos os 4 Pods
+# If I access the ClusterIP IP it will route traffic between all 4 Pods
 curl -I http://10.96.247.192
 
 k get pods
@@ -2456,22 +2469,22 @@ nginx-676b6c5bbc-n4slr   1/1     Running   0          4m37s
 nginx-676b6c5bbc-pbmjh   1/1     Running   0          4m37s
 nginx-676b6c5bbc-xkmqp   1/1     Running   0          4m37s
 
-# Abrir 4 terminais
+# Open 4 terminals
 k logs nginx-676b6c5bbc-8kggb -f
 k logs nginx-676b6c5bbc-n4slr -f
 k logs nginx-676b6c5bbc-pbmjh -f
 k logs nginx-676b6c5bbc-xkmqp -f
 
-# Requisiçoes irão chegar em todos os POds , mesmo que esses Pods estejam em outros Workers
+# Requests will arrive at all POds, even if these Pods are in other Workers
 kubectl run -i --tty --image alpine apline --restart=Never --rm
 apk add curl
 while true; do curl -I http://10.96.247.192; done
 
-# ======================= Configurando Trafic Policy ==============================
+# ======================= Configuring Trafic Policy ==============================
 
-# Como saber a politica padrao do TrafficPolicies?
+# How do I know the default Traffic Policies policy?
 #
-# O Padrao é "Cluster", altere para "Local"
+# The default is "Cluster", change it to "Local"
 
 k get svc nginx -o yaml
 
@@ -2484,7 +2497,7 @@ spec:
   internalTrafficPolicy: Cluster
   ipFamilies:
 
-# Altere para Local
+# Change to Location
 k neat <<< $(k get svc nginx -o yaml) > svc.yaml
 
   externalTrafficPolicy: Local
@@ -2508,18 +2521,20 @@ egrep 'KUBE-EXT-2CMXP7HKUVJN7L6M' /tmp/iptables
 -A KUBE-NODEPORTS -p tcp -m comment --comment "default/nginx" -m tcp --dport 30655 -j KUBE-EXT-2CMXP7HKUVJN7L6M
 -A KUBE-SERVICES -d 172.17.0.241/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
 
-# Agora o roteamento é apenas para os Pod pertencentes ao mesmo Worker.
+# Now routing is only for Pods belonging to the same Worker.
 
 egrep 'KUBE-SVL-2CMXP7HKUVJN7L6M' /tmp/iptables
 -A KUBE-SVL-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.6:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-C4VXQDW52UV45WW3
 -A KUBE-SVL-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.7:80" -j KUBE-SEP-DST4PJJC54MIXJRG
 
-# Requisiçoes irão chegar apenas nos Pods do mesmo Node
+# Requests will only arrive in Pods on the same Node
 #
 kubectl run -i --tty --image alpine apline --restart=Never --rm
 apk add curl
 while true; do curl -I http://10.96.247.192; done
+
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Estratégias Deploy
@@ -2542,42 +2557,43 @@ Deployment   => Aplicação stateless ( Aplicação escaláveis )
            |    |   |       |   |   |      |   |    |
          Pod1 Pod2 Pod3   Pod1 Pod2 Pod3  Pod1 Pod2 Pod3
 
-# Como Deployment interagi com os replicaset?
+# How does Deployment interact with replicasets?
 O deployments orquestra os replicaset, e são os replicaset que cria os pods. Os Replicaset defini a quantidade de replicas que estaram rodando.
 
-# O que é um Rolling Update?
-E um termo usado quando vou atualizar meus produtos ( pods ). Ex: Meu manifesto ( Deployment )
-
-O Deployment cria 1 replicaset com 3 pods, agora preciso trocar a imagem do manifesto.
-
-Ao aplicar o deployment irá criará outro replicaset ( replicaset2 ) com 3 novos Pods isso acontece de forma gradativa.
-
-Existe outras formas de deploy Ex: canary, mas nesse formato ( rolling Update ) o Replicaset1 remove (-) um pod a medida que o Replicaset2 adiciona (+) um pod.
-
-Isso permite eu fazer um UNDO para outro replicaset
+# What is a Rolling Update?
+# It is a term used when I update my products ( pods ). Ex: My manifest (Deployment)
+#
+# Deployment creates 1 replicaset with 3 pods, now I need to change the manifest image.
+#
+# When applying the deployment, another replicaset ( replicaset2 ) will be created with 3 new Pods, this happens gradually.
+#
+# There are other ways to deploy Ex: canary, but in this format ( rolling Update ) Replicaset1 removes (-) a pod as the
+# Replicaset2 adds (+) a pod.
+#
+# This allows me to UNDO another replicaset
 ```
-[Menu](#-menu)
 
+[Menu](#-menu)
 
 # 🚀 Create Object - Deploy Canary
 
 ```bash
-Canary Deploy ( Raiz )
+Canary Deploy ( Root )
 
 ( Joao ) => LoadBalance
                |
                |
                |
-        -----------------
-        |                |
-        |                |
-        |                |
-       80%( v1/old )   20%( v2/new )
+         -----------------
+        |                 |
+        |                 |
+        |                 |
+    80%( v1/old )    20%( v2/new )
 
-# Gerando Modelo
+# Generating Model
 k neat <<< $(k create deployment --image nginx --replicas 0 nginx-blue --dry-run=client -o yaml)
 
-# Criar 2 Deployments sendo blue com 1 replica e green com 9 replicas
+# Create 2 Deployments, blue with 1 replica and green with 9 replicas
 
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
@@ -2636,7 +2652,7 @@ spec:
   type: LoadBalancer
 EOF
 
-# Todos Pods entra no mesmo Pool
+# All Pods enter the same Pool
 selector:
   app: nginx
 
@@ -2651,9 +2667,9 @@ apk add curl
 
 i=0; while [[ $i -le 10 ]]; do echo $i; curl nginx -I; let i=i+1; done
 
-# Forcar cada requisição criar uma nova conexão TCP, cada requisição 1 Pod
-# keep-alive     → reutiliza conexão → mesmo pod
-# --no-keepalive → nova conexão      → novo pod
+# Forcing each request to create a new TCP connection, each request 1 Pod
+keep-alive     # → reuse connection → same pod
+--no-keepalive # → new connection → new pod
 
 i=0; while [[ $i -le 10 ]]; do echo $i; curl -s -I --no-keepalive nginx | grep nginx; let i=i+1; done
 
@@ -2687,9 +2703,9 @@ Content-Type: text/html
 # 🚀 Create Object - Deploy Blue Green
 
 ```bash
-# Blue-Green Deploy ( Raiz )
+# Blue-Green Deploy ( Root )
 #
-# Subo toda a infra da aplicação em outros Pods e faço o switch da aplicação no seletor do Service.
+# I upload the entire application infrastructure to other Pods and switch the application to the Service selector.
 
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
@@ -2756,7 +2772,7 @@ nginx-green   5/5     5            5           99s
 kubectl run -i --tty --image alpine apline --restart=Never --rm
 apk add curl
 
-# Blue representa o apache
+# Blue represents apache
 
 / # i=0; while [[ $i -le 10 ]]; do curl -sSL nginx -I | grep Server; let i=i+1; done
 Server: Apache/2.4.62 (Unix)
@@ -2788,7 +2804,7 @@ spec:
   type: LoadBalancer
 EOF
 
-# Green representa o nginx
+# Green represents nginx
 
 / # i=0; while [[ $i -le 10 ]]; do curl -sSL nginx -I | grep Server; let i=i+1; done
 Server: nginx/1.27.3
@@ -2833,31 +2849,32 @@ Server: nginx/1.27.3
                        POD         POD        POD
                       -----       -----      -----
 
-# O Ingress é uma aplicação que precisa ser deployadas no cluster.
-# O Serviçe LoadBalancer, entrega as requisiçoes para (Pod do Ingress). Todos os DNS ( app.demo.com ) serão resolvidas pelo LoadBalancer.
-# Quando meu manifesto yaml cria um ingress, ele adiciona uma regra de acesso ao ingress Resource.
-# Ele na real cria um virtual host no Pod do Ingress Resource ( dinamicamente )
-# O Ingress por sua vez , redireciona para o service da aplicação ( ClusterIP )
-# O Ingress é um proxy-reverso
+# Ingress is an application that needs to be deployed on the cluster.
+# The LoadBalancer Service delivers requests to (Ingress Pod).
+# DNS (app.demo.com) is resolved by LoadBalancer.
+# When my yaml manifest creates an ingress, it adds an access rule to the ingress Resource.
+#
+# A virtual host is created in the Ingress Resource Pod (dynamically)
+# Ingress, in turn, redirects to the application service (ClusterIP)
+# Ingress is a reverse proxy
 
-# Ingress Mantido pelo propria Corporação F5 Nginx
+# Ingress Maintained by the F5 Nginx Corporation itself
 https://docs.nginx.com/nginx-ingress-controller/
 
-# Ingress mantido pela comunidade ( OpenSource )
+# Ingress maintained by the community (OpenSource)
 https://kubernetes.github.io/ingress-nginx/
 
-# Esse ingress mantido pela comunidade resolve e podemos usa-lo para deployar.
-# Como estou usando MetalLB para simular o L.B, posso baixar o manifesto yaml e substituir o service
-# ( NodePort por LoadBalancer ).
+# As I'm using MetalLB to simulate L.B, I can download the yaml manifest and replace the service
+# (NodePort by LoadBalancer).
 
 curl -sSL https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.15.1/deploy/static/provider/baremetal/deploy.yaml | sed 's/NodePort/LoadBalancer/' | | k apply -f -
 
-# Instalando via Helm
+# Install by Helm
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 helm install ingress-nginx ingress-nginx/ingress-nginx --set controller.service.type=LoadBalancer
 
-# Check Instalação
+# Check Install
 k get pod -n ingress-nginx
 NAME                                        READY   STATUS      RESTARTS   AGE
 ingress-nginx-admission-create-p6hvd        0/1     Completed   0          53m
@@ -2869,8 +2886,9 @@ NAME                                 TYPE           CLUSTER-IP       EXTERNAL-IP
 ingress-nginx-controller             LoadBalancer   10.101.12.218    172.17.0.240   80:31168/TCP,443:30256/TCP   53m
 ingress-nginx-controller-admission   ClusterIP      10.108.227.154   <none>         443/TCP                      53m
 
-# Porque o curl retornou 404, sendo que tenho deployado o Ingress Controller?
-# R: Ainda não foi deployado nenhum recurso ( ingress resources )
+# Why did curl return 404, even though I have deployed the Ingress Controller?
+# A: No resources have yet been deployed ( ingress resources )
+#
 curl -I http://172.17.0.240
 HTTP/1.1 404 Not Found
 Date: Fri, 17 Apr 2026 13:32:51 GMT
@@ -2880,20 +2898,20 @@ Connection: keep-alive
 
 # =============================== Ingress Class ====================================
 #
-# No momento da criação do meu ingress resource, eu defino qual ingress class irá me atender.
-# Isso porque eu posso ter multimplos ingress instalado no cluster.
-
+# When creating my ingress resource, I define which ingress class will suit me.
+# This is because I can have multiple ingress installed on the cluster.
 k get ingressclasses
 NAME    CONTROLLER             PARAMETERS   AGE
 nginx   k8s.io/ingress-nginx   <none>       57m
 
-**OBS.:**
-# Se eu não informa o ingressclass, a criação do ingress ficará pending.
-# Para evitar isso, posso definir o niginx comm ingressclass default.
+# **NOTE:**
+# If I do not inform the ingressclass, the creation of the ingress will be pending.
+# To avoid this, I can set niginx with ingressclass default.
 
 https://kubernetes.io/docs/concepts/services-networking/ingress/#ingress-class
 
-# Definir isso como anotation
+# How is it defined?
+# Through an annotation
 k edit ingressclasses nginx
 ingressclass.kubernetes.io/is-default-class: "true"
 
@@ -2909,7 +2927,7 @@ metadata:
 spec:
   controller: k8s.io/ingress-nginx
 
-# =============================== Criando Recurso ==================================
+# =============================== Created Recurso ==================================
 
 k explain ingress.spec
 k explain ingress.spec.rules.http
@@ -2922,10 +2940,10 @@ NAME          ADDRESSTYPE   PORTS   ENDPOINTS                            AGE
 kubernetes    IPv4          6443    172.17.0.3                           69m
 nginx-9slrs   IPv4          80      10.244.1.9,10.244.1.11,10.244.1.10   32s
 
-# 1) Resolve o DNS ( nginx.demo.com => IP do LoadBalancer )
-# 2) Ao bater nesse IP, ele cai no Pod do Ingress Controller
-# 3) O Ingress vai checar nas entradas de sua conf, se ha um virtual host definido, para o path e se sim,
-# vai encaminhar para o backend rodando ( nginx )
+#1) Resolves DNS (nginx.demo.com => LoadBalancer IP)
+#2) When hitting this IP, it lands in the Ingress Controller Pod
+#3) Ingress will check your conf entries to see if there is a virtual host defined and the path
+#4) Forward to the backend running (nginx), to the Pod's clusterIp and this forwards to the Pod.
 
 cat <<EOF | k apply -f -
 apiVersion: networking.k8s.io/v1
@@ -2955,7 +2973,7 @@ k get ingress
 NAME                CLASS   HOSTS            ADDRESS     PORTS   AGE
 meu-nginx-ingress   nginx   nginx.demo.com   localhost   80      25s
 
-# Simulando uma chamada via Vhost
+# Simulating a call via Vhost
 curl 172.17.0.240 -H "Host: nginx.demo.com"
 
 <!DOCTYPE html>
@@ -2965,7 +2983,7 @@ curl 172.17.0.240 -H "Host: nginx.demo.com"
 <style>
 html { color-scheme: light dark; }
 
-# Vc poderia criar uma entrada no ( /etc/host )
+# You could create an entry in ( /etc/host )
 172.17.0.240 nginx.demo.com
 curl nginx.demo.com
 
@@ -3007,7 +3025,7 @@ k get ingress
 NAME                CLASS     HOSTS            ADDRESS        PORTS   AGE
 meu-nginx-ingress   traefik   nginx.demo.com   172.17.0.241   80      11m
 
-# Testando
+# Testing
 curl 172.17.0.241 -I -H "Host: nginx.demo.com"
 HTTP/1.1 200 OK
 Accept-Ranges: bytes
@@ -3024,7 +3042,7 @@ Server: nginx/1.29.8
 
 ```bash
 
-Para exemplificar essa funcinalidade do ingress, vamos criar um ambiente mais simples e ir ajustando os paths e o rewrite.
+# To exemplify this ingress functionality, let's create a simpler environment and adjust the paths and rewrite.
 
 k create deployment --image nginx --replicas 3 nginx
 k expose deployment nginx --type=ClusterIP --port=80 --target-port=80
@@ -3062,7 +3080,7 @@ k get svc -n ingress-nginx
 NAME                                 TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)                      AGE
 ingress-nginx-controller             LoadBalancer   10.102.19.83    172.17.0.240   80:31519/TCP,443:31037/TCP   12m
 
-# Porque nao foi especififcado hosts?
+# Why were hosts not specified?
 
   rules:
   - host: "nginx.demo.com"
@@ -3073,26 +3091,26 @@ ingress-nginx-controller             LoadBalancer   10.102.19.83    172.17.0.240
     ...
     ...
 
-# Quando é especificado o campo "Host" no manifesto, o Ingress cria uma regra específica.
-# Só roteie se o header HTTP Host for "nginx.demo.com".
-# curl 172.17.0.241 -H "Host: nginx.demo.com" => Assim eu forco o Header
+# When the "Host" field is specified in the manifest, Ingress creates a specific rule.
+# Only route if the HTTP Host header is "nginx.demo.com".
+# curl 172.17.0.241 -H "Host: nginx.demo.com" => This way I force the Header
 #
 # Ex:
 server {
     server_name nginx.demo.com;
 }
 
-# Quando NÂO especifico o campo "Host" , o ingress cria uma regra Genérica ( catch-all )
-# Aceita qualquer Host
+# When I DO NOT specify the "Host" field, ingress creates a Generic rule (catch-all)
+# Accepts any Host
 #
-# Esse _ é o default server / catch-all
+# This _ is the default server /catch-all
 # Ex:
 server {
     server_name _;
 }
 
 
-# Desta forma estou acessando o nginx do Ingress Controller.
+# This way I am accessing nginx from the Ingress Controller.
 curl 172.17.0.240 -I
 HTTP/1.1 200 OK
 Date: Mon, 20 Apr 2026 13:11:25 GMT
@@ -3104,10 +3122,10 @@ ETag: "69d4ec68-380"
 Accept-Ranges: bytes
 
 
-# Se precisar definir uma rota? Ex: /nginx
-# O Pod teria que que está apto a trbalhar nessa rota tbm?
-# Sempre que informar um /nginx quero que seja redirecionado para o container do Nginx
-# Quero que o redirecionamento seja na base do path e nao em base no host.
+# If I need to define a route? Ex: /nginx
+# Would the Pod have to be able to work on this route too?
+# Whenever you enter /nginx I want it to be redirected to the Nginx container
+# I want the redirection to be based on the path and not based on the host.
 
 cat <<EOF | k apply -f -
 apiVersion: networking.k8s.io/v1
@@ -3146,7 +3164,7 @@ Events:
   ----    ------  ----                ----                      -------
   Normal  Sync    117s (x3 over 19m)  nginx-ingress-controller  Scheduled for sync
 
-# DEU RUIM....
+# IT GOT BAD....
 
 curl 172.17.0.240 -I
 HTTP/1.1 404 Not Found
@@ -3162,7 +3180,7 @@ Content-Type: text/html
 Content-Length: 153
 Connection: keep-alive
 
-# 1) A requisicao está chegando no Pod ?
+# 1) Is the request arriving at the Pod?
 
 NAME                     READY   STATUS    RESTARTS   AGE
 nginx-66686b6766-r2njd   1/1     Running   0          29m
@@ -3181,29 +3199,32 @@ k logs nginx-66686b6766-xsxgz
 2026/04/20 13:29:34 [error] 37#37: *2 open() "/usr/share/nginx/html/nginx" failed (2: No such file or directory), client: 10.244.1.5, server: localhost, request: "HEAD /nginx HTTP/1.1", host: "172.17.0.240"
 
 
-# Ele tentou abrir uma pasta chamada nginx em ( /usr/share/nginx/html/nginx ), isso porque ele tentou uma rota /nginx
+# He tried to open a folder called nginx in ( /usr/share/nginx/html/nginx ), this is because he tried a /nginx route
 
 
-#=========================== O que de fato queriamos? ==============================
+#=========================== What we really wanted? ==============================
 #
-# Ao acessar o /nginx o controller do nginx, deveria remover o "/nginx" da requisição e encaminhar para o pode correto no "/"
-# Esse erro aconteceu porque a imagem não tem o path /nginx definido para responder requisição.
+# When accessing /nginx, the nginx controller should remove the "/nginx" from the request and forward
+# it to the correct can in the "/"
 #
-# Precisamos Reescrever o Path da Rotas
+# This error happened because the image does not have the /nginx path defined to respond to the request.
+#
+# We need to rewrite the Routes Path
 
 https://kubernetes.github.io/ingress-nginx/
+
 https://kubernetes.github.io/ingress-nginx/examples/rewrite/
 
-# Anotations injeta configurações ( Comportamento do Nginx )
+# Annotations injects configurations (Nginx Behavior)
 
-# Tudo que começar com /nginx deve ir para o service nginx, mas reescrevendo a URL antes de enviar.
-# nginx.ingress.kubernetes.io/use-regex: "true", Ativa interpretação de regex no path.
-# Sem isso, /nginx(/|$)(.*) seria tratado como string literal.
+# Everything that starts with /nginx must go to the nginx service, but rewriting the URL before sending.
+# nginx.ingress.kubernetes.io/use-regex: "true", Enables regex interpretation in path.
+# Without this, /nginx(/|$)(.*) would be treated as a string literal.
 #
 # nginx.ingress.kubernetes.io/rewrite-target: /$2
-# $2 = segundo grupo da regex → (.*)
+# $2 = regex group → (.*)
 
-# Internamente o Nginx gera isso...
+# Internally, Nginx generates this...
 
 location ~ /nginx(/|$)(.*) {
     rewrite ^ /$2 break;
@@ -3277,21 +3298,23 @@ ETag: "69d4ec68-380"
 Accept-Ranges: bytes
 
 
-# Annotations influenciam o comportamento do Ingress Controller, mas não são o que definem o Ingress por completo.
+# Annotations influence the behavior of the Ingress Controller, but they are not what define the Ingress completely.
 spec:
   rules:
   - host:
     http:
       paths:
 
-# Isso define:
-# - quem recebe a requisição
-# - para onde ela vai (service)
-# - paths e hosts
+# This defines:
+# -who receives the request
+# -where does she go (service)
+# -paths and hosts
 
-# Annotations (dependem do controller) - rotas extras
-# Annotations customizam o comportamento do Ingress
+# Annotations (depend on the controller) -extra routes
+# Annotations customize Ingress behavior
+
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Ingress Múltiplos Paths
@@ -3347,7 +3370,7 @@ meu-nginx-ingress   nginx   *       localhost   80      20s
 curl 172.17.0.240/nginx -I
 curl 172.17.0.240/httpd -I
 
-# Outra possibilidade é expor via Virtual Host.
+# Another possibility is to expose via Virtual Host.
 
 cat <<EOF | k apply -f -
 apiVersion: networking.k8s.io/v1
@@ -3393,7 +3416,7 @@ curl 172.17.0.240 -I -H "Host: httpd.demo.com"
 
 ```bash
 
-# Assumo aqui que o service e o deployment do httpd estejam rodando.
+# I assume here that the httpd service and deployment are running.
 
 while true; do curl 172.17.0.240 -H "Host: httpd.demo.com"; sleep 1; echo "============"; done
 
@@ -3448,10 +3471,11 @@ k patch svc httpd -p '{"spec":{"selector":{"app":"ui"}}}'
 </html>
 ============
 
-# Alterar o nome do selector app para httpd e voltar
+# Change the name of the app selector to httpd and back
 k patch svc httpd -p '{"spec":{"selector":{"app":"httpd"}}}'
 
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Ingress TLS
@@ -3459,7 +3483,7 @@ k patch svc httpd -p '{"spec":{"selector":{"app":"httpd"}}}'
 ```bash
 https://kubernetes.io/docs/concepts/services-networking/ingress/
 
-# Gerando Certificados - Auto Assinado
+# Generating Certificates -Self Signed
 openssl req -x509 \
   -nodes \
   -days 365 \
@@ -3519,10 +3543,10 @@ k get svc -n ingress-nginx
 NAME                                 TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)                      AGE
 ingress-nginx-controller             LoadBalancer   10.102.19.83    172.17.0.240   80:31519/TCP,443:31037/TCP   7h4m
 
-# Testando Http
+# Testing Http
 curl 172.17.0.240 -H "Host: nginx.prgs.corp"
 
-# Criando Secrets
+# Create Secrets
 k create secret tls prgs-domain-secret --key /tmp/tls.key --cert /tmp/tls.crt
 
 k get secrets
@@ -3535,13 +3559,13 @@ k describe secrets prgs-domain-secret
 tls.crt:  1192 bytes
 tls.key:  1708 bytes
 
-# Recuperar Certificado
+# Rescue Certificated
 k get secrets prgs-domain-secret -o yaml
 
-# Decriptar Certificado
+# Decript Certificated
 base64 -d <<< $(k get secrets prgs-domain-secret -o=jsonpath='{.data.tls\.crt}')
 
-# Isso aqui injeta TLS
+# This here injects TLS
   tls:
   - hosts:
     - *.demo.com
@@ -3597,7 +3621,7 @@ Events:
   Normal  Sync    35s (x5 over 169m)  nginx-ingress-controller  Scheduled for sync
 
 
-# Query feita via http sendo redirecionada para https
+# Query made via http being redirected to https
 curl 172.17.0.240 -I -H "Host: nginx.prgs.corp";
 HTTP/1.1 308 Permanent Redirect
 Date: Mon, 20 Apr 2026 20:15:07 GMT
@@ -3606,8 +3630,7 @@ Content-Length: 164
 Connection: keep-alive
 Location: https://nginx.prgs.corp
 
-# Query feita via https ( -L / -k )
-# Para que este teste funcione e necessário adicionar entrada no ( /etc/hosts )
+# Query made via https ( -L / -k )
 curl 172.17.0.240 -k -I -L -H "Host: nginx.prgs.corp"
 
 HTTP/1.1 308 Permanent Redirect
@@ -3626,8 +3649,8 @@ etag: "69d4ec68-380"
 accept-ranges: bytes
 strict-transport-security: max-age=31536000; includeSubDomains
 
-# Ou se preferir pode definir isso na query, forcando o curl a resolver o Nome.
-# Aqui não tem redirect, o curl já conversa via https.
+# Or if you prefer, you can define this in the query, forcing curl to resolve the Name.
+# There is no redirect here, curl already talks via https.
 curl -k -I -L \
   --resolve nginx.prgs.corp:443:172.17.0.240 \
   https://nginx.prgs.corp
@@ -3647,20 +3670,19 @@ strict-transport-security: max-age=31536000; includeSubDomains
 
 ```bash
 
-# Configmap e Secrets => Objetos do Kubernetes
+# Configmap and Secrets => Kubernetes Objects
 #
-# Configmap => Composto por key=value
-# Secrets   => Key armazenada no formato base64
+# Configmap => Composed of key=value
+# Secrets => Key stored in base64 format
 #
-# Ambos injetam dados para dentro de um Pod.
+# Both inject data into a Pod.
 #
-# Como injetar isso dentro do Pod?
-# - Variavies de Ambiente
-# - Montar-lo como arquivo dentro do filesystem
-# - Um secret geralmente vira um arquivo de texto ( Ex: Vault )
+# How to inject this into the Pod?
+# -Environment Variables
+# -Mount it as a file within the filesystem
+# -A secret usually becomes a text file (Ex: Vault)
 #
-# Obs.: Secret não está encripitado, está apenas encodado ( base64 )
-
+# Note: Secret is not encrypted, it is just encoded (base64)
 ```
 [Menu](#-menu)
 
@@ -3710,8 +3732,8 @@ metadata:
   name: coredns
   namespace: kube-system
 
-# Corefile => Representa a minha chave
-# Tudo que está depois do  "|" é o conteudo ( Multi line )
+# Corefile => Represents my key
+# Everything after the "|" is the content (Multi line)
 
 k create configmap --help
 k create configmap my-config --from-literal=key1=config1 --from-literal=key2=config2
@@ -3731,12 +3753,12 @@ metadata:
   resourceVersion: "17859"
   uid: d13be0b6-a1c1-4951-9719-55a6341a656a
 
-# Deletar um configmap
+# Delete configmap
 k delete cm my-config
 
 https://kubernetes.io/docs/concepts/configuration/configmap/
 
-# Gerando um modelo
+# Generate model
 k neat <<< $(k create deployment --image nginx --replicas 1 nginx --dry-run=client -o yaml)
 
 cat <<EOF | k apply -f -
@@ -3772,14 +3794,14 @@ spec:
                   key: api.prgs.corp
 EOF
 
-# Se alguma coisa estiver errada?
+# What if something is wrong?
 NAME                    READY   STATUS                       RESTARTS   AGE
 nginx-96b46d48d-h6ft2   0/1     CreateContainerConfigError   0          8s
 
-# Pegando Os enventos
+# Get events
 k describe pod nginx-96b46d48d-h6ft2
 
-# O erro ocorreu porque não foi definido o configmap
+# The error occurred because the configmap was not defined
 
 Events:
   Type     Reason     Age               From               Message
@@ -3836,20 +3858,20 @@ spec:
 EOF
 
 
-# Recuperar Nome do Pod
+# get Pod
 k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
 
-# Executando e extraindo as variaveis
+# Extract variables
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- env | egrep 'VHOSTS_PAULO|API_URL'
 VHOSTS_PAULO=prgs.corp
 API_URL=https://api.prgs.corp
 
-# Deletando Tudo
+# Delete all
 k delete deployments.apps nginx && k delete cm virtualhost
 
-#============================= ConfigMap Sem SubPaths ================================
+#============================= ConfigMap without SubPaths ==============================
 
-# Gerando um modelo
+# Generate model
 k neat <<< $(k create deployment --image nginx --replicas 1 nginx --dry-run=client -o yaml)
 
 cat <<EOF | k apply -f -
@@ -3910,10 +3932,10 @@ spec:
             path: "index.html"
 EOF
 
-# Crie um service para expor o Pod
+# Create service
 k expose deployment nginx --type=ClusterIP --port=80 --target-port=80
 
-# Desta forma todos os html contido nesse diretório ( /usr/share/nginx/html ) é substituido
+# This way all html contained in this directory ( /usr/share/nginx/html ) is replaced
 
 kubectl run -i --tty --image alpine test --restart=Never --rm
 apk add curl
@@ -3924,15 +3946,15 @@ curl nginx
   </h1>
 </html>
 
-# Aqui é montando o volume inteiro no diretório. Sendo assim , o conteúdo total da pasta original é substituido.
+# Here is mounting the entire volume in the directory. Therefore, the entire contents of the original folder are replaced.
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- ls /usr/share/nginx/html
 index.html
 
 
-#====================== ConfigMap Com SubPaths - Evitar Replace =====================
+#====================== ConfigMap With SubPaths - Avoid Replace =====================
 
-# Para evitar o replace do diretório e substituirmos apenas o index.html precisamos ajustar o deployment.
-# Nessa implementação a pasta não e sobrescrita.
+# To avoid replacing the directory and replacing only the index.html we need to adjust the deployment.
+# In this implementation, the folder is not overwritten.
 
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -3994,19 +4016,19 @@ spec:
 EOF
 
 
-# Recuperar Nome do Pod
+# Get Pod
 k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
 
-# Executando e extraindo as variaveis
+# Extract variables
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- env | egrep 'VHOSTS_PAULO|API_URL'
 VHOSTS_PAULO=prgs.corp
 API_URL=https://api.prgs.corp
 
-# Como foi usado subPath, o arquivo 50x.html ( Original ), se manteve
+# As subPath was used, the file 50x.html (Original) remained
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- ls /usr/share/nginx/html
 50x.html  index.html
 
-# Index.html conteúdo gerido pelo configmap é substituido.
+# Index.html content managed by configmap is replaced.
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- cat /usr/share/nginx/html/index.html
 <html>
   <h1>
@@ -4177,7 +4199,7 @@ nginx-5b56d896c6-4b4rh   1/1     Running   0          4m6s   10.244.1.9    prgs-
 kubectl run -i --tty --image alpine test --restart=Never --rm
 apk add curl
 
-# Batendo direto no Pod - Sem virtual Host
+# Consuming directly from the Pod -Without virtual Host
 / # curl 10.244.1.9
 <html>
   <h1>
@@ -4185,7 +4207,7 @@ apk add curl
   </h1>
 </html>
 
-# Batendo direto no Pod - Com virtual Host
+# Consuming directly from the Pod -With virtual Host
 / # curl 10.244.1.9 -H "Host: app.prgs.corp"
 <html>
   <h1>
@@ -4194,7 +4216,7 @@ apk add curl
 </html
 
 
-# Batendo direto no Ingress - Sem virtual Host
+# Hitting straight to Ingress -No virtual Host
 curl 172.17.0.240
 <html>
   <h1>
@@ -4202,7 +4224,7 @@ curl 172.17.0.240
   </h1>
 </html>
 
-# Batendo direto no Ingress - Com virtual Host
+# Hitting straight to Ingress -With virtual Host
 curl 172.17.0.240 -H "Host: app.prgs.corp"
 <html>
   <h1>
@@ -4212,7 +4234,7 @@ curl 172.17.0.240 -H "Host: app.prgs.corp"
 
 #================================ Projected-Volumes =================================
 #
-# Permite montar 2 ou mais pontos de montagem apontando para o mesmo arquivo.
+# Allows you to mount 2 or more mount points pointing to the same file.
 #
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -4267,11 +4289,12 @@ k get pods
 NAME                     READY   STATUS    RESTARTS   AGE
 nginx-66d8fc6cdb-s9x7q   1/1     Running   0          13s
 
-# Temos 2 arquivos diferentes que referenciam o mesmo source ( configmap )
+# We have 2 different files that reference the same source ( configmap )
 k exec nginx-66d8fc6cdb-s9x7q -- bash -c "ls /usr/share/nginx/html"
 index.html
 index2.html
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Secrets
@@ -4423,6 +4446,7 @@ k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- cat /segredo/username && echo
 admin
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Storage PV / PVC / StorageClass / AccessMode
