@@ -8,7 +8,7 @@
 - [Create Object - Init Containers](#-create-object---init-containers)
 - [Create Object - Replace Entrypoint](#-create-object---replace-entrypoint)
 - [Create Object - Multi Containers](#-create-object---multi-containers)
-- [Create Object - Acessando Pod Sem Kubectl Via Nsenter](#-create-object---acessando-pod-sem-kubectl-via-nsenter)
+- [Create Object - Accessing Pod Without Kubectl Via Nsenter](#-create-object---accessing-pod-without-kubectl-via-nsenter)
 - [Create Object - Pod Lifecycle](#-create-object---pod-lifecycle)
 - [Create Object - Namespace](#-create-object---namespace)
 - [Create Object - Deployment](#-create-object---deployment)
@@ -73,9 +73,17 @@ k config get-contexts
 k config set-context <name-context> --namespace='<namespace>'
 k config set-context kubernetes-admin@kubernetes --namespace='metallb-system'
 k config set-context kubernetes-admin@kubernetes --namespace=''
+k config use-context estagiario
 
-# Aplica-se ao contexto current
+# Applies to the current context
 k config set-context --current --namespace=default
+
+# Which user is logged in (authenticated)
+k auth whoami
+
+# Logged in user can see pods
+k auth can-i get pods --as=r
+k auth can-i list pods --as=r
 
 # Merge 2 kubeconfig
 kubectl config view --flatten
@@ -95,11 +103,11 @@ k get nodes
 # Ip Node
 k get nodes -o wide
 
-# Manifestos do Node
+# Manifests Node
 k get nodes -o yaml
 
-# Precisa-se no Metric Server.
-# O fato de ter o MetalLB deployado permite export ExternalIP
+# Needed in Metric Server.
+# Having MetalLB deployed allows you to use ExternalIP
 k top nodes
 
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
@@ -111,46 +119,45 @@ helm upgrade \
   --set-string args[0]=--kubelet-insecure-tls \
   --set-string args[1]="--kubelet-preferred-address-types=InternalIP\,Hostname\,ExternalIP"
 
-# Definir Label ( Rótulo )
-nodes=$(kubectl get nodes --no-headers | awk '$3 == "<none>" {print $1}')
+# Define Label
+nodes=$(k get nodes --no-headers | awk '$3 == "<none>" {print $1}')
 for i in ${nodes[@]}
 do
-  kubectl label node ${i} node-role.kubernetes.io/worker=""
+  k label node ${i} node-role.kubernetes.io/worker=""
 done
 
-# Não schedular nenhum pod no worker
-kubectl cordon worker01
-kubectl uncordon worker01
+# Do not schedule any pods on the worker
+k cordon worker01
+k uncordon worker01
 ```
 [Menu](#-menu)
 
-# 🚀 Command Line - Explorando API
+# 🚀 Command Line - Explorer API
 
 ```bash
-# Nivel de verbosidade + alto
+# Verbosity level + high
 k get pods -A -v9
 
-# Visualizando o Certificados
-kubectl config view --raw -o jsonpath='{.users[?(@.name=="kind-prgs")].user.client-certificate-data}' \
+# Viewing the Certificates
+k config view --raw -o jsonpath='{.users[?(@.name=="kind-prgs")].user.client-certificate-data}' \
 | base64 -d \
 | openssl x509 -text -noout
 
-# Extraindo Certificados
-base64 -d <<< $(kubectl config view --raw -o jsonpath='{.users[?(@.name=="kind-prgs")].user.client-key-data}') > prgs.key
+# Extracting Certificates
+base64 -d <<< $(k config view --raw -o jsonpath='{.users[?(@.name=="kind-prgs")].user.client-key-data}') > prgs.key
 
-base64 -d <<< $(kubectl config view --raw -o jsonpath='{.users[?(@.name=="kind-prgs")].user.client-certificate-data}') > prgs.crt
+base64 -d <<< $(k config view --raw -o jsonpath='{.users[?(@.name=="kind-prgs")].user.client-certificate-data}') > prgs.crt
 
-base64 -d <<< $(kubectl config view --raw -o jsonpath='{.clusters[?(@.name=="kind-prgs")].cluster.certificate-authority-data}') > ca.crt
+base64 -d <<< $(k config view --raw -o jsonpath='{.clusters[?(@.name=="kind-prgs")].cluster.certificate-authority-data}') > ca.crt
 
 port=$(docker inspect prgs-control-plane \
   --format='{{(index (index .NetworkSettings.Ports "6443/tcp") 0).HostPort}}')
 
 curl --cacert ca.crt --cert prgs.crt --key prgs.key  "https://127.0.0.1:${port}/api/v1/pods?limit=500"
 
-
-# Consulmindo a API
-kubectl config view --raw -o jsonpath='{.users[0].user.client-certificate-data}' | base64 -d > /tmp/cert.crt
-kubectl config view --raw -o jsonpath='{.users[0].user.client-key-data}' | base64 -d > /tmp/cert.key
+# Consulting API
+k config view --raw -o jsonpath='{.users[0].user.client-certificate-data}' | base64 -d > /tmp/cert.crt
+k config view --raw -o jsonpath='{.users[0].user.client-key-data}' | base64 -d > /tmp/cert.key
 curl \
   -k \
   --cert /tmp/cert.crt \
@@ -160,24 +167,24 @@ curl \
 
 openssl x509 -in /tmp/cert.crt -text
 
-# Consultando Usando Rotas anonimas
+# Consultando Usando Rotas anonymous
 curl -k https://127.0.0.1:6443/version
 curl -k https://127.0.0.1:6443/healthz
 curl -k https://127.0.0.1:6443/livez
 curl -k https://127.0.0.1:6443/readyz
 
-# Check se Cluster aceita rotas anonimas
+# Check if Cluster accepts anonymous routes
 cat /etc/kubernetes/manifests/kube-apiserver.yaml | grep anonymous
 
 # List Pods
 k get pod
 
-# Lista todos pod em todos Namespaces
+# List all Pods
 k get pod -A
 
-# Extrair manifestos
-kubectl get pods -n kube-system etcd-master01 -o json
-kubectl get pods -n kube-system etcd-master01 -o yaml
+# Extract manifests
+k get pods -n kube-system etcd-master01 -o json
+k get pods -n kube-system etcd-master01 -o yaml
 
 # Labels
 k get pod -A --show-labels
@@ -188,7 +195,7 @@ k get pod -A -l component=etcd
 # Ip Pods.
 k get pod -A -o wide
 
-# "Assistindo" mudanças em tempo real.
+# "Watch" changes in real time.
 k get pod -A -w
 
 k edit pod -n kube-system etcd-master01
@@ -199,7 +206,7 @@ k delete pod -n kube-system etcd-master01
 k logs -n <namespace> <pod>
 k logs -n kube-system etcd-master01
 
-# Conectar no container
+# Connect container
 k exec -it -n <namespace> <pod> -- bash
 k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash
 k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash -c "pwd; ls"
@@ -209,43 +216,43 @@ k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash -c "pwd; ls"
 
 # 🚀 Create Object - Pod
 
-Para muitos exemplos abaixo, foram usado alguns plugins, mais explicitamente o **neat**, veja o materia de [Dicas](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/03-k8s/exercises/dicas/dicas.md).
+# Some examples below make use of plugins, for more details see [Plugins](#-plugins).
 
 ```bash
-# Criar Resources
+# Create Resources
 k apply -f <file-name.yml>
 
-# Pega tudo do diretorio current
+# Apply all manifests the diretory current.
 k apply -f .
 k apply -f ./<dir>
 
-# Criar de um URL
+# Apply all manifeste by URL
 k apply -f https://<url>
 
-# Retorna uma lista de objetos e se eles são Globais ou vinculados a um namespace
+# Returns a list of objects and whether they are Global or linked to a namespace
 kubectl api-resources
 
-# Run
-# Cria o Pod ,e ao ser encerrado, já o deleta
+# Creates the Pod, and when closed, deletes it
 k run <pod-name> --image=<image-name> --rm
+# Ex:
 k run demo --image alpine --rm -it -- sh
 
-# Cria um YAML de um deploy de um Pod com um service do tipo ClusterIP
-# Por default ao explicitar o --expose, e criado apeanas Cluster IP
+# Create a YAML of a Pod deployment with a service of type ClusterIP
+# By default, when specifying --expose, only IP Clusters are created
 k run demo --image nginx --port=80 --expose --dry-run=client -o yaml
 
-# Se quiser criar service to tipo NodePort?
-# Apos criado, aplicar patch para determinar uma porta alta.
-# Padrão:30000-32767
+# If I want to create service to type NodePort?
+# After created, apply patch to determine a high port.
+# Default:30000-32767
 #
 k run demo --image nginx --port=80
 k expose pod demo --port=80 --target-port=80 --type=NodePort
 k patch svc demo -p '{"spec":{"ports":[{"port":80,"targetPort":80,"nodePort":30007}]}}'
 
-# Se precisar mudar o range?
+# If I need to change the range?
 # kubectl get pods -n kube-system kube-apiserver-master01 -o yaml
-# Adicione a entrada
-# - --service-node-port-range=20000-40000
+# Add entry
+- --service-node-port-range=20000-40000
 ```
 [Menu](#-menu)
 
@@ -253,22 +260,22 @@ k patch svc demo -p '{"spec":{"ports":[{"port":80,"targetPort":80,"nodePort":300
 
 ```bash
 
-# Todos os pod que contem manifesto yaml nesse path é um staticPod
+# Every pod that contains a yaml manifest in this path is a staticPod
 ls /etc/kubernetes/manifests/
 
-# Static Pods , não é gerido pelo scheduler ( api server ), pois isso aqui é um processo exclusivo do kubelet
-# O kubelete ( componete que roda no node ) é o piloto que comanda eles.
+# Static Pods, not managed by the scheduler (api server), as this is an exclusive kubelet process
+# The kubelete (component that rotates on the node) is the pilot that controls the Nodes.
 
 systemctl list-units --type=service --state=active
 systemctl status kubelet
 
-# O kubelete foi programado para ler qualquer manifesto existente em /etc/kubernetes/manifests
-# Observer que nos workers ( trabalhadores ), esse diretório é vazio.
+# Kubelete is programmed to read any existing manifest in /etc/kubernetes/manifests
+# Observe that in workers (workers), this directory is empty.
 
-# Se colocarmos qualquer manifesto dentro desse diretorio do worker , ele iniciará imediatamente
-# Se tentar matar ele é recriado
+# If we place any manifest inside this worker directory, it will start immediately
+# If you try to kill him he is recreated
 
-# Usando especificamente pelo controlplane. Por ser estático dentro do worker , NÃO É ESCALAVEL.
+# Using specifically by the controlplane. Because it is static within the worker , IT IS NOT SCALABLE.
 ```
 [Menu](#-menu)
 
@@ -276,15 +283,15 @@ systemctl status kubelet
 
 ```bash
 
-# O que são os init Containers?
-# Container init, não fazem parte do processo principal do pod, geralmente são ações que fazem determinadas tarefas pre-requistos ( ex: clonar um repo ).
+# What are init Containers?
+# Container init, they are not part of the main pod process, they are generally actions that perform certain pre-requisite tasks (ex: cloning a repo).
 
-# Como simular?
-# Essa image busybox é uma imagem que contem os binários essencias do linux , mas não é uma distro onde consegue rodar comandos do apt/yum/apk
+# How to simulate?
+# This busybox image is an image that contains the essential Linux binaries, but it is not a distro where you can run apt/yum/apk commands
 
 k run --image busybox --rm -it demo sh
 
-# Executa enquanto for falso
+# Run while false
 until ping -c 1 mymysql; do echo "Trying to resolve..."; echo; sleep 1; done
 
 ping: bad address 'mymysql'
@@ -304,14 +311,14 @@ Trying to resolve...
 
 PING mymysql (10.97.106.196): 56 data bytes
 
-# Crie o service em outro TTY
-# Apos essa ação o script acima comeca a responder.
+# Create the service in another TTY
+# After this action the script above starts responding.
 
 k create service clusterip mymysql --tcp=80:80
 k delete svc mymysql
 
 
-# Aplicando ...
+# Applying the above scenario...
 
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -331,7 +338,7 @@ spec:
     args: [ "echo 'Clone repo....'; sleep 40;" ]
 EOF
 
-# Posso ter varios init containers, e somente quando ele finalizar ( passar ), é que o container real da aplicação será executado.
+# I can have several init containers, and only when it finishes (passes), will the application's real container be executed.
 
 k get pods
 nginx   0/1     Init:0/1   0          25s
@@ -340,8 +347,8 @@ k logs nginx
 Defaulted container "nginx" out of: nginx, waitfordns (init)
 Error from server (BadRequest): container "nginx" in pod "nginx" is waiting to start: PodInitializing
 
-# Nesse contexto é criado 2 containers no mesmo pod ( nginx => aplicação e waitfordns que é meu pre-deploy )
-# Para mim ler os logs desse "pre-deploy" chamado waitfordns
+# In this context, 2 containers are created in the same pod (nginx => application and waitfordns which is my pre-deploy)
+# For me to read the logs of this "pre-deploy" called waitfordns
 
 k logs nginx -c waitfordns -f
 Clone repo....
@@ -351,12 +358,12 @@ Clone repo....
 # 🚀 Create Object - Replace Entrypoint
 
 ```bash
-# Pod irá subir e logo apos morrer, pois entrypoint espera um comando
+# Pod will rise and then die, as entrypoint waits for a command
 # Ex: terraform plan , terraform apply
 #
 k neat <<< $(k run --image hashicorp/terraform terraform --dry-run=client -o yaml) | k apply -f -
 
-# Definir sleep grande
+# Set sleep big
 cat <<EOF | k apply -f -
 apiVersion: v1
 kind: Pod
@@ -373,7 +380,7 @@ spec:
       - "9999999"
 EOF
 
-# Definir While true infinito
+# Set While true infinite
 cat <<EOF | k apply -f -
 apiVersion: v1
 kind: Pod
@@ -395,7 +402,7 @@ EOF
 
 ```bash
 
-# Criar multiplos containers no mesmo Pod.
+# Create multiple containers in the same Pod.
 
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -421,49 +428,50 @@ k logs multicontainers
 k logs multicontainers -c nginx
 k logs multicontainers -c debug
 
-# Acessando container debug
+# Accessing debug container
 k exec -it multicontainers -c debug -- sh
 ps fax
 ```
 [Menu](#-menu)
 
-# 🚀 Create Object - Acessando Pod Sem Kubectl Via Nsenter
+# 🚀 Create Object - Accessing Pod Without Kubectl Via Nsenter
 
 ```bash
-# Onde está rodando o deploy?
+# Where is the deployment running?
 k get pods -o wide
 
 
-# Instalar o pacote jq
+# Install package jq
 apt update && apt install jq
 crictl ps | grep multicontainers
 
-# Acessando um Pod sem kubectl , para isso conecte-se via ssh ao worker onde o Pod está rodando
-# e use o crictl, esse cara sai da abstração dos pods.
+# Accessing a Pod without kubectl, to do this connect via ssh to the worker where the Pod is running
+# Use crictl to access this Container directly from the Worker.
 crictl ps | grep multicontainers
 
 dfa92a11e4461       a40c03cbb81c5       22 hours ago        Running             debug               0                   73cd0774bbfec       multicontainers         default
 84cdb66aba237       5cdef4ac3335f       22 hours ago        Running             nginx               0                   73cd0774bbfec       multicontainers         default
 
-# Acessando diretamente o container
+# Directly accessing the container
 crictl exec -it dfa92a11e4461 sh
 
-# Outra forma de acessar esse pod é usando ( nsenter )
-# nsenter ( Namespace Enter => Se digitado sozinho entre no prompt do primeiro container da lista )
-# Network namespace => Rodar o comando dentro da network namespace desse processo
+# Another way to access this pod is using ( nsenter )
+# nsenter (Namespace Enter => If typed alone enter the prompt for the first container in the list)
+# Network namespace => Run the command within the network namespace of this process
 nsenter --help
 
-# Acessando o Pod que roda o processo do sleep dentro da perpectiva do Pod, na mesma network namespace
+# Accessing the Pod that runs the sleep process within the Pod's perspective, in the same network namespace.
 #
-# Busque pela coluna ContainerID
+# Query the container manifests and retrieve the PID
 crictl inspect dfa92a11e4461 | jq -r '.info.pid'
 148192
 
-# **** OBS.: **** Se NAO PASSAR O "-n" ( perpectiva do container , usando a network namespace ), o comando usara
-# a perpectiva  do host ( network do host ) e não conseguirá chegar no serviço
+# ****NOTE: ****If you DO NOT PASS THE "-n" (container perspective, using the network namespace), the command will use
+# the host's perspective (host network) and you will not be able to reach the service
 nsenter -t 148192 -n ls /
 nsenter -t 148192 -n curl localhost
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Pod Lifecycle
@@ -472,19 +480,19 @@ nsenter -t 148192 -n curl localhost
 
 # https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
 
-# Um Pod recebe um prazo para terminar graciosamente, que é de 30 segundos por padrão. Ou seja a aplicação deve subir nesse intervalo de tempo e sair com status code 0 .
+# A Pod is given a deadline to finish gracefully, which is 30 seconds by default. In other words, the application must go up in this time interval and exit with status code 0.
 
-# Apos esse 30 segundos o kubelet envia um sinal de sigkill para aplicaçao , e mata o processo na hora.
+# After 30 seconds, the kubelet sends a sigkill signal to the application, and kills the process immediately.
 
-# Podemos manipular esse ciclo de vida, configurar um yaml para sempre que receber um sigterm, seja realizado uma ação com um pouco mais do padrao 30 segundos
+# We can manipulate this life cycle, configure a yaml so that whenever a sigterm is received, an action is performed with a little more than the standard 30 seconds.
 
 # Ex:
-kubectl get pods nginx -o wide
+k get pods nginx -o wide
 nginx   1/1     Running   0          42h   10.244.1.12   worker01   <none>           <none>
 
-# Subir outro deploy com lifecycle
-# Ao ser encerrado, antes de encerrar esse pod ira enviar um curl para Nginx
-# Podia ser uma notificação no slack informando que Pod foi reciclado.
+# Upload another deploy with lifecycle
+# When closed, before closing this pod it will send a curl to Nginx
+# It could be a notification on slack informing that Pod was recycled.
 
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -510,18 +518,18 @@ spec:
               - curl 10.244.1.12
 EOF
 
-# Monitore os Logs
+# Monitoring Logs
 k logs nginx -f
 
-# Ao matar o Pod ( pod-lifecycle ) devo receber um curl nos logs acima.
-kubectl delete pod pod-lifecycle -n default
+# When killing the Pod ( pod-lifecycle ) I should receive a curl in the logs above.
+k delete pod pod-lifecycle -n default
 
-# Deve-se receber uma notificação no logs do pod Nginx
+# You should receive a notification in the Nginx pod logs
 10.244.1.16 - - [23/Feb/2026:14:27:47 +0000] "GET / HTTP/1.1" 200 615 "-" "curl/8.14.1" "-"
 
-
-# Se o commando (curl / script ) demorar mais que 30 secundos para executar , posso ajustar isso definindo
-# terminationGracePeriodSeconds: 60 com um valor que satisfaça minha necessidade.
+# If the command (curl/script) takes more than 30 seconds to execute, I can adjust this by setting
+# a value that satisfies my need.
+- terminationGracePeriodSeconds: 60
 
 ```
 [Menu](#-menu)
@@ -536,13 +544,13 @@ metadata:
   name: prgs
 EOF
 
-# É um objeto Global
+# It is a Global object
 k api-resources | grep namespace
 
-# Criando via linha de comando
+# Creating by command line
 k create ns familia
 
-# Caso não lembre como declarar o manifesto
+# If you don't remember how to declare the manifest
 k neat <<< $(k create ns familia --dry-run=client -o yaml)
 k neat <<< $(k create ns familia --dry-run=client -o yaml)
 ```
@@ -551,20 +559,20 @@ k neat <<< $(k create ns familia --dry-run=client -o yaml)
 # 🚀 Create Object - Deployment
 
 ```bash
-# Deployment   => Aplicação stateless ( Aplicação escaláveis )
-# Staless, nao depende de um estado.
-# Statless é a capacidade da aplicação ser escalavel.
+# Deployment => Stateless application (Scalable applications)
+# Stateless, does not depend on a state.
+# Statless is the ability of the application to be scalable.
 
 k create deployment --image=nginx nginx-paulo
 
 k neat <<< $(k get deployment nginx-paulo -o yaml)
 
-# O deployment garante que o pod seja recriado, mesmo que Pod seja deletado.
+# Deployment ensures that the pod is recreated, even if the Pod is deleted.
 k delete pod nginx-paulo-5b98995fcc-25zj6
 
 k delete deployment nginx-paulo
 
-# Isso aqui é mais limpo
+# This is cleaner
 k neat <<< $(k create deployment --image=nginx nginx-paulo --replicas=2 --dry-run=client -o yaml)
 
 apiVersion: apps/v1
@@ -608,36 +616,38 @@ k scale deployment nginx-paulo --replicas 10
 # CPU     => Limits   ( Hard )
 #         => Requests ( Soft )
 
-# Soft limit => É o limite que o sistema realmente aplica no momento.
-# Um processo pode abrir 1024 descriptors
+# Soft limit => It is the limit that the system actually applies at the moment.
+# A process can open 1024 descriptors
 ulimit -n
 1024
 
 ulimit -n 4096
 4096
 
-# Hard Limit => É o teto máximo que o Soft pode alcancar.
+# Hard Limit => It is the maximum ceiling that Soft can reach.
 
-# Um processo pode 1.048.576 arquivos/sockets simultaneos
-# Esse É o teto máximo que o Soft pode alcancar
+# A process can have 1,048,576 simultaneous files/sockets
+# This is the maximum ceiling that Soft can reach
 ulimit -Hn
 1048576
 
 # ==========================================================================
-# É o recurso disponível no Worker ( Onde irá receber a carga de trabalho )
-# Obs.:
-# Request é usado sempre quando um pod é colocado dentro de um node.
-# Ele é levado em conta na escolha do node onde será colocado o pod.
-# Kube-schedules é quem decide em qual worker meu pod vai rodar, ele avalia os recursos.
+# It is the resource available on the Worker (Where it will receive the workload)
+# Note:
+# Request is always used when a pod is placed inside a node.
+# It is taken into account when choosing the node where the pod will be placed.
+# Kube-schedules decides which worker my pod will run on, it evaluates the resources.
 # ==========================================================================
 #
-# Quando defino quantidade de Request, e esse numero que o scheduler levaria em conta para determinar em qual worker o pod
-# vai trabalhar. Definido em 200M por ex, caso o worker tenha 500MB ele colocaria , pois ta dentro do valor que woker pode suportar.
+# When I define the number of Requests, it is this number that the scheduler would take
+# into account to determine which worker the pod
+# go to work. Set to 200M for example, if the worker has 500MB free it would put ,
+# because it is within the value that woker can support.
 
 # Manifest Request: 1 cpu / 4 GB Ram
 k apply -f manifesto.yaml
 
-# O scheduler só vai agendar esse Pod em um node que tenha pelo menos 1 CPU e 4 GB de Ram disponível
+# The scheduler will only schedule this Pod on a node that has at least 1 CPU and 4 GB of Ram available
 
 apiVersion: apps/v1
 kind: Deployment
@@ -663,17 +673,17 @@ spec:
             cpu: 1
             memory: 4G
 
-# Como ler a capacidade do Node?
+# How to read Node capacity?
 k get nodes
 k describe node <node-name>
 k top nodes
 
 # CPU:
-# É informada em numero quantidade vcpu ou em porcentagem
-# 100m ( 10 % da cpu ) milicpu ou milicore
-# 0.1  ( 10% da cpu  )
-# Memoria:
-# É informada em M/G ex: 500M
+# It is reported in number, vcpu quantity or percentage
+# 100m (10% of cpu) milicpu or millicore
+# 0.1 (10% of cpu)
+# Memory:
+# It is reported in M/G ex: 500M
 ```
 [Menu](#-menu)
 
@@ -689,29 +699,29 @@ k explain deployment.spec.template.spec.containers
 k explain deployment.spec.template.spec.containers.resources
 k explain deployment.spec.template.spec.containers.resources.requests
 
-# Cgroup => Limites de recursos dos containers
+# Cgroup => Container resource limits
 #
-# Cgroups (Control Groups) são um recurso do kernel Linux que permitem:
-# - Limitar CPU
-# - Limitar memória
-# - Limitar I/O
-# - Controlar número de processos
-# - Medir consumo
-# - Containers (Docker, containerd, CRI-O) usam cgroups para aplicar esses limites.
+# Cgroups (Control Groups) are a feature of the Linux kernel that allow:
+# - Limit CPU
+# - Limit memória
+# - Limit I/O
+# - Control number of processes
+# - Measure consumption
+# - Containers (Docker, containerd, CRI-O) use cgroups to enforce these limits.
 
-# Nomeclatura manifestos Yaml
+# Nomenclature manifestos Yaml
 # 100m ( 10 % da cpu ) mili-cpu / mili-core
 # 0.1  ( 10% da cpu )
-# Memoria é informada em M/G ex: 500M
+# Memory is Informed in M/G ex: 500M
 
-# Se o container ultrapassar 64MB definido
-# 👉 O kernel executa OOM Killer
-# 👉 O container morre
+# If the container exceeds the defined 64MB
+# 👉 Kernel runs OOM Killer
+# 👉 The container dies
 
-# Mas não definir limit?
-# 👉 O container pode consumir toda memória do node
-# 👉 Pode causar OOM global
-# 👉 Pode matar outros pods
+# But what if you don't define limit?
+# 👉 The container can consume all of the node’s memory
+# 👉 May cause global OOM
+# 👉 Can kill other pods
 
 apiVersion: apps/v1
 kind: Deployment
@@ -746,16 +756,16 @@ spec:
 # 🚀 Create Object - ReplicaSet
 
 ```bash
-# É um objeto no Cluster, responsável por garantir um número específico de Pods esteja rodando sempre em execução.
+# It is an object in the Cluster, responsible for ensuring a specific number of Pods are always running.
 
-# Recuperar o manifesto
+# Retrieve the manifest
 k neat <<< $(k get deployment nginx-paulo -o yaml)
 
 k get rs
 NAME                    DESIRED   CURRENT   READY   AGE
 nginx-paulo-78455bbb4   1         1         1       12m
 
-# Substituir Imagem, forca a troca do replicaset.
+# Replace Image, forces the replicaset to be changed.
 k neat <<< $(k get deployment nginx-paulo -o yaml) | sed 's/image: nginx/image: httpd/' | k apply -f -
 
 k get rs
@@ -763,15 +773,15 @@ NAME                     DESIRED   CURRENT   READY   AGE
 nginx-paulo-78455bbb4    0         0         0       14m
 nginx-paulo-7bd98bdb44   1         1         1       26s
 
-# Os replicaset zerados é mantido para fins de restore.
-# Quem cria os replicaset são os Deployments
+# The zeroed replicaset is kept for restore purposes.
+# Deployments are the ones who create the replicasets
 #
-# Como o ReplicaSet sabe onde deve deployar?
-# R: As label tem o proposito de nortear o replicaset para que ele identifique qual Pod ele irá gerenciar.
-# Ela tambem é usada para direcionar que um pod possa deployar em determinado worker.
-# O deployment gerencia os Pods vinculados a uma determinada label, isso por conta do matchLabels.
+# How does ReplicaSet know where to deploy?
+# A: The labels are intended to guide the replicaset so that it identifies which Pod it will manage.
+# It is also used to direct that a pod can deploy to a given worker.
+# The deployment manages the Pods linked to a certain label, this is due to matchLabels.
 #
-# Label escopo deployment
+# Label scope deployment
 
 apiVersion: apps/v1
 kind: Deployment
@@ -794,7 +804,7 @@ spec:
       - image: httpd
         name: nginx
 
-# Mostrar as labels apenas para escopo do deployment
+# Show labels only for deployment scope
 k get deployment --show-labels
 NAME          READY   UP-TO-DATE   AVAILABLE   AGE   LABELS
 nginx-paulo   1/1     1            1           27m   app=nginx-paulo,environment=development
@@ -805,7 +815,7 @@ nginx-paulo-7bd98bdb44-p9qk8   1/1     Running   0          15m   app=nginx-paul
 
 Se eu quiser add label para pod tenho que fazer isso abaixo do objeto spec
 
-# Definir Labels no escopo do Pod
+# Set Labels at Pod Scope
 
 apiVersion: apps/v1
 kind: Deployment
@@ -829,7 +839,7 @@ spec:
       - image: httpd
         name: nginx
 
-# Filtrando por label
+# Filtering by label
 k get pod -l app=nginx-paulo
 k get pod -n kube-system -l k8s-app=kube-dns
 ```
@@ -839,43 +849,43 @@ k get pod -n kube-system -l k8s-app=kube-dns
 
 ```bash
 
-# Quais sao meus replicaset?
+# What are my replicasets?
 k get rs
 NAME                     DESIRED   CURRENT   READY   AGE
 nginx-paulo-78455bbb4    0         0         0       38m
 nginx-paulo-7bd98bdb44   1         1         1       24m
 
-# Histórico Rollout
+# History Rollout
 k rollout history deployment/nginx-paulo
 deployment.apps/nginx-paulo
 REVISION  CHANGE-CAUSE
 1         <none>
 2         <none>
 
-# Caso queira acompanhar em tempo real um rollout
-watch kubectl rollout status deployment/nginx-paulo
+# If you want to follow a rollout in real time
+watch k rollout status deployment/nginx-paulo
 
-# Fazendo undo para voltar para versao anterior
+# Making background to go back to the previous version
 k rollout undo deployment/nginx-paulo --to-revision=1
 deployment.apps/nginx-paulo rolled back
 
-# Check novamente Histórico Rollout
+# Check Rollout History again
 k rollout history deployment/nginx-paulo
 deployment.apps/nginx-paulo
 REVISION  CHANGE-CAUSE
 2         <none>
 3         <none>
 
-# Quais sao meus replicaset?
+# What are my replicasets?
 k get rs
 NAME                     DESIRED   CURRENT   READY   AGE
 nginx-paulo-78455bbb4    1         1         1       42m
 nginx-paulo-7bd98bdb44   0         0         0       28m
 
-# Checando que voltou para imagem nginx.
+# Checking that it returned to the httpd image.
 k get pods nginx-paulo-78455bbb4-pssgv -o yaml | grep image:
 
-# Como ver o conteúdo de uma revision?
+# How to see the content of a revision?
 k rollout history deployment/nginx-paulo --revision=2
 
 deployment.apps/nginx-paulo with revision #2
@@ -893,7 +903,7 @@ Pod Template:
   Node-Selectors:	<none>
   Tolerations:	<none>
 
-# Como saber qual revision está em execução
+# How to know which revision is running
 
 k get rs
 NAME                     DESIRED   CURRENT   READY   AGE
@@ -904,9 +914,10 @@ k get rs nginx-paulo-78455bbb4 -o yaml | grep deployment.kubernetes.io/revision
   deployment.kubernetes.io/revision: "3"
   deployment.kubernetes.io/revision-history: "1"
 
-# Reiniciar todos os Pods do Deployment nginx-paulo
+# Restart all nginx-paulo Deployment Pods
 k rollout restart deployment/nginx-paulo
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Rollout maxSurge / maxUnavailable
