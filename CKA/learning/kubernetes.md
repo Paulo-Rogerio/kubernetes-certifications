@@ -4452,14 +4452,14 @@ admin
 # 🚀 Create Object - Storage PV / PVC / StorageClass / AccessMode
 
 ```bash
-# Vamos separar o bloco storage em 3 temas:
-# - Provisionamento Dinamico
-# - Provisionamento Estático
-# - Access Modes
+# Let's separate the storage block into 3 themes:
+# -Dynamic Provisioning
+# -Static Provisioning
+# -Access Modes
 #
-#========================== Provisionamento Estático  ===============================
+#========================== Static Provisioning  ===============================
 #
-# Neste modelo consideramos:
+# In this model we consider:
                               POD
                                 |
                                 |
@@ -4474,34 +4474,37 @@ admin
 #
 # Infra:
 #
-# Persistent Volume ( PV ) => Precisamos de ( Objeto Persistent Volume ) , podemos ter vários tipos de persistent Volumes
-# e uma vez criado eu posso ofertar isso ao pod.
-# No persistent volume vc como admin defini o tipo, caracteristica e tamanho.
-# Isso permitirá que agora meu cluster tenha um Objeto para persistir dados.
+# Persistent Volume (PV) => We need (Persistent Volume Object), we can have several types of persistent Volumes
+# and once created I can offer it to the pod.
 #
-# Um cenario comum é ter um disco externo conectado em um dos Nodes ( Worker ), e entao os nodes schedulados para rodarem.
-# Nesse node específico que tem esse disco, poderá escrever os dados nesse disco.
-# Esse tipo de provisionamento é chamado "local". Ex: Criar um PV de 100GB
+# In Persistent Volume (PV), you as admin define the type, characteristics and size.
+# This will now allow my cluster to have an Object to persist data.
 #
-# PV => Storage que estou disponibilizando
+# A common scenario is to have an external disk connected to one of the Nodes (Worker).
+#
+# On that specific node that has the disk attached, you can write the data to that volume.
+# This type of provisioning is called "local". Ex: Create a 100GB PV
+#
+# PV => Storage that I am making available
 #
 # App:
 #
-# Persistent Volume Clain ( PVC ) => Minha aplicação que quer usar esse Volume definido pelo time da infra.
-# A app entao pede ( clain ), requisita esse volume , entao ele usa esse objeto ( PVC ), um pedaço ( Ex: 5GB ).
-# Obs.:
-# O pod não fala direto com PV
+# Persistent Volume Clain (PVC) => The app then asks for (clain), requests this volume,
+# then this object (PVC) is used, a piece (Ex: 5GB) to serve the Pod.
 #
-# PVC é uma requisição de uma parte desse storage. Cada App terá seu PVC
+# Note:
+# The pod does not speak directly to PV
+#
+# PVC is a request for a part of this storage. Each App will have its PVC
 #
 
 https://kubernetes.io/docs/concepts/storage/volumes/
 
 https://kubernetes.io/docs/concepts/storage/volumes/#local
 
-# Para exemplificar iniciaremos com PV ( PersistentVolume )
+# To illustrate, we will start with PV (PersistentVolume)
 #
-# PV é global, isso quer dizer que não é atachado em NENHUM namespace.
+# PV is global, this means that it is not attached to ANY namespace.
 #
 k api-resources| grep persis
 persistentvolumeclaims              pvc          v1                                true         PersistentVolumeClaim
@@ -4526,13 +4529,13 @@ prgs-worker          Ready    worker-apps     13m     v1.34.0   beta.kubernetes.
                                                                 kubernetes.io/role=worker-apps,prgs/apps=true
 
 
-# Em meu ambiente, tenho apenas 1 Node ( Control Plane ) e 1 Node ( Control Data )
+# In my environment, I only have 1 Node (Control Plane) and 1 Node (Control Data)
 #
 docker exec prgs-worker bash -c "mkdir -p /data"
 docker exec prgs-worker bash -c "ls -la /"
 
 ###################
-# Criado PV
+# Create PV
 ###################
 
 cat <<EOF | k apply -f -
@@ -4559,25 +4562,26 @@ spec:
           - prgs-worker
 EOF
 
-# RECLAIM POLICY => Retain ( Não vai deletar os dados )
-# STATUS         => Available ( Disponível e não atachado e nenhum PVC )
+# RECLAIM POLICY => Retain (Will not delete data)
+# STATUS         => Available (Available and not attached and no PVC)
 
 k get pv
 NAME             CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
 prgs-worker-pv   1Gi        RWO            Retain           Available                          <unset>
 
 ###################
-# Criado PVC
+# Create PVC
 ###################
 
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/
 
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims
 
-# No meu ambiente kind, já é provisionado o StorageClass, mas ELE NÃO SERÁ informado ao definir o PVC
-# Se eu não definir o storageClassName, ele pegará isso de forma dinamica, pegará o default do cluster.
+# In my kind environment, the StorageClass is already provisioned, but IT WILL NOT BE informed when defining the PVC
+# If I don't define the storageClassName, it will get it dynamically, it will get the cluster's default.
 #
-# Entao PRECISO deixar o storageClassName vazio, e preciso informar no campo volumeName o PV criado na fase anterior.
+# Notes:
+# So I NEED to leave the storageClassName empty, and I need to inform the PV created in the previous phase in the volumeName field.
 #
 k explain pvc.spec.storageClassName
 
@@ -4606,11 +4610,11 @@ k get pvc
 NAME              STATUS   VOLUME           CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
 prgs-worker-pvc   Bound    prgs-worker-pv   1Gi        RWO                           <unset>                 114s
 
-# O Kubernetes faz o bind do PVC com o PV assim que encontrou um match válido.
+# Kubernetes binds the PVC to the PV as soon as it finds a valid match.
 
 k describe pvc prgs-worker-pvc
 
-# Doc para entender o Yaml
+# Doc
 k explain deployment.spec.template.spec
 k explain deployment.spec.template.spec.volumes
 k explain deployment.spec.template.spec.volumes | grep required
@@ -4661,19 +4665,19 @@ k exec -it $pod -- bash -c "cd /data && for i in {1..20}; do dd if=/dev/zero of=
 
 k exec -it $pod -- bash -c "du -hs /data"
 
-# Não criamos um PV de 1GB e um PVC 10 MB, como ele permitiu aramazenar 20MB?
-✅  PVC não limita espaço por si só.
-✅  Local PV não tem quota ( Deve-se usar LVM com PV limitando a capacidade do bloco, ou mesmo StorageClass como Ceph (RBD) / Longhorn).
-✅  Aqui usa-se Bloco todo onde o está definido o PV. Limite real depende do storage backend.
-✅  É comportamento esperado.
+# A 1GB PV was not created but a 10MB PV, how did it allow 20MB to be stored?
+✅  PVC does not limit space by itself.
+✅  Local PV has no quota (You must use LVM with PV limiting block capacity, or even StorageClass like Ceph (RBD) /Longhorn).
+✅  Here the entire block where the PV is defined is used. Actual limit depends on the storage backend.
+✅ It is expected behavior.
 
-# E esse trecho abaixo, não deveria fazer isso?
+# And this excerpt below, shouldn't it do that?
 
 resources:
   requests:
     storage: 10Mi
 
-✅ Não !! Isso é um limite rígido, é apenas um requisito mínimo para binding.
+✅ No !! That's a hard limit, it's just a minimum requirement for binding.
 
 k exec -it $pod -- bash -c "df -h"
 Filesystem                         Size  Used Avail Use% Mounted on
@@ -4682,7 +4686,7 @@ tmpfs                               64M     0   64M   0% /dev
 overlay                            466G  255G  188G  58% /data
 
 
-#============================= Provisionamento Dinamico =============================
+#============================= Dynamic Provisioning =============================
 
                              POD
                               |
@@ -4693,22 +4697,22 @@ overlay                            466G  255G  188G  58% /data
     (POD Controller) =>   Storage Class => ( NFS / Local Path)
 
 # App
-# Não muda em nada se comparando com ( Provisionamento Estático ) ou seja , preciso de um PVC para requisitar uma parte do storage.
+# It doesn't change anything compared to (Static Provisioning), that is, I need a PVC to request part of the storage.
 #
-# Cada App terá seu PVC.
+# Each App will have its PVC.
 #
-# A mudanca é que ao criar um PVC terá um campo para que eu informe a StorageClass, a depender da storageClass, será definido e seu tipo.
+# The change is that when creating a PVC there will be a field for me to inform the StorageClass, depending on the storageClass, its type will be defined.
 #
-# Storage Classe é uma pratilheira com vários tipos de storage que posso usar.Ex: ( EFS que é o NFS da AWS , EBS, NFS, Longhorn )
+# Storage Class is a shelf with several types of storage that I can use. Ex: (EFS which is AWS's NFS, EBS, NFS, Longhorn)
 #
-# Quem faz essa mágia é o pod de controller para gerenciar esse dinamismo. Ele que cuida em criar o PV.
+# The controller pod is responsible for managing this dynamism. He's the one who takes care of creating the PV.
 #
-# Todo provisionamento dinamico terá um controller envolvido fazendo a magica...
+# Every dynamic provisioning will have a controller involved doing the magic...
 #
-# StoragClasses => NãO é especifico de uma namespace
+# StoragClasses => NOT specific to a namespace
 #
-# Vantagens do Volume dinamico, eu apenas escolho na prateleira qual PVC me atenderá e o resto o k8s
-# se encarrega de fazer, que é montar o PV.
+# Advantages of Dynamic Volume, I just choose from the shelf which PVC will suit me and the rest k8s
+# is responsible for doing this, which is mounting the PV.
 
 
 k get storageclasses
@@ -4719,9 +4723,9 @@ https://artifacthub.io/packages/helm/kvaps/nfs-server-provisioner
 
 https://medium.com/@dikkumburage/how-to-deploy-nfs-client-provionser-31407a3746c8
 
-# Não tenho que informar volumeName ( PV ) quando trabalho com volume dinamico
+# I don't have to inform volumeName (PV) when working with dynamic volume
 #
-# Preciso informar qual storageClass
+# I need to inform which storageClass
 #
 k get sc
 NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
@@ -4770,14 +4774,14 @@ spec:
 EOF
 
 
-# Fisicamente os dados estao sendo persistidos dentro do worker
+# Physically, the data is being persisted within the worker
 docker exec prgs-control-plane bash -c "ls -la /var/local-path-provisioner"
 drwxr-xr-x  3 root root 4096 Apr 23 13:06 .
 drwxr-xr-x 12 root root 4096 Apr 23 13:06 ..
 drwxrwxrwx  2 root root 4096 Apr 23 13:06 pvc-1f64a261-b8b2-4e36-a8a7-33969078cc41_default_prgs-control-plane-pvc
 
 
-# Cada pod escreveu 10 arquivos.txt no mesmo volume.
+# Each pod wrote 10 .txt files on the same volume.
 pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
 
 while IFS= read -r pod;
@@ -4786,14 +4790,14 @@ do
 done <<< "$pods"
 
 
-# Lendo
+# Read
 while IFS= read -r pod;
 do
   k exec $pod -- bash -c "ls /data"
   echo "-------------------"
 done <<< "$pods"
 
-# Todos os Pods escrevem no volume.
+# All Pods write to the volume.
 nginx-7b98f58f85-rx2r8-1.txt
 nginx-7b98f58f85-rx2r8-10.txt
 nginx-7b98f58f85-rx2r8-2.txt
@@ -4827,29 +4831,30 @@ nginx-7b98f58f85-wq6mg-9.txt
 -------------------
 
 
-# Por ter esse mode de acesso ( ReadWriteOnce ) todos os Pods schedulados neste Node Podem escrever
+# By having this access mode (ReadWriteOnce) all Pods scheduled on this Node can write.
 #
-# Por isso nao montou esse diretorio no outro container docker ( prgs-worker )
+# That's why this directory was not mounted on the other worker ( prgs-worker )
 #
-✅ Significa: o volume pode ser montado em modo leitura/escrita por UM NODE por vez
-✅ Compartilhamento de filesystem dentro do mesmo node, não cluster-wide.
+✅ Meaning: the volume can be mounted in read/write mode by ONE NODE at a time
+✅ Filesystem sharing within the same node, not cluster-wide.
 
 #================================== Access Modes ====================================
 
-# AccessModes => O PV definido ( ReadWriteOnce ) terá o disco atachado somente a um Node.
-# Eu até posso ter mais Pod lendo o mesmo disco, desde que esses Pod rodem no mesmo worker.
+# AccessModes => The defined PV (ReadWriteOnce) will have the disk attached to only one Node.
 #
-# PersistentVolumeReclaimPolicy => Ao ser deletado o PV, qual comportamento?
-# Sera deletado todos os dados uma vez que ja foi removido o PV ( Ao definir como Delete isso irá acontecer )
+# I can even have more Pods reading the same disk, as long as these Pods run on the same worker.
 #
-# Cada tipo de storage suportará access Modes diferentes.
+# PersistentVolumeReclaimPolicy => When the PV is deleted, what behavior?
+# All data will be deleted once the PV has already been removed (By setting this to Delete this will happen)
+#
+# Each type of storage will support different access modes.
 
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
 
-# ReadWriteOnce ( RWO ) => Eu até posso ter mais Pod lendo o mesmo disco/volume,
-# desde que esses POd rodem no mesmo worker, ou storage seja compartilhado NFS.
+# ReadWriteOnce ( RWO ) => I can even have more Pod reading the same disk/volume,
+# as long as these POds run on the same worker, or storage is shared NFS.
 #
-# ReadWriteMany ( RWX ) => Casa da mãe Joana ( Todo mundo pode tudo )
+# ReadWriteMany (RWX) => Mother Joana's house (Everyone can do anything)
 
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -4893,8 +4898,8 @@ spec:
             claimName: prgs-worker-claim
 EOF
 
-# Ao tentar aplicar o manifesto , será schedulado o kube-scheduler irá tentar distribuir a carga entre os membro do cluster.
-# O que acontecerá nesse cenário acima?
+# When trying to apply the manifest, the kube-scheduler will try to distribute the load among the cluster members.
+# What will happen in this scenario above?
 
 k describe pvc prgs-worker-claim
 
@@ -4906,29 +4911,30 @@ Events:
   Warning  ProvisioningFailed    15s (x2 over 30s)  rancher.io/local-path_local-path-provisioner-57c5987fd4-m2f5m_840e8c44-e7d9-427b-93e5-a2b88ac268c5  failed to provision volume with StorageClass "standard": Only support ReadWriteOnce access mode
   Normal   ExternalProvisioning  10s (x3 over 30s)  persistentvolume-controller                                                                         Waiting for a volume to be created either by the external provisioner 'rancher.io/local-path' or manually by the system administrator. If volume creation is delayed, please verify that the provisioner is running and correctly registered.
 
-# O error é de compatibilidade entre o tipo de volume e o access mode que foi pedido.
+# The error is due to compatibility between the volume type and the access mode that was requested.
 
 accessModes:
   - ReadWriteMany
 
-# Mas o provisionador que está sendo usado é o local-path-provisioner, e ele só suporta: ReadWriteOnce (RWO)
-# A mensagem "Only support ReadWriteOnce access mode" deixa isso claro.
+# But the provisioner being used is local-path-provisioner, and it only supports: ReadWriteOnce (RWO)
+# The message "Only support ReadWriteOnce access mode" makes this clear.
 #
-# Como corrigir?
+# How to fix?
 
 accessModes:
   - ReadWriteOnce
 
-# Todos os pods vão usar volumes separados
-# ou o scheduler pode concentrar no mesmo node.
+# All pods will use separate volumes
+# or the scheduler can focus on the same node.
 #
-# Usar storage que suporta RWX (recomendado para esse caso)
+# Use storage that supports RWX (recommended in this case)
 # Ex:
 # NFS
 # CephFS
 # Longhorn (com RWX habilitado)
 # GlusterFS
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Reclaim Policy PVC / StorageClass
@@ -4936,10 +4942,10 @@ accessModes:
 ```bash
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reclaim-policy
 
-# Delete => Default ( Assim que deleta os recursos pvc é deletado os dados )
-# Retain => Deleta o PVC, mas os dados continuam lá
+# Delete => Default (As soon as you delete the pvc resources, the data is deleted)
+# Retain => Deletes the PVC, but the data is still there
 #
-# É na definição da PVC que aplico o tipo de Policy
+# It is in the PVC definition that I apply the Policy type
 
 reclaimPolicy: Retain
 
@@ -4958,17 +4964,21 @@ reclaimPolicy: Retain
           persistentVolumeClaim:
             claimName: volume-persistente
 
-# Isso quer dizer que os Deployments que usarem esse PVC ( volume-persistente ) não teram seus dados apagados
+# This means that Deployments that use this PVC (persistent-volume) will not have their data deleted
 
-# Se eu deletar o Deployment + PVC , meus dados ainda sim continuaram intactos,
-# pois quem ta garantindo isso é o StorageClass do tipo Retain.
+# If I delete Deployment + PVC, my data is still intact,
+# because the StorageClass of type Retain is guaranteeing this.
 
-# O PV ainda estará lá mas com status ( Release )
-# Estando nesse estado ( Release ) , ele pode ser atachado novamente.
+# The PV will still be there but with status ( Release )
+# Notes:
+# Notes:
+# ******************************************************************
+# Once in this state (Release), it can be attached again.
+# ******************************************************************
 
 k get pv
 
-# Para re-usar esse PV é necessário ajustar o deploy do PVC para "especificar o PV" e deixo em "branco o storageClass".
+# To reuse this PV it is necessary to adjust the PVC deployment to "specify the PV" and leave the storageClass blank.
 #
 # Ex: pv-55be07b6-f39c-41e5-90bc-59885eecdc2d
 
@@ -4987,15 +4997,16 @@ spec:
 
 #================================== PVC Policy Retain ===============================
 #
-# Nada impede ter multiplos storageClass no seu cluster. No exemplo abaixo, será criado um novo pvc
-# manualmente, e será rotulado que esse PVC terá um nome qualquer como StorageClass
+# Nothing prevents having multiple storageClass in your cluster. In the example below, a new PVC will be created
+# manually, and it will be labeled that this PVC will have any name like StorageClass
 
-# Crie o diretório
+# Create the directory
 docker exec prgs-control-plane bash -c "mkdir -p /data"
 docker exec prgs-control-plane bash -c "ls /data"
 
-# Para esse laboratório, primeiro cria-se o PV
-# Como esse PV tem uma regra específica de afinidade, ele so montará os pods com esse volume neste node ( prgs-control-plane )
+# For this laboratory, first create the PV
+# As this PV has a specific affinity rule,
+# it will only mount the pods with this volume on this node ( prgs-control-plane )
 
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -5026,7 +5037,7 @@ k get pv
 NAME                    CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS            VOLUMEATTRIBUTESCLASS   REASON   AGE
 prgs-control-plane-pv   10Mi       RWO            Retain           Available           prgs-control-plane-sc   <unset>                          3s
 
-# Criando PVC
+# Create PVC
 
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -5048,7 +5059,7 @@ k get pvc
 NAME                     STATUS   VOLUME                  CAPACITY   ACCESS MODES   STORAGECLASS            VOLUMEATTRIBUTESCLASS   AGE
 prgs-control-plane-pvc   Bound    prgs-control-plane-pv   10Mi       RWX            prgs-control-plane-sc   <unset>                 4s
 
-# Apesar do PVC ter sido rotulado com StorageClass, chamado "prgs-control-plane-sc", esse storageClass não existe no K8S.
+# Although the PVC was labeled with StorageClass, called "prgs-control-plane-sc", this storageClass does not exist in K8S.
 
 k get sc
 NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
@@ -5100,7 +5111,7 @@ do
 done <<< "$pods"
 
 
-# Lendo pelo Pod
+# Read
 while IFS= read -r pod;
 do
   k exec $pod -- bash -c "ls /data"
@@ -5123,7 +5134,7 @@ nginx-7b98f58f85-4trx6-1.txt
 nginx-7b98f58f85-4trx6-10.txt
 -------------------
 
-# Lendo No worker
+# Reading in worker
 docker exec prgs-control-plane bash -c "ls /data"
 nginx-7b98f58f85-4trx6-1.txt
 nginx-7b98f58f85-764fk-10.txt
@@ -5136,7 +5147,7 @@ nginx-7b98f58f85-764fk-10.txt
 nginx-7b98f58f85-jr46k-1.txt
 nginx-7b98f58f85-jr46k-10.txt
 
-# E se eu deletar tudo ?
+# What if I delete everything?
 #
 k delete deployments.apps nginx
 deployment.apps "nginx" deleted from default namespace
@@ -5149,8 +5160,8 @@ persistentvolumeclaim "prgs-control-plane-pvc" deleted from default namespace
 k delete pv prgs-control-plane-pv
 persistentvolume "prgs-control-plane-pv" deleted
 
-# Lendo No worker
-# Os dados estao lá
+# Reading in worker
+# The data is there
 #
 docker exec prgs-control-plane bash -c "ls /data"
 nginx-7b98f58f85-4trx6-1.txt
@@ -5164,14 +5175,14 @@ nginx-7b98f58f85-764fk-10.txt
 nginx-7b98f58f85-jr46k-1.txt
 nginx-7b98f58f85-jr46k-10.txt
 
-# Se eu Subir novamente ( PV / PVC / Deployment ) o que acontece?
+# If I Upgrade again (PV/PVC/Deployment) what happens?
 k get pods
 NAME                     READY   STATUS    RESTARTS   AGE
 nginx-6767449f59-h58tb   1/1     Running   0          63s
 nginx-6767449f59-pg2sl   1/1     Running   0          63s
 nginx-6767449f59-vdxbp   1/1     Running   0          63s
 
-# Lendo pelo Pod
+# Reading via Pod
 pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
 
 while IFS= read -r pod;
@@ -5180,7 +5191,8 @@ do
   echo "-------------------"
 done <<< "$pods"
 
-# Consegue montar e ler os dados normalmente. Isso porque ao criar o PVC foi Definido ( persistentVolumeReclaimPolicy: Retain )
+# Can mount and read data normally.
+# This is because when creating the PVC it ​​was defined ( persistentVolumeReclaimPolicy: Retain )
 
 nginx-7b98f58f85-4trx6-1.txt
 ...
@@ -5200,13 +5212,13 @@ nginx-7b98f58f85-4trx6-10.txt
 
 #============================= StoraClass Policy Retain =============================
 #
-# A ideia aqui e aplicar a mesma regras de Retaim feita no PVC, porém a nivel de StorageClass
+# The idea here is to apply the same Retain rules made in PVC, but at the StorageClass level
 #
-# O pv é criado herdando o que foi definido na StorgaClass
+# The pv is created by inheriting what was defined in StorgaClass
 #
-# É na definição da StorageClass que aplico o tipo de Policy
+# It is in the StorageClass definition that I apply the Policy type
 #
-# Vamos criar um StorageClass Personalizado.
+# Let's create a Custom StorageClass.
 
 k neat <<< $(k get sc standard -o yaml) | sed 's/true/false/;s/standard/volume-persistente/;s/Delete/Retain/'
 
@@ -5228,18 +5240,18 @@ NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE  
 standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  4h25m
 volume-persistente   rancher.io/local-path   Retain          WaitForFirstConsumer   false                  3s
 
-# Criando o PVC
+# Creating the PVC
 #
-# Obs.: Aqui foi definido que o mode de acesso ...
+# Note: Here it was defined that the access mode ...
 
 accessModes:
   - ReadWriteOnce
 
-✅ Por ter esse mode de acesso ( ReadWriteOnce ) todos os Pods schedulados neste Node Podem escrever / ler.
-✅ O volume pode ser montado em modo leitura/escrita por UM NODE por vez
-✅ Compartilhamento de filesystem dentro do mesmo node, não cluster-wide.
-✅ O PV definido ( ReadWriteOnce ) terá o disco atachado somente a um Node.
-✅ Vários Pods podem usar o mesmo volume se estiverem no mesmo node.
+✅ By having this access mode (ReadWriteOnce) all Pods scheduled on this Node can write/read.
+✅ Volume can be mounted in read/write mode by ONE NODE at a time
+✅ Filesystem sharing within the same node, not cluster-wide.
+✅ The defined PV (ReadWriteOnce) will have the disk attached to only one Node.
+✅ Multiple Pods can use the same volume if they are on the same node.
 
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -5256,13 +5268,13 @@ spec:
 EOF
 
 # Check
-# OBS.: Aqui ele ficará como Pending até que um POD faca requisição para usar esse PVC
+# NOTE: Here it will remain as Pending until a POD makes a request to use this PVC
 
 k get pvc
 NAME                     STATUS    VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS         VOLUMEATTRIBUTESCLASS   AGE
 prgs-control-plane-pvc   Pending                                      volume-persistente   <unset>                 2s
 
-# Criando Deployment
+# Create Deployment
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
 kind: Deployment
@@ -5292,7 +5304,7 @@ spec:
             claimName: prgs-control-plane-pvc
 EOF
 
-# Como ficou o ponto montagem dentro do Worker?
+# How was the assembly point inside the Worker?
 #
 docker exec prgs-control-plane bash -c "ls /var/local-path-provisioner"
 pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc
@@ -5302,7 +5314,7 @@ NAME                     STATUS   VOLUME                                     CAP
 prgs-control-plane-pvc   Bound    pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd   10Mi       RWO            volume-persistente   <unset>                 9m8s
 
 
-# Injetando Dados
+# Injecting Data
 pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
 
 while IFS= read -r pod;
@@ -5310,7 +5322,7 @@ do
   k exec $pod -- bash -c 'for i in {1..10}; do touch "/data/${HOSTNAME}-$i.txt"; done'
 done <<< "$pods"
 
-# Listando direto do Worker
+# Listing directly from Worker
 docker exec prgs-control-plane bash -c "ls /var/local-path-provisioner/pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc"
 nginx-7b98f58f85-5lt9h-1.txt
 nginx-7b98f58f85-5lt9h-10.txt
@@ -5343,7 +5355,7 @@ nginx-7b98f58f85-ph4cz-7.txt
 nginx-7b98f58f85-ph4cz-8.txt
 nginx-7b98f58f85-ph4cz-9.txt
 
-# E se eu deletar tudo?
+# What if I delete everything?
 #
 k delete deployments.apps nginx
 deployment.apps "nginx" deleted from default namespace
@@ -5351,8 +5363,8 @@ deployment.apps "nginx" deleted from default namespace
 k delete pvc prgs-control-plane-pvc
 persistentvolumeclaim "prgs-control-plane-pvc" deleted from default namespace
 
-# Listando direto do Worker
-# Os dados continuam lá , isso por conta da regra ( Policy Retain )
+# Listing directly from Worker
+# The data is still there, due to the rule (Policy Retain)
 #
 docker exec prgs-control-plane bash -c "ls /var/local-path-provisioner/pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc"
 nginx-7b98f58f85-5lt9h-1.txt
@@ -5368,20 +5380,22 @@ nginx-7b98f58f85-ph4cz-10.txt
 ...
 ...
 
-# Se não tenho mais PVC, mas os dados estao montados fisicamente nesse Worker, com esse NOME ( pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc )
-# Como eu montaria esse PVC novamente?
+# If I no longer have a PVC, but the data is physically mounted on this Worker
+# with this NAME ( pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc ).
+# How would I mount this PVC again?
 #
-# OBS.:
-# OBS.: ISSO SÓ É POSSIVEL, PORQUE AO DELETAR O PVC , O PV É CONSERVADO
-# OBS.:
+# NOTE:
+# NOTE: THIS IS ONLY POSSIBLE BECAUSE WHEN DELETING THE PVC, THE PV IS KEPT
+# NOTE:
 
 k get pv
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                            STORAGECLASS         VOLUMEATTRIBUTESCLASS   REASON   AGE
 pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd   10Mi       RWO            Retain           Released   default/prgs-control-plane-pvc   volume-persistente   <unset>                          9m45s
 
-# Recriando o PVC fazendo match com PV existente
+# Recreating the PVC by matching the existing PV
 #
-# Obs: Foi definido o ID do PV no PVC
+# Note:
+# The PV ID was defined in the PVC
 
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -5398,12 +5412,13 @@ spec:
       storage: 10Mi
 EOF
 
-# Listando PVC
+# List PVC
 k get pvc
 NAME                     STATUS    VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS         VOLUMEATTRIBUTESCLASS   AGE
 prgs-control-plane-pvc   Pending   pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd   0                         volume-persistente   <unset>                 9s
 
-# Caso o PV esteja montado em node específico, e melhor definir uma regra de afinidade ao montar o deployment.
+# Notes:
+# If the PV is mounted on a specific node, it is better to define an affinity rule when mounting the deployment.
 
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
@@ -5443,39 +5458,39 @@ spec:
             claimName: prgs-control-plane-pvc
 EOF
 
-# Listando os Pod...
-# Não subiu nada !!!
+# Notes:
+# Listing the Pod...
+# Nothing went up!!!
 #
 NAME                     READY   STATUS    RESTARTS   AGE
 nginx-6767449f59-2jhlp   0/1     Pending   0          2s
 nginx-6767449f59-8blp8   0/1     Pending   0          2s
 nginx-6767449f59-hrxn8   0/1     Pending   0          2s
 
-# Isso acontece porque o PV ainda está atrelado ao PVC antigo que morreu
-# O fato do Status está como ( Released ), aponta para essa caracterítica.
+# This happens because the PV is still linked to the old PVC that died
+# The fact that the Status is (Released) points to this characteristic.
 #
 k get pv
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                            STORAGECLASS         VOLUMEATTRIBUTESCLASS   REASON   AGE
 pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd   10Mi       RWO            Retain           Released   default/prgs-control-plane-pvc   volume-persistente   <unset>                          25m
 
-# ----------------- Hard Core -----------------------------
-# Uma outra solução seria fazer um provisionamento estatico.
-# Defino storageClass como ""
-# Aponto qual pv quero usar usando o objeto volumeName
-# Uma outra alternativa seria editar o PV e remover o ID atrelado ao PV
-# Ex: Remover a entrada ( claimRef => uid: 0e436051-7441-42d5-83d9-3a8362ee0d34 )
+# ---------------------- Hard Core -------------------------
+# Another solution would be to do static provisioning.
+# I define storageClass as ""
+# I point out which pv I want to use using the volumeName object
+#
+# Another alternative would be to edit the PV and remove the ID linked to the PV
+# Ex: Remove entry ( claimRef => uid: 0e436051-7441-42d5-83d9-3a8362ee0d34 )
 # ---------------------------------------------------------
 
-# Aplicar PAtch de correção...
-# Obs.:
+# Apply patch ...
+# Notes.:
 kubectl patch pv pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd -p '{"spec":{"claimRef": null}}'
-# Obs.:
-#
 
 k delete deployments.apps nginx
 k delete pvc prgs-control-plane-pvc
 
-# Reaplique o PVC
+# Apply PVC again
 cat <<EOF | k apply -f -
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -5500,7 +5515,7 @@ do
 done <<< "$pods"
 
 
-# Consegue montar e ler os dados normalmente. Isso porque ao criar o PVC foi Definido ( persistentVolumeReclaimPolicy: Retain )
+# Can mount and read data normally. This is because when creating the PVC it ​​was defined ( persistentVolumeReclaimPolicy: Retain )
 
 nginx-7b98f58f85-4trx6-1.txt
 ...
@@ -5520,8 +5535,8 @@ nginx-7b98f58f85-4trx6-10.txt
 
 #================================= PV Policy Retain =================================
 #
-# Criei StorageClass com Policy Retaim, mas matei o PV
-# Como fica?
+# I created StorageClass with Policy Retain, but killed the PV
+# How is it?
 #
 k delete deployments.apps nginx
 deployment.apps "nginx" deleted from default namespace
@@ -5532,9 +5547,9 @@ persistentvolumeclaim "prgs-control-plane-pvc" deleted from default namespace
 k delete pv pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd
 persistentvolume "pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd" deleted
 
-# Meu volume está orfão
+# My volume is orphaned
 #
-# Porém o dado ainda existe no meu cluster
+# However, the data still exists in my cluster
 docker exec prgs-control-plane bash -c "ls /var/local-path-provisioner/pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd_default_prgs-control-plane-pvc"
 nginx-7b98f58f85-5lt9h-1.txt
 nginx-7b98f58f85-5lt9h-10.txt
@@ -5567,9 +5582,9 @@ nginx-7b98f58f85-ph4cz-7.txt
 nginx-7b98f58f85-ph4cz-8.txt
 nginx-7b98f58f85-ph4cz-9.txt
 
-# O processo de recuperação de um PV orfão é manual.
+# The process of recovering an orphaned PV is manual.
 #
-# Criando PV
+# Creating PV
 #
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -5595,7 +5610,7 @@ spec:
           - prgs-control-plane
 EOF
 
-# Criando PVC
+# Creating PVC
 #
 cat <<EOF | k apply -f -
 apiVersion: v1
@@ -5612,12 +5627,12 @@ spec:
       storage: 10Mi
 EOF
 
-# Listando PVC
+# Listing PVC
 k get pvc
 NAME             STATUS    VOLUME          CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
 pvc-recuperado   Pending   pv-recuperado   0                                        <unset>                 3s
 
-# Criando App
+# Creating App
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
 kind: Deployment
@@ -5660,7 +5675,7 @@ k get pvc
 NAME             STATUS   VOLUME          CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
 pvc-recuperado   Bound    pv-recuperado   10Mi       RWO                           <unset>                 81s
 
-# Listando conteúdo
+# Listing content
 #
 pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
 
@@ -5670,7 +5685,7 @@ do
   echo "-------------------"
 done <<< "$pods"
 
-# Consegue montar e ler os dados normalmente. Isso porque ao criar o PVC foi Definido ( persistentVolumeReclaimPolicy: Retain )
+# Can mount and read data normally. This is because when creating the PVC it ​​was defined ( persistentVolumeReclaimPolicy: Retain )
 
 nginx-7b98f58f85-4trx6-1.txt
 ...
@@ -5695,49 +5710,50 @@ nginx-7b98f58f85-4trx6-10.txt
 # 🚀 Create Object - HPA / VPA
 
 ```bash
-# Escala Vertical X Escala Horizontal ( Componentes que monitoram recursos )
 #
-#================================ Horizontal (HPA) ==================================
+# Vertical Scale X Horizontal Scale (Components that monitor resources)
+#
+#================================ Horizontal (HPA) =================================
 #
 # Deployment => ReplicaSet => Pod
 #
-# No Deployment injetamos um novo objeto chamado HPA, ele irá escutar alguma métrica ( CPU / RAM ),
-# mas pode-se usar metricas externas e uma vez que esse threshoud bater no limite definido, o HPA escalará os PODS.
+# In Deployment we inject a new object called HPA, it will listen to some metrics (CPU /RAM),
+# but you can use external metrics and once this threshold hits the defined limit, the HPA will scale the PODS.
 #
 
 https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
 
 https://kubernetes.io/docs/reference/command-line-tools-reference/kube-controller-manager/
 
-# No start no kube-controller existem parametros listado no link acima que definem comportamentos do HPA
+# At start in kube-controller there are parameters listed in the link above that define HPA behaviors
 # Ex: --horizontal-pod-autoscale-xxxx
 #
-# Em amnientes gerenciados, vc dificilmente ajustará esses comportamentos pois não tem gerencia sobre o control-plane.
+# In managed environments, you will hardly adjust these behaviors as you have no control over the control plane.
 #
-# Formas como HPA coleta as metricas?
+# How does HPA collect metrics?
 
 https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-resource-metrics
 
-- Custom Metrics ( Escalar baseada em CPU )
-- APi Metrics ( Coleta metricas de um Prometheus )
-- Escalar baseada em request, fila SQS .. etc
+✅ Custom Metrics (CPU-based Scalar)
+✅ APi Metrics (Collects metrics from a Prometheus)
+✅ Scaling based on request, SQS queue.. etc
 
-# OBS.:
-# Preciso do metrics-server deployado no cluster
+# NOTE:
+# I need metrics-server deployed on the cluster
 #
-# Metric Server baseada em CPU
+# CPU-based Metric Server
 metrics.k8s.io API
 
-# Metrics Customizadas / Como é coletada as metrics
+# Custom Metrics / How metrics are collected?
 custom.metrics.k8s.io API.
 external.metrics.k8s.io API.
 
-# Recursos consumidos pelo Node
+# Resources consumed by the Node
 k top nodes
 NAME                 CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)
 prgs-control-plane   532m         4%       1570Mi          10%
 
-# Recursos consumidos pelos Pods
+# Resources consumed by Pods
 k top pods -A
 NAMESPACE            NAME                                                        CPU(cores)   MEMORY(bytes)
 argocd               argo-cd-argocd-application-controller-0                     1m           28Mi
@@ -5807,17 +5823,19 @@ EOF
 
 
 # ==========================================================================
-# Obs.:
-# Request é usado sempre quando um pod é colocado dentro de um node.
-# Ele é levado em conta na escolha do node onde será colocado o pod.
-# Kube-schedules é quem decide em qual worker meu pod vai rodar, ele avalia os recursos.
-# ==========================================================================
+# Note:
 #
-# O segredo está em declarar os resource no deployment
-# O que o HPA leva em consideração é o (request).
-# O limits é usado para definir a quantidade maxima de CPU / RAM usada por um POd ( hard limit )
-# O HPA nao consulta o limits para tomada de decisao em escalar.
-# A tomada de decisão do scheduler de iniciar um novo Pod acontece por meio da metrica de request.
+# Request is always used when a pod is placed inside a node.
+# It is taken into account when choosing the node where the pod will be placed.
+# Kube-schedules decides which worker my pod will run on, it evaluates the resources.
+# ==========================================================================
+# Note:
+#
+# The secret is to declare the resources in the deployment
+# What HPA takes into account is ( request ).
+# Limits is used to define the maximum amount of CPU /RAM used by a POd (hard limit)
+# The HPA does not consult the limits to make scaling decisions.
+# The scheduler's decision to start a new Pod takes place through the request metric.
 
 k explain horizontalpodautoscalers.spec
 k explain horizontalpodautoscalers.spec.metrics.resource.target
@@ -5825,15 +5843,15 @@ k explain horizontalpodautoscalers.spec | grep required
 maxReplicas	<integer> -required-
 scaleTargetRef	<CrossVersionObjectReference> -required-
 
-# Um recurso namespace
+# A namespace resource
 k api-resources | grep hpa
 horizontalpodautoscalers            hpa                               autoscaling/v2                    true         HorizontalPodAutoscaler
 
 k neat <<< $(k autoscale deployment nginx --cpu=50 --min=1 --max=5 --dry-run=client -o yaml)
 
-# HPA ( Baseado em milicore do CPU )
-# Quando o workloads variam muito
-# Requer um controle absoluto de CPU
+# HPA (Based on CPU millicore)
+# When workloads vary greatly
+# Requires absolute CPU control
 
 cat <<EOF | k apply -f -
 apiVersion: autoscaling/v2
@@ -5863,17 +5881,16 @@ spec:
         periodSeconds: 15
 EOF
 
-# Saida do HPA quando usa-se regras baseadas em Milicore
+# HPA output when using Milicore-based rules
 k get hpa
 NAME    REFERENCE          TARGETS      MINPODS   MAXPODS   REPLICAS   AGE
 nginx   Deployment/nginx   cpu: 0/10m   1         5         1          51m
 
 
-
-# HPA ( Baseado em % de Uso do CPU )
+# HPA (Based on % CPU Usage)
 #
-# Quando definido bem o requests.cpu
-# Na grande maioria dos workloads (APIs, web, microserviços)
+# When well defined requests.cpu
+# In the vast majority of workloads (APIs, web, microservices)
 
 cat <<EOF | k apply -f -
 apiVersion: autoscaling/v2
@@ -5902,8 +5919,8 @@ nginx   Deployment/nginx   cpu: 0%/50%   1         5         1          16s
 
 k describe hpa nginx
 
-# Validando processo
-# Monitore o HPA
+# Validating process
+# Monitor HPA
 k get hpa -w
 nginx   Deployment/nginx   cpu: 0%/50%     1         5         1          114s
 
@@ -5912,7 +5929,7 @@ nginx   Deployment/nginx   cpu: 200%/50%   1         5         1          5m31s
 nginx   Deployment/nginx   cpu: 200%/50%   1         5         4          5m46s
 nginx   Deployment/nginx   cpu: 110%/50%   1         5         4          6m1s
 
-# Gerando carga de Stress no Nginx
+# Generating Stress load in Nginx
 k run --image alpine --rm -it teste-curl sh
 apk add curl
 while true; do curl -I nginx; done
@@ -5924,8 +5941,8 @@ nginx-7577f95fd6-hdmbf   0/1     ContainerCreating   0          5s
 nginx-7577f95fd6-sl8fh   1/1     Running             0          30m
 nginx-7577f95fd6-vhn74   0/1     ContainerCreating   0          5s
 
-# Após encerrar a carga de Stress, os Pods devem assumir o valor default do deployment.
-# Mesmo com CPU baixa, ele “segura” os pods por alguns minutos antes de matar
+# After ending the Stress load, the Pods must assume the default deployment value.
+# Even with low CPU, it “holds” the pods for a few minutes before killing
 
 k get pods
 NAME                     READY   STATUS        RESTARTS   AGE
@@ -5936,8 +5953,8 @@ nginx-7577f95fd6-sl8fh   1/1     Running       0          36m
 nginx-7577f95fd6-vhn74   1/1     Terminating   0          6m32s
 teste-curl               1/1     Running       0          7m50s
 
-# Como deixar o scale down mais rápido.
-# Adicionando o Bloco abaixo no manifesto...
+# How to make scale down faster.
+# Adding the Block below to the manifest...
 
   behavior:
     scaleDown:
@@ -5976,36 +5993,35 @@ spec:
         periodSeconds: 15
 EOF
 
-#*************************** Etendendo o calculo do HPA *****************************
+#*************************** Extending or calculating HPA *****************************
 #
 
 https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#algorithm-details
 
-# ceil => Função de arrendodamento ( Golang )
+# ceil => Rounding function (Golang)
 
-# Fórmula para determinar a quantidade de replicas para aguentar as requisiçoes.
-# Ele vai calcular a quantidade de replicas desejadas
+# Formula to determine the number of replicas to handle requests.
+# It will calculate the number of desired replicas
 #
-# currentReplicas    => Replicas definidas no deployment
+# currentReplicas => Replicas defined in deployment
 # desiredMetricValue => HPA averageUtilization
-# currentMetricValue => Utilização/Desejado Isso é calculado baseado no request limits ( requests => cpu: 10m )
-
+# currentMetricValue => Usage/Desired This is calculated based on request limits ( requests => cpu: 10m )
 k get hpa
 NAME        REFERENCE          TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
 nginx    Deployment/nginx    cpu: 0%/50%       1         5         1        105m
 
 # Ex:
-# Se minha app precisa de 10m ( mili core ou milicpu ), mas no momento não tem utilização e o pod está consumindo 3m de cpu.
-# Sendo que para esse POD foi definido 10m. Esse  é o maximo e como se fosse o hard limit.
-# Esse 10m e o request pois e nesse campo que o HPA atua.
+# If my app needs 10m (milli core or millicpu), but at the moment it has no use and the pod is consuming 3m of cpu.
+# Therefore, 10m was defined for this POD. This is the maximum and as if it were the hard limit.
+# This 10m is the request because it is in this field that the HPA operates.
 #
 k top pods
 NAME                     CPU(cores)   MEMORY(bytes)
 nginx-7577f95fd6-sl8fh   0m           10Mi
 
-# Vamos imaginar que vc definiu isso no seu HPA
-# Do nada seu Pod começa a usar 12m cpu , isso quer dizer que 12m é maior que 10m que é maior que 100%
-# OS 10m representa a totallidade de CPU tolerada pelo HPA ( ele representa o 100% )
+# Let's imagine that you defined this in your HPA
+# Out of nowhere your Pod starts using 12m cpu, this means that 12m is greater than 10m which is greater than 100%
+# OS 10m represents the total CPU tolerated by the HPA (it represents 100%)
 
 - resource:
     name: cpu
@@ -6014,24 +6030,24 @@ nginx-7577f95fd6-sl8fh   0m           10Mi
       type: AverageValue
   type: Resource
 
-# Pods trabalhando em sem sobrecarga
+# Pods working without overhead
 k get hpa
 NAME    REFERENCE          TARGETS      MINPODS   MAXPODS   REPLICAS   AGE
 nginx   Deployment/nginx   cpu: 0/10m   1         5         1          73m
 
-# Pods trabalhando com sobrecarga
+# Pods working with overload
 k get hpa
 nginx   Deployment/nginx   cpu: 10m/10m   1         5         4          69m
 
 # Regra de 3
 10m -- 100%
-12m -- x
-10x = 1200
-x = 120%
+32m -- x
+10x = 3200
+x = 320%
 
-# Entao posso afirmar que a request definido no manifesto ( 10m isso equivale a 100% )
-# Esse valor será o atributo usado para calculo do HPA
-# mas com Pods consumindo 32m tem consumido 320% da cpu definida.
+# So I can say that the request defined in the manifest (10m is equivalent to 100%)
+# This value will be the attribute used to calculate the HPA.
+# But with Pods consuming 32m has it consumed 320% of the defined cpu?
 
 desiredReplicas = ceil[currentReplicas * ( currentMetricValue / desiredMetricValue )]
 
@@ -6043,13 +6059,13 @@ desiredReplicas = ceil[1  * ( 5.3 )]
 
 desiredReplicas = 6
 
-# Fazendo na prática
+# Doing it in practice
 watch kubectl top pod nginx-599d9c6bc5-twzk8
 NAME                     CPU(cores)   MEMORY(bytes)
 nginx-599d9c6bc5-twzk8   58m           3Mi
 
-# Suponhamos que
-# 58m => Regrinha de 3 ( Isso quer dizer quase 580%)
+# Suppose that
+# 58m => Rule of 3 (That means almost 580%)
 
 desiredReplicas = ceil[1 * ( 580 / 60 )]
 
@@ -6057,8 +6073,8 @@ desiredReplicas = ceil[1 * ( 9.666 )]
 
 desiredReplicas = 10
 
-# Sendo assim o valor desejado para atender essa demanda seria 10 Replicas.
-# Se algum pod estiver trabalhando com mais de 10m cpu HPA irá provisionar mais nodes.
+# Therefore, the desired value to meet this demand would be 10 Replicas.
+# If any pod is working with more than 10m cpu HPA will provision more nodes.
 
 k get hpa -w
 NAME        REFERENCE          TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
@@ -6070,10 +6086,10 @@ nginx-hpa   Deployment/nginx   cpu: 0%/60%     1         50        10          1
 
 https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#default-behavior
 
-# Stabillization window , define como o kubernetes desescala o pods ( Isso aqui que é punk para ele )
-# usado para scale down.
+# Stabillization window, defines how kubernetes descales pods (This is punk for him)
+# used to scale down.
 #
-# Padrao ( 300s / 5 minutos )
+# Standard (300s /5 minutes)
 
 k explain hpa.spec
 k explain hpa.spec.behavior
@@ -6084,25 +6100,25 @@ k explain hpa.spec.behavior.scaleDown.stabilizationWindowSeconds
 #================================= Vertical (VPA) ===================================
 #
 # Deployment => ReplicaSet => Pod
-# OBS.: O VPA só ira atuar em deployments que tenha no mínimo 2 réplicas
-# Qual comportamento?
+# NOTE: VPA will only work on deployments that have at least 2 replicas
+# What behavior?
 #
-# Ele mata um dos pods, o novo Pod ao ser criado será interceptado pelo VPA que ajustará os request limits com
-# um valor definido no VPA ( recursos necessários ) e ai sim o Pod sobe.
+# It kills one of the pods, the new Pod when created will be intercepted by the VPA which will adjust the request limits with
+# a value defined in the VPA (required resources) and then the Pod goes up.
 #
-# Aplicaçoes Monolitas é um bom caso de uso de VPA
-# Assim como no HPA no VPA leva-se em consideração o request limits.
+# Monolith Applications is a good use case for VPA
+# Just like HPA, VPA takes request limits into account.
 #
 #
-# VPA não é deployado automaticamente
+# VPA is not automatically deployed
 
 https://github.com/kubernetes/autoscaler
 
-# OBS.: Faça checkou na ultima tag estavel
+# NOTE: Checkout the last stable tag
 #
-# VPA atua em cima dos enventos
+# VPA acts on events
 #
-# cluster-autoscaler é usado pelos cloud providers para escalar os nodes
+# cluster-autoscaler is used by cloud providers to scale nodes
 #
 # Deploy Manual
 git clone https://github.com/kubernetes/autoscaler.git
@@ -6121,9 +6137,9 @@ helm install vertical-pod-autoscaler fairwinds-stable/vpa \
 # Check
 k describe pods -n vertical-pod-autoscaler vertical-pod-autoscaler-vpa-admission-controller-7f4667b6fszspr
 
-# Como o VPA trabalha?
-# Ele intercepta a criação do POD e ajusta dinamicamente os request limits, observe que ele atua a nivel de Pod.
-# Ele usa esse recuso de Webhook para gerir isso.
+# How does VPA work?
+# It intercepts the creation of the POD and dynamically adjusts the request limits, note that it acts at the Pod level.
+# It uses this Webhook feature to manage this.
 
 k get mutatingwebhookconfigurations
 NAME                                         WEBHOOKS   AGE
@@ -6132,13 +6148,13 @@ vertical-pod-autoscaler-vpa-webhook-config   1          3m18s
 # Yaml
 k get mutatingwebhookconfigurations vertical-pod-autoscaler-vpa-webhook-config -o yaml
 
-# Açoes as quais esse mutatingweebhook irá trigar.
-# - Qualquer chamada de create no recurso de POds. Sempre que um pod for criado , ele vai cair nesse Hook
-# - Sempre que atualizar ou criar um VPA
+# Actions that this mutatingweebhook will trigger.
+# -Any create call on the POds resource. Whenever a pod is created, it will fall into this Hook
+# -Whenever you update or create a VPA
 #
-# O que ele faz?
+# What does he do?
 #
-# Ele pega a requisição e manda para o seu service ( HPA Webhook )
+# It takes the request and sends it to your service (HPA Webhook)
 
   service:
       name: vertical-pod-autoscaler-vpa-webhook
@@ -6147,42 +6163,42 @@ k get mutatingwebhookconfigurations vertical-pod-autoscaler-vpa-webhook-config -
 
 k get svc -n vertical-pod-autoscaler
 
-# O que está por de traz desse serviço?
+# What is behind this service?
 k get endpointslices.discovery.k8s.io -n vertical-pod-autoscaler
 NAME                                        ADDRESSTYPE   PORTS   ENDPOINTS     AGE
 vertical-pod-autoscaler-vpa-webhook-r59kl   IPv4          8000    10.244.0.23   8m42s
 
-# Quem é esse POd ( 10.244.0.23 )?
+# Who is this POd ( 10.244.0.23 )?
 k get pods -A -o wide | grep 10.244.0.23
 vertical-pod-autoscaler   vertical-pod-autoscaler-vpa-admission-controller-7f4667b6fszspr   1/1     Running   0          9m56s   10.244.0.23
 
-# Obs:
+# Note:
 #
-✔️ O Vertical Pod Autoscaler calcula novos requests
-✔️ Ele pode recriar o pod para aplicar esses valores
-✔️ Ele usa o valor de Target, não o manifesto YAML
+✔️ Vertical Pod Autoscaler calculates new requests
+✔️ It can recreate the pod to apply these values
+✔️ It uses the Target value, not the YAML manifest
 
-# Quem define o valor final?
+# Who defines the final value?
 #
-👉 É o recommender do VPA
+👉 He is the VPA recommender
+👉 Ele calcula:
 
-Ele calcula:
 Target:
   cpu: 350m
   memory: ~335Mi
 
 # EvictedPod ... to apply resource recommendation
-👉 Isso significa:
+👉 This means:
 
-✔️ VPA calculou
-✔️ VPA decidiu
-✔️ VPA matou o pod
-✔️ VPA aplicou novos requests
+✔️ VPA calculated
+✔️ VPA decided
+✔️ VPA killed the pod
+✔️ VPA applied new requests
 
-💥 O VPA NÃO reage diretamente ao OOM
+💥 VPA DOES NOT react directly to OOM
 
-❌ não diz “deu OOM → sobe pra 1GB”
-✅ diz “uso médio indica que precisa ~335Mi”
+❌ it doesn’t say “it went OOM → goes up to 1GB”
+✅ says “average usage indicates you need ~335Mi”
 
 #********************************* VPA Na prática ***********************************
 #
@@ -6241,9 +6257,9 @@ done <<< ${pod}
         cpu: 200m
         memory: 200M
 
-# Monitore os Eventos dos Pods ao vivo
-# Esse recurso não ficará notificando criacão de Pods, para esse laboratório.
-# Observer que após criados os Pod acima, não terá ação de create.
+# Monitor Pod Events live
+# This feature will not notify the creation of Pods for this laboratory.
+# Observe that after creating the Pods above, there will be no create action.
 k get events --sort-by=.lastTimestamp -w
 ...
 ...
@@ -6256,9 +6272,7 @@ stress-59788cbb7-6f9xs   1m           0Mi
 stress-59788cbb7-8lht5   0m           0Mi
 stress-59788cbb7-jxc7v   0m           0Mi
 
-
-
-# Aplciando VPA
+# Appply VPA
 cat <<EOF | k apply -f -
 apiVersion: "autoscaling.k8s.io/v1"
 kind: VerticalPodAutoscaler
@@ -6287,8 +6301,8 @@ k get vpa
 NAME         MODE       CPU    MEM     PROVIDED   AGE
 stress-vpa   Recreate   200m   200Mi   True       14s
 
-# Após a aplicação do VPA , os PODs foram interceptados e recriados.
-# Como tenho 3 Pods, fez isso um para cada Pod.
+# After applying VPA, PODs were intercepted and recreated.
+# As I have 3 Pods, I did this one for each Pod.
 k get events --sort-by=.lastTimestamp -w
 
 0s          Normal   Killing                   pod/stress-59788cbb7-8lht5            Stopping container stress
@@ -6320,8 +6334,8 @@ k get events --sort-by=.lastTimestamp -w
 0s          Normal   Started                   pod/stress-59788cbb7-wptm6            Started container stress
 
 
-# Porque Matou os Pod e os Recriou
-# O campo Recomendation dita a regra do jogo do VPA
+# Because He Killed the Pros and Created Them
+# The Recommendation field dictates the rules of the VPA game
 k describe vpa stress-vpa
 
 Status:
@@ -6352,7 +6366,7 @@ Events:
   Normal  EvictedPod  11m   vpa-updater  VPA Updater evicted Pod stress-59788cbb7-6f9xs to apply resource recommendation.
 
 
-# Gerando Carga de Stress
+# Generating Stress Load
 pod=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}' | grep '^stress-')
 while read i;
 do
@@ -6375,7 +6389,7 @@ stress-59788cbb7-9c9sv   200m         66Mi
 stress-59788cbb7-wptm6   1m           1Mi
 stress-59788cbb7-zdrzw   1m           1Mi
 
-# Observe que o VPA ja alterou o resource limits para o valor que ele mesmo prospectou.
+# Note that the VPA has already changed the resource limits to the value it proposed.
 k get pods stress-59788cbb7-9c9sv -o yaml | grep memo
     vpaUpdates: 'Pod resources updated by stress-vpa: container 0: cpu request, memory
       request, cpu limit, memory limit'
@@ -6388,17 +6402,16 @@ k get pods stress-59788cbb7-9c9sv -o yaml | grep memo
 #********************************* VPA Nginx K6 ************************************
 #
 https://grafana.com/docs/k6/latest/
+
 #
-# Gerando Carga de dados.
+# Generating data load.
 #
 # Watching
 watch -n 2 "kubectl get pod -l app=nginx -o wide"
 
-# Em outra aba
 k get events --sort-by=.lastTimestamp -w
 
-
-# Running - Gerar carga de stress
+# Running Stress
 cat > script.js <<EOF
 import http from 'k6/http';
 import { sleep, check } from 'k6';
@@ -6425,7 +6438,7 @@ EOF
 
 k6 run --insecure-skip-tls-verify script.js
 
-# Running - Gerar carga de stress
+# Running Stress - Another form
 k run --image alpine --rm -it teste-curl sh
 apk add curl
 while true; do curl -I nginx-service; done
