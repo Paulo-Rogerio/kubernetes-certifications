@@ -8404,11 +8404,11 @@ https://github.com/doitintl/kube-no-trouble
 sh -c "$(curl -sSL https://git.io/install-kubent)"
 kubent --help
 
-# Vai me mostra uma lista de coisas que podem dar problema.
-# Faz um dump e te mostra as mudancas
-# Faça a mudanca das versoes das api antes do upgrade
+# Go show me a list of things that could cause problems.
+# Make a dump and show you the changes
+# Change API versions before upgrading
 
-# Quero atualizar para 1.35
+# I want to update to 1.35
 kubent -t 1.35
 10:44AM INF >>> Kube No Trouble `kubent` <<<
 10:44AM INF version 0.7.3 (git sha 57480c07b3f91238f12a35d0ec88d9368aae99aa)
@@ -8426,27 +8426,27 @@ kubent -t 1.35
 10:45AM INF Loaded ruleset name=deprecated-1-32.rego
 10:45AM INF Loaded ruleset name=deprecated-future.rego
 
-# Observe que passou liso, entao o cluster não vai quebrar no processo de Upgrade.
+# Note that it went smoothly, so the cluster will not break during the Upgrade process.
 
-#************************ Como Simular kubent Com Mudancas **************************
+#************************ How to Simulate Kubent With Changes **************************
 #
-# Pegue a versao o flow suportada
+# Get the supported flow version
 kubectl api-resources | grep flow
 flowschemas                                      flowcontrol.apiserver.k8s.io/v1   false        FlowSchema
 prioritylevelconfigurations                      flowcontrol.apiserver.k8s.io/v1   false        PriorityLevelConfiguration
 
-# O flowcontrol.apiserver.k8s.io é o mecanismo de API Priority and Fairness (APF) do Kubernetes.
+# O flowcontrol.apiserver.k8s.io is the mechanism of API Priority and Fairness (APF) do Kubernetes.
 #
-# Ele controla:
-👉 quem pode consumir a API
-👉 quanto cada cliente pode consumir
-👉 como a fila de requisições é organizada
-👉 proteção contra overload do kube-apiserver
+# It controls:
+👉 who can consume the API
+👉 how much each customer can consume
+👉 how the request queue is organized
+👉 kube-apiserver overload protection
 
-# Em resumo:
-👉 O APF impede que um cliente “afogue” a API do Kubernetes.
+# In summary:
+👉 APF prevents a client from “throttling” the Kubernetes API.
 
-# Supondo que esteja rodando o cluster na 1.31 e quisesse atualizar para 1.32
+# Supposing you are running the cluster on 1.31 and want to upgrade to 1.32
 kubent -t 1.32
 4:54PM INF >>> Kube No Trouble `kubent` <<<
 4:54PM INF version 0.7.3 (git sha 57480c07b3f91238f12a35d0ec88d9368aae99aa)
@@ -8481,7 +8481,7 @@ https://github.com/msfidelis/kubedump
 
 ```bash
 
-# Produtos Deployados No momento do Upgrade
+# Deployed Products At the Time of Upgrade
 k get nodes -o wide
 NAME       STATUS   ROLES           AGE   VERSION   INTERNAL-IP     EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION       CONTAINER-RUNTIME
 master01   Ready    control-plane   89d   v1.34.4   10.100.100.11   <none>        Ubuntu 22.04.5 LTS   5.15.0-177-generic   containerd://1.7.28
@@ -8515,11 +8515,12 @@ https://docs.aws.amazon.com/eks/latest/userguide/update-cluster.html
 
 https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 
-# Para esse laboratório o Cluster foi criado via kubeadm, pois no exame será abordado esse cenário.
+# For this laboratory, the Cluster was created via kubeadm, as this scenario will be covered in the exam.
 #
-# Todos os comandos listados abaixo devem ser executados no master ( control plane )
+# All commands listed below must be executed on the master (control plane)
 #
-# Mostra as versoes disponiveis
+# Shows available versions
+#
 apt list -a kubeadm
 Listing... Done
 kubeadm/unknown 1.34.8-1.1 amd64 [upgradable from: 1.34.4-1.1]
@@ -8532,17 +8533,17 @@ kubeadm/unknown 1.34.2-1.1 amd64
 kubeadm/unknown 1.34.1-1.1 amd64
 kubeadm/unknown 1.34.0-1.1 amd64
 
-# Meu repositório aponta para 1.34, então os upgrades de Minio Version fica confinado a essa versão.
+# My repository points to 1.34, so Minio Version upgrades are confined to that version.
 
-# Atuallizar minha lista de repositorio.
-# Estou emitindo os comandos logado como root
+# Update my repository list.
+# I am issuing the commands logged in as root
 
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.35/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
 echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.35/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list
 apt-get update -y
 
-# Liste novamente as versões disponíveis
+# Re-list available versions
 apt list -a kubeadm
 Listing... Done
 kubeadm/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
@@ -8553,7 +8554,7 @@ kubeadm/unknown 1.35.1-1.1 amd64
 kubeadm/unknown 1.35.0-1.1 amd64
 kubeadm/now 1.34.4-1.1 amd64 [installed,upgradable to: 1.35.5-1.1]
 
-# Ao logar na máquina o próprio Ubuntu que mostra que ele precisam ser atualizado.
+# When logging into the machine, Ubuntu itself shows that it needs to be updated.
 
 Expanded Security Maintenance for Applications is not enabled.
 
@@ -8575,9 +8576,10 @@ kubectl/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
 kubelet/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
 kubernetes-cni/unknown 1.8.0-1.1 amd64 [upgradable from: 1.7.1-1.1]
 
-# Se simplismente rodar o upgrade será ignorado os pacotes ( kubeadm kubectl kubelet )
-# POis os mesmos estão marcado como ( Hold ), para não atualizar.
-# Nessa etapa garanto o upgrade de outros pacotes
+# If you simply run the upgrade, the packages will be ignored ( kubeadm kubectl kubelet )
+# Because they are marked as (Hold), so as not to update.
+# At this stage I guarantee the upgrade of other packages
+#
 apt upgrade
 
 Reading package lists... Done
@@ -8601,51 +8603,53 @@ Need to get 188 MB of archives.
 After this operation, 195 MB of additional disk space will be used.
 Do you want to continue? [Y/n] Y
 
-# Os pacotes não foram atualizados
+# Packages have not been updated
 kubectl version
 Client Version: v1.34.4
 Kustomize Version: v5.7.1
 Server Version: v1.34.4
 
-# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
-# - kubelet.service
-# - containerd.service
+# NOTE: If a suggestion window for restarting services appears at the time of the upgrade, deselect the options related to:
+👉 - kubelet.service
+👉 - containerd.service
 
-# Listar os pacotes a serem atualzidos
+# List packages to be updated
 apt list --upgradable
 Listing... Done
 kubeadm/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
 kubectl/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
 kubelet/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
 
-# Como checar os pacotes marcados como Hold
-# Ao emitir o comando abaixo, os pacotes iniciados com ( hi ) estão marcados para não serem atualziados.
+# How to check packages marked as Hold
+# When issuing the command below, packages starting with ( hi ) are marked not to be updated.
+#
 dpkg -l | grep kube
 hi  kubeadm                          1.34.4-1.1                              amd64        Command-line utility for administering a Kubernetes cluster
 hi  kubectl                          1.34.4-1.1                              amd64        Command-line utility for interacting with a Kubernetes cluster
 hi  kubelet                          1.34.4-1.1                              amd64        Node agent for Kubernetes clusters
 ii  kubernetes-cni                   1.7.1-1.1                               amd64        Binaries required to provision kubernetes container networking
 
-# Devo marcar todos como unhold?
-# NÃO !!!
-# Obs.: Nesse primeiro momento apenas o kubeadm
+# Should I mark everyone as unhold?
+# NO !!!
+# Note: At first only kubeadm
 
 apt-mark unhold kubeadm
 Canceled hold on kubeadm.
 
-# Ao ficar marcado com unhold seu status muda para ( ii )
+# When marked with unhold your status changes to (ii)
+#
 dpkg -l | grep kube
 ii  kubeadm                          1.34.4-1.1                              amd64        Command-line utility for administering a Kubernetes cluster
 hi  kubectl                          1.34.4-1.1                              amd64        Command-line utility for interacting with a Kubernetes cluster
 hi  kubelet                          1.34.4-1.1                              amd64        Node agent for Kubernetes clusters
 ii  kubernetes-cni                   1.7.1-1.1                               amd64        Binaries required to provision kubernetes container networking
 
-# Atualizando kubeadm
+# Updating kubeadm
 apt install kubeadm
 
-# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
-# - kubelet.service
-# - containerd.service
+# NOTE: If a suggestion window for restarting services appears at the time of the upgrade, deselect the options related to:
+👉 kubelet.service
+👉 containerd.service
 
 kubeadm version
 kubeadm version: &version.Info{Major:"1", Minor:"35", EmulationMajor:"", EmulationMinor:"", MinCompatibilityMajor:"", MinCompatibilityMinor:"", GitVersion:"v1.35.5", GitCommit:"6636cbce3bbef91ff61d36658757179426f9e1b2", GitTreeState:"clean", BuildDate:"2026-05-12T09:53:04Z", GoVersion:"go1.25.9", Compiler:"gc", Platform:"linux/amd64"}
@@ -8698,14 +8702,14 @@ kubeadm upgrade apply v1.35.5
 [upgrade] Now please proceed with upgrading the rest of the nodes by following the right order.
 
 
-# Mesmo após o Upgrade ainda mostra a versão antiga
+# Even after Upgrade it still shows the old version
 kubectl get nodes
 NAME       STATUS   ROLES           AGE   VERSION
 master01   Ready    control-plane   89d   v1.34.4
 worker01   Ready    worker          89d   v1.34.4
 
-# Atualizando o Cluster
-# Esse parametro é necessário porque está usando emptyDir (storage local efêmero).
+# Updating the Cluster
+# This parameter is necessary because you are using emptyDir (ephemeral local storage).
 kubectl drain master01 --ignore-daemonsets --delete-emptydir-data
 
 Warning: ignoring DaemonSet-managed Pods: kube-flannel/kube-flannel-ds-qxqqp, kube-system/kube-proxy-qm6qq, metallb-system/metallb-speaker-lsp9j
@@ -8715,14 +8719,15 @@ pod/metallb-controller-765c495b75-c757j evicted
 pod/metrics-server-755bdffd6c-trrcm evicted
 node/master01 drained
 
-# Atualize os demias pacotes
+# Update other packages
 apt-mark unhold kubectl kubelet
 Canceled hold on kubectl.
 Canceled hold on kubelet.
 
-# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
-# - kubelet.service
-# - containerd.service
+# NOTE: If a suggestion window for restarting services appears at the time of the upgrade, deselect the options related to:
+👉 kubelet.service
+👉 containerd.service
+
 apt install kubectl kubelet
 apt-mark hold kubectl kubelet kubeadm
 
@@ -8732,7 +8737,7 @@ Client Version: v1.35.5
 Kustomize Version: v5.7.1
 Server Version: v1.35.5
 
-# Agora sim Reinici o Servico
+# Now Restart the Service
 systemctl restart kubelet
 
 kubectl get nodes
@@ -8740,7 +8745,7 @@ NAME       STATUS                     ROLES           AGE   VERSION
 master01   Ready,SchedulingDisabled   control-plane   89d   v1.35.5
 worker01   Ready                      worker          89d   v1.34.4
 
-# No processo de Upgrade o kubernets marca o node para não receber schedule.
+# In the Upgrade process, Kubernetes marks the node to not receive a schedule.
 kubectl uncordon master01
 node/master01 uncordoned
 
@@ -8758,15 +8763,15 @@ worker01   Ready    worker          89d   v1.34.4
 
 ```bash
 
-# De forma semelhante que foi feito o upgrade no Control Plane, será seguido aqui:
-# - checar pacotes unhold
-# - atualizar S.O
-# - marcar inicialmente apenas kubeadm com unhold
-# - atualizar images ( kubeadm upgrade )
-# - drain
-# - atualizar demais componentes ( kubect e kubelet )
-# - uncordon
-# - restart
+# In a similar way to the Control Plane upgrade, it will be followed here:
+# -check unhold packages
+# -update OS
+# -initially mark only kubeadm with unhold
+# -update images ( kubeadm upgrade )
+# -drain
+# -update other components (kubect and kubelet)
+# -uncordon
+# -restart
 
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.35/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
@@ -8774,7 +8779,7 @@ echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
 apt-get update -y
 
 
-# Liste as versões disponíveis
+# List available versions
 apt list -a kubeadm
 Listing... Done
 kubeadm/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
@@ -8785,19 +8790,20 @@ kubeadm/unknown 1.35.1-1.1 amd64
 kubeadm/unknown 1.35.0-1.1 amd64
 kubeadm/now 1.34.4-1.1 amd64 [installed,upgradable to: 1.35.5-1.1]
 
-# Como checar os pacotes marcados como Hold
-# Ao emitir o comando abaixo, os pacotes iniciados com ( hi ) estão marcados para não serem atualziados.
+# How to check packages marked as Hold
+# When issuing the command below, packages starting with ( hi ) are marked not to be updated.
 dpkg -l | grep kube
 hi  kubeadm                          1.34.4-1.1                              amd64        Command-line utility for administering a Kubernetes cluster
 hi  kubectl                          1.34.4-1.1                              amd64        Command-line utility for interacting with a Kubernetes cluster
 hi  kubelet                          1.34.4-1.1                              amd64        Node agent for Kubernetes clusters
 ii  kubernetes-cni                   1.7.1-1.1                               amd64        Binaries required to provision kubernetes container networking
 
-# Atuallize o S.O
+# Upgrade S.O
 apt upgrade
 
-# Listar os pacotes a serem atualzidos
-# Aqui deve mostrar apenas os pacotes ( hold )
+# List packages to be updated
+# Here it should only show packages (hold)
+#
 apt list --upgradable
 Listing... Done
 kubeadm/unknown 1.35.5-1.1 amd64 [upgradable from: 1.34.4-1.1]
@@ -8817,14 +8823,14 @@ Canceled hold on kubeadm.
 # Atualizando kubeadm
 apt install kubeadm
 
-# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
-# - kubelet.service
-# - containerd.service
+# NOTE: If a suggestion window for restarting services appears at the time of the upgrade, deselect the options related to:
+👉 kubelet.service
+👉 containerd.service
 
 kubeadm version
 kubeadm version: &version.Info{Major:"1", Minor:"35", EmulationMajor:"", EmulationMinor:"", MinCompatibilityMajor:"", MinCompatibilityMinor:"", GitVersion:"v1.35.5", GitCommit:"6636cbce3bbef91ff61d36658757179426f9e1b2", GitTreeState:"clean", BuildDate:"2026-05-12T09:53:04Z", GoVersion:"go1.25.9", Compiler:"gc", Platform:"linux/amd64"}
 
-# Diferente do control plane que tem o plan , aqui deve-se emitir diretamente o upgrade node.
+# Unlike the control plane that has the plan , here you must directly issue the upgrade node.
 # kubeadm upgrade
 kubeadm upgrade node
 [upgrade] Reading configuration from the "kubeadm-config" ConfigMap in namespace "kube-system"...
@@ -8837,11 +8843,11 @@ W0521 06:14:53.191140   37001 utils.go:69] The recommended value for "bindAddres
 ...
 ...
 
-# Ataulize os demais componentes.
+# Update the other components.
 apt-mark unhold kubectl kubelet
 
-# Obs.:
-# Conectar no controlPlane e fazer o drain no worker01
+# Note:
+# Connect to controlPlane and drain worker01
 #
 kubectl drain worker01 --ignore-daemonsets --delete-emptydir-data
 evicting pod metallb-system/metallb-controller-765c495b75-4rfdm
@@ -8860,12 +8866,12 @@ evicting pod local-path-storage/local-path-storage-local-path-provisioner-f555d4
 error when evicting pods/"nginx-1" -n "default" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
 error when evicting pods/"nginx-0" -n "default" (will retry after 5s): Cannot evict pod as it would violate the pod's disruption budget.
 
-# Tenho Pods com PDB habilitado.
+# I have Pods with PDB enabled.
 kubectl get pdb -A
 NAMESPACE   NAME        MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
 default     nginx-pdb   N/A             0                 0                     76d
 
-# Deletar PDB
+# Delete PDB
 kubectl delete pdb nginx-pdb -n default
 
 kubectl drain worker01 --ignore-daemonsets --delete-emptydir-data
@@ -8877,12 +8883,12 @@ pod/nginx-0 evicted
 pod/nginx-1 evicted
 node/worker01 drained
 
-# Atualize os pacotes do Worker01
+# Upgrade packages in Worker01
 apt install kubectl kubelet
 
-# OBS.: Se no momento do upgrade aparecer janela de sugestao para reinicio dos servicos, desmaque as opçoes relacionadas a:
-# - kubelet.service
-# - containerd.service
+# NOTE: If a suggestion window for restarting services appears at the time of the upgrade, deselect the options related to:
+👉 kubelet.service
+👉 containerd.service
 
 dpkg -l | grep kube
 ii  kubeadm                          1.35.5-1.1                                       amd64        Command-line utility for administering a Kubernetes cluster
@@ -8890,23 +8896,23 @@ ii  kubectl                          1.35.5-1.1                                 
 ii  kubelet                          1.35.5-1.1                                       amd64        Node agent for Kubernetes clusters
 ii  kubernetes-cni                   1.8.0-1.1                                        amd64        Binaries required to provision kubernetes container networking
 
-# Marque os pacotes novamente com hold
+# Mark packets again with hold
 apt-mark hold kubectl kubelet kubeadm
 kubectl set on hold.
 kubelet set on hold.
 kubeadm set on hold.
 
-# Agora sim Reinici o Servico
+# Now Restart the Service
 systemctl restart kubelet
 
-# Obs.:
-# Os comandos abaixo deve ser executado no control plane
+# Note:
+# The commands below must be executed in the control plane
 kubectl get nodes
 NAME       STATUS                     ROLES           AGE   VERSION
 master01   Ready,SchedulingDisabled   control-plane   89d   v1.35.5
 worker01   Ready                      worker          89d   v1.34.4
 
-# No processo de Upgrade o kubernets marca o node para não receber schedule.
+# In the Upgrade process, Kubernetes marks the node to not receive a schedule.
 kubectl uncordon worker01
 node/worker01 uncordoned
 
@@ -8926,9 +8932,9 @@ https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
 
 https://kubernetes.io/docs/concepts/containers/images/#imagepullbackoff
 
-# Geralmente causado por problema na aplicação ( problema no container ),
-# O processo startado pelo command está retornando alguma coisa diferente de 0
-# E um tipo de erro que consegue ser mostrado nos logs do Pod.
+# Usually caused by an application problem (container problem),
+# The process started by the command is returning something other than 0
+# And a type of error that can be shown in the Pod logs.
 
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
@@ -8962,10 +8968,10 @@ chashloop-5c5b77669f-hbrfz   0/1     CrashLoopBackOff   1 (3s ago)   20s
 chashloop-5c5b77669f-qqsp5   0/1     CrashLoopBackOff   1 (1s ago)   20s
 
 
-# Describe no Pod
+# Describe Pod
 k describe pod chashloop-5c5b77669f-qqsp5
 
-# O describe irá mostrar o status do container, e o comando que ele ta executando
+# The describe will show the status of the container, and the command it is executing
 
 Controlled By:  ReplicaSet/chashloop-5c5b77669f
 Containers:
@@ -8989,7 +8995,7 @@ Containers:
     Ready:          False
 
 
-# Os logs podem ser consultados tbm
+# Logs can also be consulted
 
 k logs chashloop-5c5b77669f-qqsp5
 ls: abacate: No such file or directory
@@ -9000,7 +9006,7 @@ ls: abacate: No such file or directory
 # 🚀 Dicas - ImagePullBackOff
 
 ```bash
-# Não consegue fazer o pull da imagem
+# Unable to pull the image
 
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
@@ -9034,7 +9040,7 @@ imagepullerror-7bfdbb568d-52kgd   0/1     ErrImagePull   0          11s   10.244
 imagepullerror-7bfdbb568d-82w45   0/1     ErrImagePull   0          11s   10.244.1.9    prgs-worker   <none>           <none>
 imagepullerror-7bfdbb568d-dbk5b   0/1     ErrImagePull   0          11s   10.244.1.8    prgs-worker   <none>           <none>
 
-# OBS.: Como ele não transicionou 1/1 o pod nao gera log, entao devo fazer por describe para identificar o que rolou.
+# NOTE: As it did not transition 1/1, the pod does not generate a log, so I must use describe to identify what happened.
 
 k describe pod imagepullerror-7bfdbb568d-dbk5b
 
@@ -9043,7 +9049,7 @@ iled to resolve reference "docker.io/library/alpine:paulera": docker.io/library/
   Normal   BackOff    10s (x6 over 2m3s)  kubelet            Back-off pulling image "alpine:paulera"
   Warning  Failed     10s (x6 over 2m3s)  kubelet            Error: ImagePullBackOff
 
-# Erros + comuns
+# Common errors
 👉  Certificado https do registry privado
 👉  Se o registry usa um certificado auto assinado, esse certificado deve ser importado para dentro do node.
 👉  Autenticação
