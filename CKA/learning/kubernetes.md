@@ -6449,21 +6449,21 @@ while true; do curl -I nginx-service; done
 # 🚀 Create Object - CNI
 
 ```bash
-# CNI é diferente entre os cluster ( AWS / Azure )
-# CNI é uma especifiçao de como a rede deve se comportar num cluster K8S.
-# Isso gera uma grande diversidade de implementaçoes, sendo que cada cloud provider tem suas necessidades para ser atendida.
+# CNI is different between clusters (AWS /Azure)
+# CNI is a specification of how the network should behave in a K8S cluster.
+# This generates a great diversity of implementations, with each cloud provider having its own needs to be met.
 
-# Entao isso não pode ser implementado pelo core do código k8s e sim pelo vendor que vai entregar o k8s como serviço para vc.
+# So this cannot be implemented by the k8s code core, but by the vendor that will deliver k8s as a service to you.
 
-# Um pod precisa comunicar-se com outro pod independente em qual node estiver rodando , sem usar nat.
-# Um daemonset tem que ter a capacidade de comunicar-se diretamente com o pod
-# CNI geralmente é um daemonset que roda em cada no do cluster
+# A pod communicates with another pod regardless of which node it is running on, without using nat.
+# A daemonset must have the ability to communicate directly with the pod.
+# CNI is usually a daemonset that runs on each node in the cluster
 
 k get pods -n kube-system -o wide | grep kindnet
 
 kindnet-7npgk   1/1     Running   0          4h50m   172.17.0.2   prgs-control-plane  <none>           <none>
 
-# Criando um Deployment e um Service
+# Creating a Deployment and a Service
 k create deployment --image=nginx nginx
 k create service clusterip nginx --tcp=80:80
 
@@ -6471,7 +6471,7 @@ k get pods -o wide
 NAME                     READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
 nginx-66686b6766-xgt78   1/1     Running   0          71s   10.244.0.32   prgs-control-plane   <none>           <none>
 
-# Listando as Interface no Host
+# Listing the Interfaces on the Host
 docker exec prgs-control-plane bash -c "ip a | grep veth"
 
 3: veth82067b25@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
@@ -6511,46 +6511,46 @@ docker exec prgs-control-plane bash -c "ip a | grep veth"
 33: veth8b8a115d@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000
     inet 10.244.0.1/32 scope global veth8b8a115d
 
-# Porque se cria tanta interface de rede no Host? Não Conflita?
-👉 Porque cada pod precisa de uma "placa de rede virtual" própria.
-👉 No Kubernetes, um pod não compartilha a interface do node diretamente.
-👉 Recurso que está mapeado a um Network namespace no nível do kernel do Host ( isola a rede ).
-👉 Então o kernel cria um veth pair:
+# Why are so many network interfaces created on the Host? No Conflict?
+👉 Because each pod needs its own "virtual network card".
+👉 In Kubernetes, a pod does not share the node interface directly.
+👉 Resource that is mapped to a Network namespace at the host kernel level (isolates the network).
+👉 Then the kernel creates a veth pair:
 
 [pod netns] eth0 <------> vethXXXX [node]
 
-👉 É literalmente um “cabo virtual Ethernet”.
-👉 uma ponta fica no namespace do pod a outra ponta fica no node.
-👉 o tráfego entra por um lado e sai pelo outro
-👉 ponta da interface no node/container
+👉 It is literally a “virtual Ethernet cable”.
+👉 one end is in the pod namespace, the other end is in the node.
+👉 traffic enters one side and leaves the other
+👉 edge of the interface on the node/container
 
-# Esses IPs iguais NÃO conflitam?
+# Do these same IPs NOT conflict?
 👉 IP representa SOMENTE este endpoint.
-👉 Sem subnet /32
+👉 No /32 subnet
 
-# Porque Linux permite o MESMO IP em interfaces diferentes?
-👉 São rotas point-to-point
-👉 usam policy routing
-👉 usam namespaces
-👉 ou são usados como next-hop internos do CNI
+# Why does Linux allow the SAME IP on different interfaces?
+👉 Are routes point-to-point
+👉 used policy routing
+👉 used namespaces
+👉 or are used as internal CNI next-hop
 
 # Ex:
 inet 10.244.0.1/32 scope global vethXXXX
 
-# De forma prática
+# In a practical way
 pod A <-> veth A usa 10.244.0.1
 pod B <-> veth B usa 10.244.0.1
 
-pod1 ===== fio privado ===== node
-pod2 ===== fio privado ===== node
-pod3 ===== fio privado ===== node
+pod1 ===== network private ===== node
+pod2 ===== network private ===== node
+pod3 ===== network private ===== node
 
-👉 cada pod precisa de stack TCP/IP própria
-👉 isolamento de rede
-👉 firewall independente
-👉 roteamento independente
-👉 policy independente
-👉 observabilidade independente
+👉 each pod needs its own TCP/IP stack
+👉 network isolation
+👉 independent firewall
+👉 independent routing
+👉 independent policy
+👉 independent Observability
 
 1 pod = 1 netns = 1 eth0 = 1 veth pair
 
@@ -6564,11 +6564,11 @@ nginx-66686b6766-xgt78   1/1     Running   0          24h   10.244.0.32   prgs-c
 
 
 
-# Obs.:
-# O 10.244.0.1/32 que você viu NÃO é o IP do pod.
-# Esse normalmente é IP da bridge/rota usada pelo CNI.
+# Note:
+# The 10.244.0.1/32 you saw is NOT the pod's IP.
+# This is normally the IP of the bridge/route used by the CNI.
 #
-# Descobrir a outra ponta do veth
+# Discover the other end of veth
 docker exec prgs-control-plane bash -c "ip link"
 
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
@@ -6613,9 +6613,10 @@ docker exec prgs-control-plane bash -c "ip link"
     link/ether 6a:7b:2e:1f:68:11 brd ff:ff:ff:ff:ff:ff link-netns cni-bab69db5-ed3d-ef0e-4aae-2c8fc10d3c25
 
 # Ao ver essa informação ( veth82067b25@if2 ), esse @if2 significa que:
-- a outra ponta do par veth possui Menu 2 dentro do namespace do pod.
+👉  the other end of the veth pair has Menu 2 within the pod namespace.
+👉  It is necessary to go through CNI by CNI to know which interface is being served by the Pod.
 
-# Inspecionando CNI ( cni-aa5c9c4e-2a72-db95-c2b8-ef261bf21dc2 )
+# Inspect CNI ( cni-aa5c9c4e-2a72-db95-c2b8-ef261bf21dc2 )
 # Ex:
 docker exec prgs-control-plane bash -c "nsenter --net=/var/run/netns/cni-aa5c9c4e-2a72-db95-c2b8-ef261bf21dc2 ip link"
 
@@ -6624,32 +6625,32 @@ docker exec prgs-control-plane bash -c "nsenter --net=/var/run/netns/cni-aa5c9c4
 2: eth0@if3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
     link/ether 3a:ba:dd:52:a3:38 brd ff:ff:ff:ff:ff:ff link-netnsid 0
 
-# O que isso quer dizer?
-👉 Perceba:
+# What does this mean?
+👉 host see if2
+👉 pod  see if3
 
-# host vê if2
-# pod  vê if3
+# NOtes:
+#*********  How to identify which CNI is linked to my Pod and Service? *************
+# NOtes:
 
-# Como identificar qual CNI está vinculada ao meu Pod e Service?
-
-# Exportar Variavel
+# Export Variable
 export cnis=$(docker exec prgs-control-plane bash -c "ip link | egrep -o 'cni-[a-z0-9-]+'")
 
 # Print
 docker exec prgs-control-plane bash -c "printf '%s\n' \"${cnis}\""
 
-# Saida padrao do nsenter
+# nsenter default output
 2: eth0@if33: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default qlen 1000 link-netnsid 0
     inet 10.244.0.32/24 brd 10.244.0.255 scope global eth0
        valid_lft forever preferred_lft forever
 
 # Regex
 # (?<=inet\s)\d+(\.\d+){3}
-# (?<=...) → lookbehind positivo ( Olho para traz )
-# inet     → texto literal bate com palavra chave inet
-# \s       → um espaço em branco
-# Pego IPV4 apos esse match
-
+# (?<=...) → lookbehind Positive ( I look back )
+# inet     → tliteral text matches inet keyword
+# \s       → a blank space
+# I got IPV4 after this match
+# Ex:
 # 10.244.0.32 => Ip do Pod ( Nginx )
 
 while read -r cni;
@@ -6658,7 +6659,7 @@ do
   [[ ${match} == "10.244.0.32" ]] && echo "${cni} - ${match}"
 done <<< ${cnis}
 
-# Entao a CNI que está atendendo o Pod Nginx é:
+# So the CNI that is serving the Nginx Pod is...
 cni-bab69db5-ed3d-ef0e-4aae-2c8fc10d3c25 - 10.244.0.32
 ```
 
@@ -6673,7 +6674,7 @@ NAME             TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)              
 kube-dns         ClusterIP   10.96.0.10      <none>        53/UDP,53/TCP,9153/TCP   78m
 metrics-server   ClusterIP   10.108.129.79   <none>        443/TCP                  73m
 
-# Criando um Deployment e um Service
+# Creating a Deployment and a Servicee
 k create deployment --image=nginx nginx
 k create service clusterip nginx --tcp=80:80
 
@@ -6684,10 +6685,10 @@ search default.svc.cluster.local svc.cluster.local cluster.local
 nameserver 10.96.0.10
 options ndots:5
 
-# Quem gera esse resolv.conf?
-# O próprio kubelet
+# Who generates this resolv.conf?
+# The kubelet itself
 
-👉 Search => Definie os domínios de busca automática.
+👉 Search => Defines the automatic search domains.
 nginx.default.svc.cluster.local
 nginx.svc.cluster.local
 nginx.cluster.local
@@ -6695,18 +6696,18 @@ nginx.cluster.local
 👉 Nameserver => Ip do servidor.
 👉 options    => ndots:5
 
-# Ela controla quando um nome é considerado “absoluto” (FQDN) ou “relativo”.
-# Se o hostname tiver MENOS de 5 pontos (.), o resolver tentará aplicar os domínios do search.
+# It controls when a name is considered “absolute” (FQDN) or “relative”.
+# If the hostname has LESS than 5 dots (.), the resolver will try to apply the search domains.
 # Ex:
 # curl google.com
-# Tentará resolver...
+# Will try to resolve...
 # google.com.default.svc.cluster.local
 # google.com.svc.cluster.local
 # google.com.cluster.local
-# Tenta isso antes, de tentar isso...
+# Try this before trying this...
 # google.com
 
-# Esses sao os Pod que irão atender essas requisiçoes
+# These are the Pods that will respond to these requests
 k get endpoints -n kube-system kube-dns
 NAME       ENDPOINTS                                               AGE
 kube-dns   10.244.0.2:53,10.244.0.4:53,10.244.0.2:53 + 3 more...   14m
@@ -6715,7 +6716,7 @@ k get pods -n kube-system -o wide | grep coredns
 coredns-66bc5c9577-9wjg7                     1/1     Running   0          15m   10.244.0.2   prgs-control-plane   <none>           <none>
 coredns-66bc5c9577-t4k6n                     1/1     Running   0          15m   10.244.0.4   prgs-control-plane   <none>           <none>
 
-# Monitorando os Logs
+# Monitoring the Logs
 dns=$(k get pods -n kube-system -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}' | grep '^coredns-')
 
 while true;
@@ -6731,8 +6732,8 @@ done
 pod=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
 k exec -it $pod -- bash -c "curl nginx"
 
-# Observe que os Logs do kube-system não trazem a resolução dos Nomes
-# Como Ativar / Habilitar ( Logs e Debug )?
+# Note that the kube-system Logs do not include Name resolution
+# How to Activate /Enable (Logs and Debug)?
 
 k get cm -n kube-system coredns
 k get cm -n kube-system coredns -o yaml
@@ -6749,11 +6750,11 @@ data:
            lameduck 5s
         }
 
-# Após modificar o ConfigMap, reinicie os Pods
+# After modifying the ConfigMap, restart the Pods
 k rollout restart -n kube-system deployment coredns
 deployment.apps/coredns restarted
 
-# Execute novamente o monitoramento
+# Run monitoring again
 [INFO] 127.0.0.1:58994 - 34124 "HINFO IN 6037978408014335337.605814283789943898. udp 56 false 512" NXDOMAIN qr,rd,ra 131 0.030715552s
 [INFO] 10.244.0.18:44094 - 2374 "TXT IN _grpc_config.localhost.cluster.local. udp 65 false 1232" NXDOMAIN qr,aa,rd 147 0.000133673s
 [INFO] 10.244.0.18:53621 - 42692 "TXT IN _grpc_config.localhost. udp 51 false 1232" NOERROR qr,aa,rd,ra 40 0.000665255s
@@ -6775,14 +6776,14 @@ deployment.apps/coredns restarted
 [INFO] 10.244.0.11:50750 - 44854 "AAAA IN nginx.default.svc.cluster.local. udp 49 false 512" NOERROR qr,aa,rd 142 0.000279647s
 
 
-# Se tiver um DNS interno, resolvendo outro dominio, como fazer para esse Dominio ficar acessível no cluster?
-# Deve-se configurar um DNS Externo.
+# If you have an internal DNS, resolving another domain, how do you make this domain accessible in the cluster?
+# An External DNS must be configured.
 
 k get cm -n kube-system coredns
 k get cm -n kube-system coredns -o yaml
 k edit cm -n kube-system coredns -o yaml
 
-# Adicione um novo bloco, no meu caso o bloco chama-se "interno.prgs.corp"
+# Add a new block, in my case the block is called "interno.prgs.corp"
 
 apiVersion: v1
 data:
@@ -6819,10 +6820,10 @@ data:
         reload
     }
 
-# Reinicie os Pods
+# Restart Pods
 k rollout restart -n kube-system deployment coredns
 
-# Nesse cenário, O DNS externo ( vault.interno.prgs.corp aponta para 192.168.56.56 )
+# In this scenario, the external DNS ( vault.interno.prgs.corp points to 192.168.56.56 )
 #
 k run --image alpine --rm -it curl sh
 / # ping 192.168.56.56
@@ -6858,9 +6859,9 @@ PING vault.interno.prgs.corp (192.168.56.56): 56 data bytes
 
 ```bash
 
-# Para reproduzir esse laboratório é necessário ter uma CNI que suporta Policies. No cenários abaixo foi implementado o Kind com suporte a Cilium.
+# To reproduce this laboratory it is necessary to have a CNI that supports Policies. In the scenarios below, Kind was implemented with Cilium support.
 #
-# Subir o kind com suporte a cilium
+# Start kind with cilium support
 
 k apply -f apps
 deployment.apps/backend created
@@ -6874,33 +6875,33 @@ database-57f5bfb9c5-tfb6b   1/1     Running   0          17m   10.244.2.181   pr
 frontend-64f4b788f9-hw8hb   1/1     Running   0          17m   10.244.1.49    prgs-worker2   <none>           <none>
 
 # Frontend:
-#   - Recebe tráfego de fora, mas só pode conversar com Backend.
-#   - Não pode falar com database.
+# -Receives traffic from outside, but can only talk to Backend.
+# -Cannot talk to database.
 
 # Backend:
-#   - Recebe requisiçoes do Frontend
-#   - Pode fazer requisições para o Database.
+# -Receives requests from the Front End
+# -Can make requests to the Database.
 
 # Database:
-#   - Só recebe requisiçoes do Frontend.
+#   -Only receives requests from the Frontend.
 
 
-#******************* Frontend não consegue Chegar no Database **********************
+#******************* Frontend cannot reach Database **********************
 #
-# 1) Conectar no Database e deixar uma porta Listen ( 5432 )
+# 1) Connect to the Database and leave a Listen port (5432)
 
 k exec -it database-57f5bfb9c5-tfb6b  -- sh
 nc -lvp 5432
 listening on [::]:5432 ...
 connect to [::ffff:10.244.2.181]:5432 from [::ffff:10.244.1.49]:42587 ([::ffff:10.244.1.49]:42587)
 
-# 2) Conectar no Frontend e tentar conectar na porta ( 5432 )
+# 2) Connect to Frontend and try to connect to port (5432)
 k exec -it frontend-64f4b788f9-hw8hb  -- sh
 nc -v 10.244.2.181 5432
 10.244.2.181 (10.244.2.181:5432) open
 
-# Esse Policie aplicada permite conexão externa , mas não permite conexão intra cluster.
-# Ela bloqueia tudo, como o DNS está no range dos Pods ( 10.244.0.0/16 ) não consigo resolver nomes.
+# This applied policy allows external connection, but does not allow intra-cluster connection.
+# It blocks everything, as the DNS is in the Pods range (10.244.0.0/16) I cannot resolve names.
 #
 cat <<EOF | k apply -f -
 kind: NetworkPolicy
@@ -7163,7 +7164,7 @@ R6zl6qw7CWOuxNI=
 
 ```bash
 
-#**************** Configurando Nova Credencial Estagiário **************************
+#**************** Configuring New Credential Estagiário **************************
 #
 # Check the current Context
 k config current-context
@@ -7679,30 +7680,32 @@ No resources found in kube-system namespace.
 # 🚀 Create Object - Affinity / Node-Selector Labels
 
 ```bash
-# O Node Selector funciona como uma regra de agendamento no Kubernetes.
 #
-# Quando um workload (como Pod, Deployment, DaemonSet ou StatefulSet) é criado, a requisição é enviada para o kube-apiserver, que armazena o objeto no etcd.
+# The Node Selector works as a rule to define Pod scheduling in Kubernetes workers.
 #
-# Em seguida, o kube-scheduler identifica que existe um Pod sem node definido (Pending) e avalia em qual node ele pode ser executado.
+# When a workload (such as Pod, Deployment, DaemonSet or StatefulSet) is created, the request is sent to the kube-apiserver, which stores the object in etcd.
 #
-# Durante essa análise, o scheduler considera diversos critérios definidos no YAML e no cluster, como:
+# Next, the kube-scheduler identifies that there is a Pod without a defined node (Pending) and evaluates which node it can be run on.
+#
+# During this analysis, the scheduler considers several criteria defined in YAML and in the cluster, such as:
 
 👉 nodeSelector
 👉 nodeAffinity
 👉 taints e tolerations
-👉 recursos disponíveis no node (CPU, Memória)
-👉 políticas de scheduling
+👉 resources available on the node (CPU, Memory)
+👉 scheduling policies
 
-# Após escolher o node mais adequado, o scheduler atualiza o Pod informando em qual node ele deve rodar.
+# After choosing the most suitable node, the scheduler updates the Pod informing which node it should run on.
 #
-# Então o ReplicaSet (ou outro controller, como StatefulSet/DaemonSet) garante que os Pods necessários sejam criados, e o kubelet do node selecionado recebe a instrução para iniciar os containers.
+# Then the ReplicaSet (or another controller, such as StatefulSet/DaemonSet) ensures that the necessary Pods are created,
+# and the kubelet of the selected node receives the instruction to start the containers.
 #
 
 k get pods -n kube-system kube-scheduler-master01
 NAME                      READY   STATUS    RESTARTS      AGE
 kube-scheduler-master01   1/1     Running   0            3h23m
 
-# Listar todas as labels
+# List all labels defined on nodes.
 kubectl get nodes --show-labels | tr ',' '\n'
 NAME       STATUS   ROLES           AGE   VERSION   LABELS
 master01   Ready    control-plane   89d   v1.35.5   beta.kubernetes.io/arch=amd64
@@ -7748,13 +7751,13 @@ k get pods postgres-64f4bd66b8-tgnwj
 NAME                        READY   STATUS    RESTARTS   AGE
 postgres-64f4bd66b8-tgnwj   0/1     Pending   0          19s
 
-# O status ficará assim como pending , pois não tem essa label definda.
+# The status will be pending , as this label is not defined.
 #
-# Definindo Label
+# Defining Label
 #
 kubectl label node worker01 prgs/postgres=true
 
-# Listando todos Pods após criação da label.
+# Listing all Pods after creating the label.
 k get pods
 NAME                          READY   STATUS              RESTARTS      AGE
 nginx-0                       1/1     Running             1 (25m ago)   3h11m
@@ -7771,15 +7774,16 @@ postgres-64f4bd66b8-tgnwj     0/1     ContainerCreating   0             8m54s
 
 https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
 
-# Node Afinity => é mais flexivel !!!
-# Utilizado quando quero dar preferencia para rodar em determinado worker,
-# mas caso ele seja deployado em outro worker não tem problemas.
+# Node Afinity => is more flexible!!!
 #
-# Como é uma regra de "required" ele ficará em pendind se não bater na regra.
+# Used when I want to give preference to running on a certain worker,
+# but if it is deployed to another worker there is no problem.
 #
-# Comportamento do node selector
+# As it is a "required" rule, it will be pending if it does not meet the rule.
+#
+# Selector node behavior
 
-#************ Affinity - Comportamento Semelhante NodeSelector ***********************
+#************ Affinity - NodeSelector Similar Behavior ***********************
 #
 
 cat <<EOF | k apply -f -
@@ -7820,7 +7824,7 @@ nginx-1                       1/1     Running   1 (34m ago)   3h14m
 nginx-paulo-78455bbb4-82vkz   1/1     Running   1 (34m ago)   3h23m
 postgres-5b48bf944f-f5xl9     0/1     Pending   0             1s
 
-# OBS.: Mesmo comportamento do Node Selector
+# NOTE: Same behavior as Node Selector
 k describe pod postgres-5b48bf944f-f5xl9
 
 Conditions:
@@ -7842,9 +7846,9 @@ Events:
   ----     ------            ----  ----               -------
   Warning  FailedScheduling  28s   default-scheduler  0/2 nodes are available: 1 node(s) didn't match Pod's node affinity/selector, 1 node(s) had untolerated taint(s). no new claims to deallocate, preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
 
-#****************** Affinity - Tenta Schedular no Node Correto ***********************
+#****************** Affinity - Try Scheduling on the Correct Node ***********************
 #
-# Ele irá tentar schedular o Pod no Node que tem a label "prgs/postgres", se não achar, ele joga em qualquer um
+# It will try to schedule the Pod on the Node that has the label "prgs/postgres", if it doesn't find it, it will play on any other
 
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
@@ -7881,10 +7885,10 @@ EOF
 # - weight: 1
 #  preference:
 #
-# Esse wight é o peso como ele é um array eu consigo mensurar qual terá mais preferencia para deploy.
+# This wight is the "weight" as it is an array I can measure which one will have more preference for deployment.
 #
-# O conceito de weight no nodeAffinity serve para definir uma preferência do scheduler
-# preferred → preferência, não obrigação
+# The concept of weight in nodeAffinity is used to define a scheduler preference
+# preferred → preference, not obligation
 
 cat <<EOF | kaf -
 apiVersion: apps/v1
@@ -7936,25 +7940,24 @@ EOF
 https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#an-example-of-a-pod-that-uses-pod-affinity
 
 #
-# PodAntiAffinity é uma regra usada para evitar que determinados Pods sejam executados próximos uns dos outros.
+# PodAntiAffinity is a rule used to prevent certain Pods from running close to each other.
 #
-# Ela é muito utilizada para:
-# - alta disponibilidade
-# - distribuição de carga
-# - evitar ponto único de falha
-
-# Pegar na doc pois a sintaxe é puck e garantir as labels pois ela é a chave.
+# It is widely used to:
+# -high availability
+# -load distribution
+# -avoid single point of failure
+# Get the doc because the syntax is puck and guarantee the labels because it is the key to it working.
 #
-# Vamos deployar postgres no worker do postgres e nao quero o pod do frontend no mesmo worker
+# Let's deploy postgres to the postgres worker and I don't want the frontend pod on the same worker
 
-# Definindo Label
+# Defining Label
 #
 kubectl label node worker01 prgs/postgres=true
 kubectl label node worker01 app=database
 
-# Criando Deployment
-# A label será usada para fazer match no afinity do deployment do backend
-#
+# Creating Deployment
+# The label will be used to match the affinity of the backend deployment
+
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
 kind: Deployment
@@ -7979,14 +7982,14 @@ spec:
         name: postgres
 EOF
 
-# Listar as labels deste pod
+# List the labels of this pod
 pod=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}' | grep '^postgres-')
 
 k get pod $pod --show-labels
 NAME                        READY   STATUS    RESTARTS   AGE   LABELS
 postgres-684cb45d6-hbwth   1/1     Running   0          6s    app=database,pod-template-hash=684cb45d6
 
-# Quero que a aplicação rode próximo do banco, no mesmo worker.
+# I want the application to run close to the bank, on the same worker.
 #
 # Check
 kubectl get nodes --show-labels | grep -o app=database
@@ -7995,18 +7998,18 @@ app=database
 # Criando Deployment
 #
 # topologyKey: prgs/postgres
-# O que isso significa...
-# o Pod deve ficar no mesmo node onde existe um Pod com Label prgs/postgres
-# O topologyKey NÃO é um valor arbitrário qualquer.
-# Ele precisa referenciar uma label existente nos nodes, e todos os nodes envolvidos precisam possuir essa label.
+# What does this mean...
+# the Pod must be on the same node where there is a Pod with Label prgs/postgres
+# The topologyKey is NOT any arbitrary value.
+# It needs to reference an existing label on the nodes, and all nodes involved need to have this label.
 #
-# topologyKey usa somente a CHAVE da label do node.
-# O podAffinity não procura nodes com label app=database.
+# topologyKey uses only the node label KEY.
+# podAffinity does not look for nodes with label app = database.
 #
-# Ele procura:
-# Pods com app=database
+# It looks for:
+# Pods with app=database
 #
-# e depois usa o topologyKey para descobrir em qual “domínio/topologia” esse Pod está.
+# and then use the topologyKey to find out which “domain/topology” this Pod is in.
 #
 cat <<EOF | kaf -
 apiVersion: apps/v1
@@ -8051,9 +8054,9 @@ postgres-684cb45d6-hbwth   1/1     Running   0          53s
 # 🚀 Create Object - Affinity / PodAntiAffinity
 
 ```bash
-#****************** Affinity - Frontend Rodando em Outro Node  ***********************
+#****************** Affinity - Frontend Running on Another Node  ***********************
 #
-# Como não tenho outro node , vou remover a regra que evitar usar o node ( Control Plane ) para schedular Pods.
+# As I don't have another node, I will remove the rule that prevents using the node (Control Plane) to schedule Pods.
 #
 kubectl taint nodes master01 node-role.kubernetes.io/control-plane:NoSchedule-
 
@@ -8102,22 +8105,22 @@ postgres-684cb45d6-hbwth    1/1     Running   0          13m   10.244.1.162   wo
 # 🚀 Create Object - Affinity / Tolerations
 
 ```bash
-| Tipo             | Comportamento           |
-| ---------------- | ----------------------- |
-| NoSchedule       | Não agenda novos Pods   |
-| PreferNoSchedule | Evita, mas pode agendar |
-| NoExecute        | Remove Pods já rodando  |
+| Type             | Behavior                    |
+| ---------------- | --------------------------- |
+| NoSchedule       | Does not schedule new Pods  |
+| PreferNoSchedule | Avoid, but you can schedule |
+| NoExecute        | Remove Pods already running |
 
-# Ensure no workloads are scheduled on control-plane nodes.
-# Garantindo que nenhum pod sera schedulado nos control-plane.
-# A menos que ele tenha toleration correspondente.
+# Ensure that workloads are scheduled on control-plane nodes.
+# Guaranteeing that no pod will be scheduled in the control-plane.
+# Unless it has corresponding tolerance.
 
 k taint nodes master01 node-role.kubernetes.io/control-plane=:NoSchedule
 k describe node master01 | grep Taint
 
-# O que o toleration?
-# Isso declarado no manifesto garante que o Pod possa ser schedulado no control-plane por ex,
-# mesmo que tenha um taint
+# What is tolerance?
+# This declared in the manifest ensures that the Pod can be scheduled in the control-plane e.g.
+# even if it has a taint
 
 tolerations:
 - key: "node-role.kubernetes.io/control-plane"
@@ -8125,25 +8128,25 @@ tolerations:
   effect: "NoSchedule"
 
 
-# E se meu taint for "NoExecute" ?
-# O efeito NoExecute faz duas coisas:
-# Impede que novos Pods sejam agendados
-# Remove Pods que já estão rodando e não toleram o taint
+# What if my taint is "NoExecute" ?
+# The NoExecute effect does two things:
+# Prevent new Pods from being scheduled
+# Remove Pods that are already running and do not tolerate taint
 
 👉 O Pod:
 
-# Pode ser agendado
-# Não será removido
-# Fica rodando indefinidamente
+# Can be scheduled
+# Will not be removed
+# Runs indefinitely
 
-| Taint      | Sem toleration      | Com toleration     | Com tolerationSeconds      |
-| ---------- | ------------------- | ------------------ | -------------------------- |
-| NoSchedule | Não agenda          | Agenda             | Agenda                     |
-| NoExecute  | Não agenda + remove | Agenda + permanece | Agenda + remove após tempo |
+| Taint      | With toleration      | Without toleration | With tolerationSeconds  |
+| ---------- | -------------------- | ------------------ | ----------------------- |
+| NoSchedule | No schedule          | Schedule           | Schedule                |
+| NoExecute  | No schedule + remove | schedule + remains | Schedule + remove after |
 
-
-# Definir no manifesto os workloads que pode-se usar.
-# Como os workers tem label de worker, entao os pods só serão agendados nos worker.
+# Define the workloads that can be used in the manifest.
+# As workers have a worker label, pods will only be scheduled on workers.
+#
 nodeSelector:
   node-role.kubernetes.io/worker: ""
 
@@ -8162,10 +8165,10 @@ spec:
 '
 
 
-# Voltar o padrao, para nao permitir que pods seja agendados no control plane
+# Return to default, to disallow that can be scheduled in the control plane
 kubectl taint nodes master01 node-role.kubernetes.io/control-plane:NoSchedule
 
-# Na prática para garantir que o frontend não rode nos pod da aplicação posso forcar a amizade.
+# In practice, to ensure that the frontend does not run in the application pods, I can force the friendship.
 
 cat <<EOF | kaf -
 apiVersion: apps/v1
@@ -8203,7 +8206,7 @@ spec:
         name: frontend
 EOF
 
-# Listando todos os Pods
+# Listing all Pods
 k get pod -o wide
 NAME                       READY   STATUS    RESTARTS   AGE   IP             NODE       NOMINATED NODE   READINESS GATES
 backend-58fd97f655-bqfgd   1/1     Running   0          19m   10.244.1.163   worker01   <none>           <none>
@@ -8217,15 +8220,15 @@ postgres-684cb45d6-hbwth   1/1     Running   0          20m   10.244.1.162   wor
 
 ```bash
 
-# Define regras onde o próprio scheduler irá distribuir os workloads em diferentes nodes.
+# Defines rules where the scheduler itself will distribute workloads across different nodes.
 
 https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
 
 https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#example-multiple-topologyspreadconstraints
 
-# Suponhamos que temos um deplyment com 3 replicas, quero que ele seja distribuidos em 3 nodes
+# Suppose we have a deployment with 3 replicas, I want it to be distributed across 3 nodes
 #
-# Posso usar essa mesma analogia para zonas de disponibilidades, onde posso garantir que terei replicas rodando em multi az.
+# I can use this same analogy for availability zones, where I can guarantee that I will have replicas running in multi-az.
 #
 us-east-1a
 us-east-1b
@@ -8237,34 +8240,37 @@ spec:
     topologyKey: zone
     whenUnsatisfiable: DoNotSchedule
 
-# maxSkew => Suponhamos que temos 2 nodes e meu deployment irá schedular 5 REPLICAS.
-# Na pr[atica isso quer dizer que terei 1 pod rodando por node, entao 3 pods NAO serão deployados.
+# maxSkew =>
+# Suppose we have 2 nodes and my deployment will schedule 5 REPLICAS.
+# In practice, this means that I will have 1 pod running per node, so 3 pods will NOT be deployed.
 #
-# Outro cenário => Meu "maxSkew" definido como 2, terei 2 pods por node e 1 pod ficará como pending.
+# Another scenario =>
+# My "maxSkew" set to 2, I will have 2 pods per node and 1 pod will be pending.
 #
-# Quanto maior esse numero mais soft seu deployment será em termos de como será feito o schedule
+# The higher this number, the smoother your deployment will be in terms of how the schedule will be done
 #
-# topologyKey: kubernetes.io/hostname ( Garante que essa label será unica por node )
-# Em cloud é interessante colocar por zona de disponibilidade
+# topologyKey: kubernetes.io/hostname ( Guarantees that this label will be unique per node )
+# In the cloud, it is interesting to place them by availability zone
 
-# Imagina um cenario com um deployment com 10 replicas, o padrão do k8s é criar outro replicaset
-# e geralmente ele baixa 2 pods e cria 2 pods.
+# Imagine a scenario with a deployment with 10 replicas, the k8s default is to create another replicaset
+# and usually it downloads 2 pods and creates 2 pods.
 #
-# O problema é que tanto o Deployment antigo quanto o novo possuem a mesma label (app=nginx).
-# Durante um rolling update, o scheduler pode considerar pods de revisões diferentes
-# como pertencentes ao mesmo grupo ao calcular o skew do topologySpreadConstraints,
-# já que ambos compartilham as mesmas labels.
-
-# Sem essa configuração, os pods antigos e novos podem influenciar mutuamente
-# a distribuição, causando um balanceamento inesperado durante o rollout.
+# The problem is that both the old and new Deployment have the same label (app=nginx).
+# During a rolling update, the scheduler can consider pods of different revisions
+# as belonging to the same group when calculating the skew of topologySpreadConstraints,
+# since they both share the same labels.
+#
+# Without this configuration, old and new pods can influence each other
+# distribution, causing unexpected balancing during rollout.
 
 matchLabelKeys:
   - pod-template-hash
 
-# Ao utilizar matchLabelKeys com pod-template-hash, o scheduler passa a considerar
-# apenas pods que possuem o mesmo valor de pod-template-hash (ou seja, da mesma revisão do Deployment)
-# ao calcular o skew. Assim, os pods da nova versão não interferem no balanceamento
-# dos pods da versão antiga, e vice-versa.
+# When using matchLabelKeys with pod-template-hash, the scheduler starts to consider
+# only pods that have the same pod-template-hash value (i.e. from the same Deployment revision)
+# when calculating skew.
+# Thus, the pods of the new version do not interfere with balancing
+# of the old version's pods, and vice versa.
 
 
 cat <<EOF | kaf -
@@ -8301,7 +8307,7 @@ spec:
           - "9999999999999"
 EOF
 
-# So tenho 2 nodes ( workers )
+# I only have 2 nodes (workers)
 kgn
 NAME                 STATUS   ROLES             AGE    VERSION
 prgs-control-plane   Ready    control-plane     139m   v1.32.0
@@ -8309,7 +8315,7 @@ prgs-worker          Ready    worker-apps       139m   v1.32.0
 prgs-worker2         Ready    worker-postgres   139m   v1.32.0
 
 
-# Só fez 2 deploy
+# Only made 2 deploys
 k get pod
 NAME                        READY   STATUS    RESTARTS   AGE
 frontend-77876bddc7-hcz94   0/1     Pending   0          4m41s
@@ -8318,8 +8324,8 @@ frontend-77876bddc7-qct74   0/1     Pending   0          4m41s
 frontend-77876bddc7-s7x78   1/1     Running   0          4m41s
 frontend-77876bddc7-x6f4c   1/1     Running   0          4m41s
 
-# Outro exemplo
-# 3 pods por node, então irá deployar 6 pods e 4 pods ficaram como pending por falta de worker
+# Another example
+# 3 pods per node, so 6 pods will be deployed and 4 pods are pending due to lack of worker
 
 cat <<EOF | kaf -
 apiVersion: apps/v1
@@ -8355,8 +8361,9 @@ spec:
           - "9999999999999"
 EOF
 
-# Ao fazer o describe pode-se notar que tentou usar o control-plane, mas devido a uma regra de afinidade ( toleration )
-# nenhum pod pode ser schedulado nos control-plane.
+# When doing describe you can notice that it tried to use the control-plane, but due to an affinity rule (tolerance)
+# no pods can be scheduled in the control-planes.
+#
 k describe pod frontend-c86867df9-fnjdr
   Warning  FailedScheduling  3m31s  default-scheduler  0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 2 node(s) didn't match pod topology spread constraints. preemption: 0/3 nodes are available: 1 Preemption is not helpful for scheduling, 2 No preemption victims found for incoming pod.
 
@@ -8372,15 +8379,15 @@ k rollout restart -n default deployment frontend
 # 🚀 Cluster Upgrade - Ferramentas e Boas Práticas
 
 ```bash
-# Para esse laboratório vamos usar Vms provisionadas via KVM
-# Cluster atual rodando na versao 1.34
+# For this lab we will use Vms provisioned via KVM
+# Current cluster running on version 1.34
 # Control Plane => master01
-# Control Data  => worker01
+# Control Data => worker01
 
-# OBS.:
-# Sempre uma minor por vez
+# NOTE:
+# Always one minor at a time
 #
-# Cuidado com as APIs deprecada
+# Beware of deprecated APIs
 
 https://kubernetes.io/docs/reference/using-api/deprecation-guide/
 
@@ -8391,7 +8398,7 @@ master01   Ready    control-plane   87d   v1.34.4
 worker01   Ready    worker          87d   v1.34.4
 
 # kubenet
-# Ajuda a mapear as APIs deprecadas
+# Helps to map deprecated APIs
 https://github.com/doitintl/kube-no-trouble
 
 sh -c "$(curl -sSL https://git.io/install-kubent)"
