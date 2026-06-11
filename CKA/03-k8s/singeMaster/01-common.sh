@@ -102,7 +102,7 @@ echo "======================================================"
 echo " Configure Containerd "
 echo "======================================================"
 echo
-# Listar as imagens usadas
+# List the images used
 # kubeadm config images list --kubernetes-version v1.34.0
 imagem_pause=$(kubeadm config images list --kubernetes-version v${KUBERNETES_SHORT_VERSION}.0 | grep 'pause' | awk -F/ '{print $NF}')
 

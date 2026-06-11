@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 echo "***********************************************************************"
-echo "* Definir Label nos Workers                                           *"
+echo "* Define Label for Workers                                           *"
 echo "***********************************************************************"
 echo
 

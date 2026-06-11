@@ -5,9 +5,9 @@ cd $(dirname $0)
 echo "======================================="
 read -p "Como o Kubernetes ira usar o etcd? (1) ETCD interno. (2) ETCD external : " v
 
-[[ -z ${v} || ! ${v} =~ 1|2 ]] && echo errado && exit 1;
+[[ -z ${v} || ! ${v} =~ 1|2 ]] && echo "Choose option 1 or 2" && exit 1;
 
-[[ ${v} == 1 ]] && echo "Usando ETCD: Interno" || echo "Usando ETCD: Externo"
+[[ ${v} == 1 ]] && echo "Using ETCD: Interno" || echo "Using ETCD: Externo"
 echo "======================================="
 
 source ./01-common.sh

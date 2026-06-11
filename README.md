@@ -11,8 +11,8 @@
 
 ## 🚀 Deploy Kubernetes
 
-- [Single Master](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/03-k8s/singleMaster.md)
-- [Multi Master](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/03-k8s/multiMaster.md)
+- [Single Master](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/singleMaster.md)
+- [Multi Master](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/multiMaster.md)
 
 ## 🚀 Learn ETCD
 

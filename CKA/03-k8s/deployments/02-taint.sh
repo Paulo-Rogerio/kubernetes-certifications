@@ -2,7 +2,7 @@
 
 
 echo "***********************************************************************"
-echo "* Não agenda PODs No Control Plane                                     *"
+echo "* Do not schedule PODs in the Control Plane                           *"
 echo "***********************************************************************"
 echo
 nodes=$(kubectl get nodes -o name | awk -F/ '/^node\/master/ {print $2}')
