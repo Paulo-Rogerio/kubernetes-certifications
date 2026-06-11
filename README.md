@@ -6,7 +6,8 @@
 
 ## 🚀 Deploy ETCD
 
-- [Deploy](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/etcd-deploy.md)
+- [Deploy systemD](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/etcd-deploy-systemD.md)
+- [Deploy staticPod](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/etcd-deploy-staticPod.md)
 
 ## 🚀 Deploy Kubernetes
 
@@ -17,8 +18,8 @@
 
 - [Manager Data](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/etcd-data.md)
 - [Add New Member](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/etcd-new-members.md)
-- [Backup Cluster](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/etcd-backup.md)
 - [Delete Member](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/etcd-delete-member.md)
+- [Backup Cluster](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/etcd-backup.md)
 - [Restore Cluster](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/etcd-restore-cluster.md)
 
 ## 🚀 Learn Kubernetes

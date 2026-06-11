@@ -3,7 +3,6 @@
 - [1) Vms Requisitos](#1-vms-requisitos)
 - [2) Vms Startup](#2-vms-startup)
 - [3) ETCD SystemD](#3-etcd-systemd)
-- [4) ETCD StaticPod](#4-etcd-staticpod)
 
 
 ## 1) Vms Requisitos
@@ -137,51 +136,3 @@ bash 02-list-members.sh
 The scripts for handling the **cluster**are located at: */root/kubernetes-certifications/CKA/02-etcd/etcd-manager/cluster/systemd*
 
 This implementation based on **SystemD**is just to clarify how the service behaves. I will not detail procedures here, since for **CKA**the implementation is charged and based on **POD**
-
-## 4) ETCD StaticPod
-
-
-After deploying the Vms, connect to (**master01 and master02**). For this lab we will deploy the internal **etcd**, maintained and managed by **kubernetes**via **StaticPod**.
-
-
-Connect to master01...
-
-```bash
-ssh root@master01
-cd kubernetes-certifications/CKA/02-etcd/etcd-staticPod/
-
-bash deploy.sh
-
-crictl ps -a | grep etcd
-crictl logs 992e3500eddf6
-systemctl status kubelet
-
-+------------------+---------+----------+-----------------------+----------------------------+------------+
-|        ID        | STATUS  |   NAME   |      PEER ADDRS       |        CLIENT ADDRS        | IS LEARNER |
-+------------------+---------+----------+-----------------------+----------------------------+------------+
-| 564yru980out75ut | started | master01 | https://master01:2380 | https://10.100.100.11:2379 |      false |
-| 7rurjt778iuo98tg | started | master02 | https://master02:2380 | https://10.100.100.12:2379 |      false |
-+------------------+---------+----------+-----------------------+----------------------------+------------+
-```
-
-#### NOTE: The same script serves both implementations
-
-Connect to master02 and perform a similar procedure
-
-```bash
-ssh root@master02
-cd kubernetes-certifications/CKA/02-etcd/etcd-staticPod/
-
-bash deploy.sh
-
-crictl ps -a | grep etcd
-crictl logs 992e3500eddf6
-systemctl status kubelet
-
-+------------------+---------+----------+-----------------------+----------------------------+------------+
-|        ID        | STATUS  |   NAME   |      PEER ADDRS       |        CLIENT ADDRS        | IS LEARNER |
-+------------------+---------+----------+-----------------------+----------------------------+------------+
-| 564yru980out75ut | started | master01 | https://master01:2380 | https://10.100.100.11:2379 |      false |
-| 7rurjt778iuo98tg | started | master02 | https://master02:2380 | https://10.100.100.12:2379 |      false |
-+------------------+---------+----------+-----------------------+----------------------------+------------+
-```
