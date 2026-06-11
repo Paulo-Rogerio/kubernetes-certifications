@@ -92,8 +92,8 @@ sh remove.sh
 
 For teaching purposes we have 2 options to run **etcd**:
 
--As a service **SystemD**
--As **Static Pod**.
+* As a service **SystemD**
+* As **Static Pod**.
 
 To understand how the service works, these 2 implementations were created.
 
