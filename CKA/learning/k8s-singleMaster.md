@@ -1,9 +1,9 @@
 # 🚀 Learn K8S
 
--[1) Vms Requirements](#1-vms-requirements)
+- [1) Vms Requirements](#1-vms-requirements)
 - [2) Vms Startup](#2-vms-startup)
 - [3) Deploy Kubernetes Single Master](#3-deploy-kubernetes-single-master)
--[4) Cluster Information](#4-cluster-information)
+- [4) Cluster Information](#4-cluster-information)
 
 
 ## 1) Vms Requirements
