@@ -91,8 +91,10 @@ sh remove.sh
 ## 3) ETCD SystemD
 
 For teaching purposes we have 2 options to run **etcd**:
+
 -As a service **SystemD**
 -As **Static Pod**.
+
 To understand how the service works, these 2 implementations were created.
 
 After deploying the Vms, connect to (**master01 and master02**).
