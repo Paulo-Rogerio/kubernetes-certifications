@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+echo "####################################################"
+echo " This script must be executed only in node master01 "
+echo "####################################################"
 
 HOSTS=("master01" "master02")
 

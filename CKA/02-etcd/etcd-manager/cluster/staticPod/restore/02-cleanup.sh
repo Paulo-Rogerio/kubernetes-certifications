@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+echo "#################################################"
+echo " This script should be executed on only 1 node.  "
+echo "#################################################"
+
 members=("master01" "master02" "master03")
 
 for i in ${members[@]}

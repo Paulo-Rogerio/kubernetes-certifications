@@ -8,30 +8,30 @@
 
 ## 1) Vms Requisitos
 
-Para execução desse laboratório é necessário ter o **KVM** instalado no host, pois ele irá emular todos as vms necessárias.
+To run this lab it is necessary to have **KVM**installed on the host, as it will emulate all the necessary vms.
 
 #### Imagens Cloud
 
-É necessário baixar a imagem no formato **qcow2** que já vem adaptada para rodar com cloud-init. [Download Oficial](https://cloud-images.ubuntu.com/).
+It is necessary to download the image in **qcow2**format, which is already adapted to run with cloud-init. [Official Download](https://cloud-images.ubuntu.com/).
 
-#### Diretório das Imagens
+#### Image Directory
 
-Esse script assumi que as imagens devam estar localizadas em **/var/lib/libvirt/images/**.
+This script assumes that the images must be located in **/var/lib/libvirt/images/**.
 
 #### Chave SSH
 
-É necessário ter um par de chaves SSH do tipo **id_ed25519** (privada e pública) moderno e seguro, baseado no algoritmo Ed25519 para autenticação sem senha nos servidores.
+It is necessary to have a modern and secure SSH key pair of type **id_ed25519**(private and public), based on the Ed25519 algorithm for passwordless authentication on servers.
 
 ```bash
 ssh-keygen -t ed25519 -C "seu_email@exemplo.com"
 ```
 
-#### Adicionar Entradas no seu /etc/hosts
+#### Add Entries to your /etc/hosts
 
-Isso irá ajudar muito na conexão SSH
+This will help a lot with SSH connection
 
 ```bash
-# Estudos Cka
+# Studies Cka
 #==============================
 10.100.100.10       vip
 10.100.100.11       master01
@@ -42,15 +42,15 @@ Isso irá ajudar muito na conexão SSH
 
 #### Password Default todas as Vms
 
-Todas as vms tem uma senha default já definida no cloud-init **123456**.
+All VMs have a default password already defined in cloud-init **123456**.
 
 ## 2) Vms Startup
 
-[Clone o Repositório](https://github.com/Paulo-Rogerio/kubernetes-certifications.git), e navegue no diretório **01-kvm**. Nesse diretório, você irá encontrar um arquivo **hosts.txt**, ele é quem irá definir a quantidade de hosts que terá seu laboratório.
+[Clone the Repository](https://github.com/Paulo-Rogerio/kubernetes-certifications.git), and navigate to the **01-kvm**directory. In this directory, you will find a **hosts.txt**file, which will define the number of hosts your laboratory will have.
 
 ```bash
 #===========================================================================
-# Estudos K8S
+# Learning K8S
 #===========================================================================
 # Vm Name  |  Ram  | vCPU  |     Ip        |   Imagem Cloud Init
 #===========================================================================
@@ -58,32 +58,32 @@ Todas as vms tem uma senha default já definida no cloud-init **123456**.
 # master02   2048     3      10.100.100.12   jammy-server-cloudimg-amd64.img
 # worker01   2048     3      10.100.100.20   jammy-server-cloudimg-amd64.img
 #===========================================================================
-# Estudos ETCD
+# Learning ETCD
 #===========================================================================
 master01     2048     3      10.100.100.11    jammy-server-cloudimg-amd64.img
 master02     2048     3      10.100.100.12    jammy-server-cloudimg-amd64.img
 master03     2048     3      10.100.100.13    jammy-server-cloudimg-amd64.img
 ```
 
-O instalador já garante que essa network será criada, então **NÂO** altere o range **10.100.100.**. Essa rede é criada no modo **NAT**, para evitar qualquer tipo de conflito.
+The installer already guarantees that this network will be created, so **DO NOT**change the range **10.100.100.**. This network is created in **NAT**mode, to avoid any type of conflict.
 
-#### Iniciando Vms
+#### Starting VMS
 
-Esse utilitário já cria todo os requisitos necessários.
+This utility already creates all the necessary requirements.
 
 ```bash
 sh deploy.sh
 ```
 
-Conecte-se na Vm recém criada.
+Connect to the newly created VM.
 
 ```bash
 ssh root@master01
 ```
 
-#### Removendo Vms
+#### Removing VMS
 
-Remova as Vms após o término do laboratório.
+Remove the Vms after the lab is finished.
 
 ```bash
 sh remove.sh
@@ -91,11 +91,14 @@ sh remove.sh
 
 ## 3) ETCD SystemD
 
-Para fins didáticos temos 2 opções para rodar o **etcd**: Como serviço **SystemD**, ou como **Static Pod**. Para entender como funciona o serviço foi criado essas 2 implementações.
+For teaching purposes we have 2 options to run **etcd**:
+-As a service **SystemD**
+-As **Static Pod**.
+To understand how the service works, these 2 implementations were created.
 
-Após deployado as Vms conecte-se em (**master01 e master02**).
+After deploying the Vms, connect to (**master01 and master02**).
 
-Isso irá deployar o **etcd** externo , mantido pelo S.O e gerido pelo **systemd**.
+This will deploy the external **etcd**, maintained by the OS and managed by **systemd**.
 
 ```bash
 ssh root@master01
@@ -104,7 +107,7 @@ bash deploy-master01.sh
 systemctl status etcd
 ```
 
-Conecte-se na master02 e execute procedimento semelhante
+Connect to master02 and perform a similar procedure.
 
 ```bash
 ssh root@master02
@@ -113,11 +116,11 @@ bash deploy-master02.sh
 systemctl status etcd
 ```
 
-#### OBS.: Subimos 3 Vms , mas o etcd foi instalado em apenas 2 membros. Isso foi proposital, para aprendermos manipular o ETCD.
+#### NOTE: We uploaded 3 Vms, but etcd was installed on only 2 members. This was on purpose, so we could learn how to manipulate the ETCD.
 
-A manipulação dos dados no ETCD pode acontecer em qualquer node.
+Data manipulation in ETCD can happen on any node.
 
-Os scripts para manipulação dos **dados** ficam em: */root/kubernetes-certifications/CKA/02-etcd/etcd-manager/data*
+The scripts for manipulating **data**are located at: */root/kubernetes-certifications/CKA/02-etcd/etcd-manager/data*
 
 ```bash
 cd /root/kubernetes-certifications/CKA/02-etcd/etcd-manager/data
@@ -131,17 +134,17 @@ bash 02-list-members.sh
 +------------------+---------+----------+-----------------------+----------------------------+------------+
 ```
 
-Os scripts para manipulação do **cluster** ficam em: */root/kubernetes-certifications/CKA/02-etcd/etcd-manager/cluster/systemd*
+The scripts for handling the **cluster**are located at: */root/kubernetes-certifications/CKA/02-etcd/etcd-manager/cluster/systemd*
 
-Essa implementação baseada em **SystemD** é apenas para clarificar como se comporta o serviço. Não vou detalhar procedimentos aqui, visto que para **CKA** a implementação cobrada e baseada em **POD**
+This implementation based on **SystemD**is just to clarify how the service behaves. I will not detail procedures here, since for **CKA**the implementation is charged and based on **POD**
 
 ## 4) ETCD StaticPod
 
 
-Após deployado as Vms conecte-se em (**master01 e master02**). Para esse laboratório vamos deployar o **etcd** interno, mantido pelo e gerido pelo **kubernetes** via **StaticPod**.
+After deploying the Vms, connect to (**master01 and master02**). For this lab we will deploy the internal **etcd**, maintained and managed by **kubernetes**via **StaticPod**.
 
 
-Conecte-se na master01...
+Connect to master01...
 
 ```bash
 ssh root@master01
@@ -161,9 +164,9 @@ systemctl status kubelet
 +------------------+---------+----------+-----------------------+----------------------------+------------+
 ```
 
-#### OBS.: O mesmo script atende ambas implementações
+#### NOTE: The same script serves both implementations
 
-Conecte-se na master02 e execute procedimento semelhante
+Connect to master02 and perform a similar procedure
 
 ```bash
 ssh root@master02

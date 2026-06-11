@@ -5,24 +5,24 @@
 - [1.2) Cleanup Etcd](#12-cleanup-etcd)
 - [1.3) Restore Backup Etcd](#13-restore-backup-etcd)
 - [1.4) Replace Manifests Yaml Etcd](#14-replace-manifests-yaml-etcd)
+- [1.5) Check Restore](#15-check-restore)
 
 
 ## 1) ETCD StaticPod
 
-O procedimento abaixo irá remover todos os dados de todos os membros. Isso irá deixar o cluster inutilizável.
+The procedure below will remove all data for all members. This will leave the cluster unusable.
 
 ## 1.1) Check Status Backup Etcd
 
-Check o status do backup. Como o backup foi realizado no node **master03**, esse script identifica que o backup não está presente no host e copia para membro em questão.
+Check the backup status. As the backup was performed on node **master03**, this script identifies that the backup is not present on the host and copies it to the member in question.
+
+#### ***NOTES.: This script must be executed on each node***
 
 ```bash
 cd /root/kubernetes-certifications/CKA/02-etcd/etcd-manager/cluster/staticPod/restore
 
 sh 01-status-backup.sh
 
-#################################################
- Esse script deve ser executa a cada node
-#################################################
 +----------+----------+------------+------------+---------+
 |   HASH   | REVISION | TOTAL KEYS | TOTAL SIZE | VERSION |
 +----------+----------+------------+------------+---------+
@@ -32,13 +32,15 @@ sh 01-status-backup.sh
 
 ## 1.2) Cleanup Etcd
 
-#### OBS.: OS PROCEDIMENTOS ABAIXO PODEM SER FEITOS EM QUALQUER UM DOS MEMBROS. TODOS OS NODES SE COMUNICAM POR CHAVE.
+#### ***NOTE.: THE PROCEDURES BELOW CAN BE DONE ON ANY OF THE MEMBERS. ALL NODES COMMUNICATE BY KEY.***
 
-O kubelet sobe o *etcd** como um pod estático, o script interrompe o serviço do **kubelet** e remove os dados persistidos em **/var/lib/etcd**
+The kubelet uploads **etcd** as a static pod, the script stops the **kubelet**service and removes the data persisted in **/var/lib/etcd**
 
-O script executa isso em todos os membros do cluster: **(master01, master02 e master03)**
+The script runs this on all cluster members: **(master01, master02 and master03)**
 
 ```bash
+sh 02-cleanup.sh
+
 ○ kubelet.service - kubelet: The Kubernetes Node Agent
      Loaded: loaded (/lib/systemd/system/kubelet.service; enabled; vendor preset: enabled)
     Drop-In: /usr/lib/systemd/system/kubelet.service.d
@@ -55,17 +57,18 @@ O script executa isso em todos os membros do cluster: **(master01, master02 e ma
 
 ## 1.3) Restore Backup Etcd
 
-O processo de restore, deve ser executado **MEMBRO** por **MEMBRO**, então será necessário conectar-se em cada um dos membros e executar o script **03-rescue-backup.sh**
+The restore process must be executed **MEMBER**by **MEMBER**, so it will be necessary to connect to each member and run the script **03-rescue-backup.sh**
 
-Posso iniciar o processo de restore em qualquer um dos membros, visto que **TODOS** já estão sem o **ETCD**.
+I can start the restore process on any of the members, since **ALL**are already without the **ETCD**.
 
-#### Restore de Forma Individual em cada membro ( 03-rescue-backup.sh )
+#### Restore Individually on Each Member
 
+
+#### ***NOTES.: This script must be executed on each node***
 
 ```bash
-#################################################
- Esse script deve ser executa a cada node
-#################################################
+sh 03-rescue-backup.sh
+
 2026-02-17T15:22:28-03:00	info	snapshot/v3_snapshot.go:305	restoring snapshot	{"path": "/backup/etcd.db", "wal-dir": "/var/lib/etcd/member/wal", "data-dir": "/var/lib/etcd", "snap-dir": "/var/lib/etcd/member/snap", "initial-memory-map-size": 10737418240}
 2026-02-17T15:22:28-03:00	info	bbolt	backend/backend.go:203	Opening db file (/var/lib/etcd/member/snap/db) with mode -rw------- and with options: {Timeout: 0s, NoGrowSync: false, NoFreelistSync: true, PreLoadFreelist: false, FreelistType: , ReadOnly: false, MmapFlags: 8000, InitialMmapSize: 10737418240, PageSize: 0, NoSync: false, OpenFile: 0x0, Mlock: false, Logger: 0xc0000642d0}
 2026-02-17T15:22:28-03:00	info	bbolt	bbolt@v1.4.3/db.go:321	Opening bbolt db (/var/lib/etcd/member/snap/db) successfully
@@ -83,17 +86,15 @@ Posso iniciar o processo de restore em qualquer um dos membros, visto que **TODO
 
 ## 1.4) Replace Manifests Yaml Etcd
 
-Agora que o restore aconteceu, precisamos ajustar o **YAML** de todos os membros definindo que todos iniciariam o clsuter com **state NEW**.
+Now that the restore has happened, we need to adjust the **YAML**of all members, defining that everyone would start the cluster with **state NEW**.
 
-O script também já inicia o kubelet.
+The script also starts the kubelet.
 
+#### ***NOTES.: This script must be executed on each node***
 
 ```bash
 sh 04-replace-manifests.sh
 
-#################################################
- Esse script deve ser executa a cada node
-#################################################
 Start Kubelet....
 ```
 
@@ -102,6 +103,8 @@ crictl ps
 CONTAINER           IMAGE               CREATED             STATE               NAME                ATTEMPT             POD ID              POD                 NAMESPACE
 ac1b857294cb0       a3e246e9556e9       35 seconds ago      Running             etcd                0                   44fbcf6b6bd97       etcd-master03       kube-system
 ```
+
+## 1.5) Check Restore
 
 ```bash
 #!/usr/bin/env bash

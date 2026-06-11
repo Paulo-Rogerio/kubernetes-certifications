@@ -7,11 +7,11 @@
 
 ## 1) ETCD StaticPod
 
-Nesse material vamos mostrar como gerenciar o cluster, adicioando e removendo membros ao cluster.
+In this material we will show how to manage the cluster, adding and removing members to the cluster.
 
 ## 1.1) Add Member
 
-Conecte-se ao **member03** para iniciamos o procedimento
+Connect to **member03**to start the procedure
 
 ```bash
 ssh root@master03
@@ -20,13 +20,13 @@ cd /root/kubernetes-certifications/CKA/02-etcd/etcd-manager/cluster/staticPod/ad
 bash deploy.sh
 ```
 
-Ao finalizar o deploy será informado a seguinte mensagem.
+When the deployment is complete, the following message will be displayed.
 
-#### OBS.: O SCRIPT DEVE SER EXECUTADO EM UM MEMBRO ATIVO ( master01 ou master02 )
+#### NOTE: THE SCRIPT MUST BE RUN ON AN ACTIVE MEMBER (master01 or master02)
 
 ```bash
-Antes de executar o script que inicia o etcd como novo membro, deve-se informar ao cluster existente que
-um novo membro deseja-se se tornar membro do cluster.
+Before running the script that starts etcd as a new member, you must inform the existing cluster that
+a new member wants to become a member of the cluster.
 
 ################################################################
 
@@ -35,9 +35,9 @@ bash /root/kubernetes-certifications/CKA/02-etcd/etcd-manager/data/08-new-member
 ################################################################
 ```
 
-O script a ser executado é o **08-new-member.sh** , ele precisa notificar ao cluster a existencia de um novo membro.
+The script to be executed is **08-new-member.sh**, it needs to notify the cluster of the existence of a new member.
 
-O script se resume a isso...
+The script boils down to this...
 
 ```bash
 cat > /root/etcdctl.env <<EOF
@@ -51,14 +51,14 @@ source /root/etcdctl.env
 etcdctl member add master03 --peer-urls=https://10.100.100.13:2380
 ```
 
-Nessa altura do campeonato, **NÃO** existe nenhum pod nesse novo cluster.
+At this point in the championship, **NOT** there are any pods in this new cluster.
 
 ```bash
 crictl ps
 CONTAINER           IMAGE               CREATED             STATE               NAME                ATTEMPT             POD ID              POD                 NAMESPACE
 ```
 
-Ao executar o script solicitado **08-new-member.sh** em um dos membros, será mostrado a seguinte mensagem. O novo membro é esperado que suba com essa atribuições.
+When executing the requested script **08-new-member.sh**on one of the members, the following message will be displayed. The new member is expected to take on these duties.
 
 ```bash
 sh 08-new-member.sh
@@ -70,8 +70,7 @@ ETCD_INITIAL_ADVERTISE_PEER_URLS="https://10.100.100.13:2380"
 ETCD_INITIAL_CLUSTER_STATE="existing"
 ```
 
-
-Se observar o script **04-kubeadmcfg.sh** , ele injeta essas mesmas configuções no construtor do pod.
+If you look at the **04-kubeadmcfg.sh**script, it injects these same settings into the pod constructor.
 
 ```yaml
 ...

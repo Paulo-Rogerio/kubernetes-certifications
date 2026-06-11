@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 echo "#################################################"
-echo " Esse script deve ser executa a cada node        "
+echo " This script must be executed on each node       "
 echo "#################################################"
 
 endpoints="master01=https://10.100.100.11:2380,master02=https://10.100.100.12:2380,master03=https://10.100.100.13:2380"

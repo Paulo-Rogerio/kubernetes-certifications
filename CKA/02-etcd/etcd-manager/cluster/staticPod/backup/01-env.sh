@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+echo "####################################################"
+echo " This script must be executed only in node master03 "
+echo "####################################################"
+
 cat > /root/etcdctl.env <<EOF
 export ETCDCTL_ENDPOINTS=https://master01:2379,https://master02:2379,https://master03:2379
 export ETCDCTL_CACERT=/etc/kubernetes/pki/etcd/ca.crt

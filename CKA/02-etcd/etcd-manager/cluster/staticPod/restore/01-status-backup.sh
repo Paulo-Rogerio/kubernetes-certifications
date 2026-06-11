@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 echo "#################################################"
-echo " Esse script deve ser executa a cada node        "
+echo " This script must be executed on each node       "
 echo "#################################################"
 
 declare -A members=(

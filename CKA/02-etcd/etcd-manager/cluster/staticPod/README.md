@@ -1,6 +1,6 @@
 # Debug ETCD Kubelet
 
-Examinar saida de logs
+Examine log output
 
 ```bash
 crictl ps -a | grep etcd
@@ -10,7 +10,7 @@ systemctl status kubelet
 
 # Query
 
-Aqui defini apenas um único endpoint **master01** para consulta.
+Here I defined just a single endpoint **master01** for querying.
 
 ```bash
 cat > /root/etcdctl.env <<EOF
@@ -58,7 +58,7 @@ etcdctl endpoint health --write-out=table
 +-----------------------+--------+-------------+-------+
 ```
 
-## Reomvendo um membro
+## Remove master02 from the cluster
 
 ```bash
 sh 03-remove-member.sh 8cd2a87e18f78509
@@ -76,9 +76,10 @@ sh 02-list-members.sh
 
 ## Backup
 
-Observe que para esse tipo de manutenção os certificados são **outros**. O endpoint **master02**, foi removido, por isso não foi informado na string de conexão.
+Note that for this type of maintenance the certificates are **other**, different from those used for **query**.
+The **master02**endpoint was removed, so it was not included in the connection string.
 
-#### O disparo do backup pode ser executado em qualquer membro. Afim de testificar, o backup será executado no node ( master03 )
+#### The backup trigger can be performed on any member. In order to test, the backup will be performed on the node (master03)
 
 ```bash
 cat > /root/etcdctl.env <<EOF

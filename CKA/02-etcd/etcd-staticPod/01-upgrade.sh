@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+echo "#################################################"
+echo " This script must be executed on each node       "
+echo "#################################################"
+
 export DEBIAN_FRONTEND=noninteractive
 
 apt upgrade -y

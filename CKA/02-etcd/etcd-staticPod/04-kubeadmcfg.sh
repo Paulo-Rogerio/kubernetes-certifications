@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+echo "#################################################"
+echo " This script must be executed on each node       "
+echo "#################################################"
+
 declare -A members=(
   [10.100.100.11]="master01"
   [10.100.100.12]="master02"

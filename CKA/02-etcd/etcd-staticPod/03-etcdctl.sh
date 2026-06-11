@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+echo "#################################################"
+echo " This script must be executed on each node       "
+echo "#################################################"
+
 export DEBIAN_FRONTEND=noninteractive
 
 apt install -y tzdata curl bash openssl jq

@@ -6,7 +6,7 @@
 
 ## 1) ETCD StaticPod
 
-O procedimento abaixo pode ser realizado em qualquer membro do  cluster. O **backup** será armazendo no próprio servidor onde o backup acontecerá.
+The procedure below can be performed on any member of the cluster. The **backup**will be stored on the server where the backup will take place.
 
 
 ## 1.1) List Member Etcd
@@ -26,22 +26,23 @@ sh 02-list-members.sh
 
 ## 1.2) Backup Cluster
 
-O backup será salvo em **/backup/etcd.db**.
+The backup will be saved in **/backup/etcd.db**.
 
 ```bash
 sh 03-backup.sh
+
 {"level":"info","ts":"2026-02-17T14:51:16.828882-0300","caller":"snapshot/v3_snapshot.go:83","msg":"created temporary db file","path":"/backup/etcd.db.part"}
 {"level":"info","ts":"2026-02-17T14:51:16.837089-0300","logger":"client","caller":"v3@v3.6.8/maintenance.go:236","msg":"opened snapshot stream; downloading"}
 {"level":"info","ts":"2026-02-17T14:51:16.841000-0300","caller":"snapshot/v3_snapshot.go:96","msg":"fetching snapshot","endpoint":"https://master03:2379"}
 {"level":"info","ts":"2026-02-17T14:51:16.841375-0300","logger":"client","caller":"v3@v3.6.8/maintenance.go:302","msg":"completed snapshot read; closing"}
 {"level":"info","ts":"2026-02-17T14:51:16.843967-0300","caller":"snapshot/v3_snapshot.go:111","msg":"fetched snapshot","endpoint":"https://master03:2379","size":"20 kB","took":"14.917492ms","etcd-version":"3.6.0"}
 {"level":"info","ts":"2026-02-17T14:51:16.844185-0300","caller":"snapshot/v3_snapshot.go:121","msg":"saved","path":"/backup/etcd.db"}
+
 Snapshot saved at /backup/etcd.db
 Server version 3.6.0
 ```
 
 ## 1.3) Check Backup
-
 
 ```bash
 sh 04-check-backup.sh

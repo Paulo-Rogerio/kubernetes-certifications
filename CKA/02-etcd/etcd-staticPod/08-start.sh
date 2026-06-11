@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+echo "#################################################"
+echo " This script must be executed on each node       "
+echo "#################################################"
+
+
 NAME=$(hostname -s)
 
 mkdir -p /etc/kubernetes/pki/etcd/

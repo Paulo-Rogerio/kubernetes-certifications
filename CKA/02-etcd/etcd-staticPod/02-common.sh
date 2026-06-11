@@ -102,7 +102,7 @@ echo "======================================================"
 echo " Configure Containerd "
 echo "======================================================"
 echo
-# Listar as imagens usadas
+# List the images used
 # kubeadm config images list --kubernetes-version v1.34.0
 imagem_pause=$(kubeadm config images list --kubernetes-version v${KUBERNETES_SHORT_VERSION}.0 | grep 'pause' | awk -F/ '{print $NF}')
 
@@ -119,7 +119,7 @@ echo " Start Kubelet "
 echo "======================================================"
 echo
 #
-# Se tem mais de uma Interface , deve-se anunciar ao Kubelet qual IP respondera as requisicoes
+# If you have more than one Interface, you must announce to Kubelet which IP will respond to requests
 #
 echo "systemctl restart kubelet"
 sed -i "/Environment=/a Environment="KUBELET_EXTRA_ARGS=--node-ip=${IP_CONTROL_PLANE}"" /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf

@@ -9,5 +9,5 @@ done
 
 echo "################## JQ ####################"
 
-# Tudo que comecao com "chave"
+# Everything that starts with the word"chave"
 etcdctl get chave --prefix -w json | jq .

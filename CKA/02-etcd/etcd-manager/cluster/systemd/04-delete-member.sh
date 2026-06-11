@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-[[ -z $1 ]] && echo "Member Id não informado. Liste os membros para obter o Id" && exit 1;
+[[ -z $1 ]] && echo "Member Id não informado. List members to get the Id" && exit 1;
 
 MEMBER_ID=$1
 

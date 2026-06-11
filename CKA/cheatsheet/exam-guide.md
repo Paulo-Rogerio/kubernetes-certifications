@@ -354,4 +354,4 @@ If you have issues during check-in or the exam:
 - Login to [trainingsupport.linuxfoundation.org](https://trainingsupport.linuxfoundation.org) with your LF account
 - The proctor can assist with technical issues during check-in
 
-[Top](#-setup-shortcuts--first-5-minutes)
+[Setup Shortcuts first 5 minutes](#-setup-shortcuts--first-5-minutes)

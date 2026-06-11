@@ -7,9 +7,9 @@
 
 ## 1) ETCD StaticPod
 
-Após deployado deployar o **etcd** via staticPod, mantido pelo e gerido pelo **kubernetes** via **StaticPod**, vamos manipular os dados.
+After deploying **etcd**via staticPod, maintained by and managed by **kubernetes**via **StaticPod**, we will manipulate the data.
 
-Execute os seguinte comando nos **2** nodes **(master01 e master02)**
+Run the following command on **2**nodes **(master01 and master02)**
 
 ```bash
 crictl ps
@@ -26,6 +26,7 @@ cf30e0cbbd5f4       a3e246e9556e9       4 minutes ago       Running             
 ## 1.1) ETCD EndPoints
 
 ```bash
+
 cd /root/kubernetes-certifications/CKA/02-etcd/etcd-manager/data
 
 sh 02-list-members.sh
@@ -46,7 +47,7 @@ sh 03-endpoint-health.sh
 +-----------------------+--------+-------------+-------+
 ```
 
-Para os scripts acima funcionar é necessário informar os endpoints e os certificados.
+For the above scripts to work, it is necessary to inform the endpoints and certificates.
 
 
 ```bash
@@ -62,9 +63,9 @@ source /root/etcdctl.env
 
 ## 1.2) ETCD Insert Data
 
-Os dados podem ser inseridos em qualquer membro do cluster, todos tem papel de leitura e escrita.
+Data can be inserted into any member of the cluster, everyone has a reading and writing role.
 
-No exemplo abaixo , está sendo inserido **10 registros** no membro **master02**.
+In the example below, **10 records**are being inserted, the script is being executed on member **master02**.
 
 ```bash
 sh 05-insert-item.sh
@@ -82,14 +83,15 @@ OK
 
 ```bash
 sh 06-read-item.sh
-#
-# O script se resume na execução dos comandos abaixo
-#
+```
+
+```bash
+cat 06-read-item.sh
 etcdctl get chave1 -w simple
 etcdctl get chave --prefix -w json | jq .
 ```
 
-No exemplo abaixo estamos listando os dados no formato **json**.
+In the example below we are listing the data in **json**format.
 
 ```json
 {
@@ -177,19 +179,17 @@ No exemplo abaixo estamos listando os dados no formato **json**.
 
 ## 1.3) ETCD Delete Data
 
+Running the script will remove 2 records
 
 ```bash
 sh 07-delete-item.sh
 1
 1
-#
-# A execução do script removerá 2 registros
-#
 etcdctl del chave10
 etcdctl del chave9
 ```
 
-Ao executar o contador novamente, podemos ver apenas 8 registros.
+When we run the counter again, we can only see 8 records.
 
 ```json
   ...

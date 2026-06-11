@@ -2,9 +2,9 @@
 
 cd $(dirname $0)
 
-# Gerando CA
+# Generating AC
 echo "======================================================"
-echo " Gerando CA                                           "
+echo " Generating AC                                           "
 echo "======================================================"
 
 cat > ca-config.json <<EOF
@@ -44,9 +44,9 @@ EOF
 
 cfssl gencert -initca ca-csr.json | cfssljson -bare ca
 
-# Gerando Certiciados ETCD
+# Generating ETCD Certificates
 echo "======================================================"
-echo " Gerando Certificados ETCD                            "
+echo " Generating ETCD Certificates                           "
 echo "======================================================"
 
 cat > etcd-csr.json <<EOF

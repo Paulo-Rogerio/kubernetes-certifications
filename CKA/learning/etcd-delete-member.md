@@ -8,7 +8,7 @@
 
 ## 1) ETCD StaticPod
 
-O procedimento abaixo irá remover um membro saudável do cluster.
+The procedure below will remove a healthy member from the cluster.
 
 
 ## 1.1) List Member Etcd
@@ -28,7 +28,7 @@ sh 02-list-members.sh
 
 ## 1.2) Delete Member
 
-Para deleção de um membro, deve-se informar o **Id**. Ex ```etcdctl member remove xxxxxxxx``` . Na ocasião estou removendo o **membro01**.
+To delete a member, you must inform the **Id**. Ex ```etcdctl member remove xxxxxxxx``` . At the time I am removing **member01**.
 
 ```bash
 sh 03-remove-member.sh  6f9a16d488597713
