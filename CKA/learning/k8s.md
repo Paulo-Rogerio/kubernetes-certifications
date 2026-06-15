@@ -6,6 +6,7 @@
 - [Create Object - Pod](#-create-object---pod)
 - [Create Object - StaticPod](#-create-object---staticpod)
 - [Create Object - Init Containers](#-create-object---init-containers)
+- [Create Object - Pod Priority & Preemption](#-create-object---pod-priority--preemption)
 - [Create Object - Replace Entrypoint](#-create-object---replace-entrypoint)
 - [Create Object - Multi Containers](#-create-object---multi-containers)
 - [Create Object - Accessing Pod Without Kubectl Via Nsenter](#-create-object---accessing-pod-without-kubectl-via-nsenter)
@@ -41,7 +42,8 @@
 - [Create Object - ConfigMap Vhost Ingress](#-create-object---configmap-vhost-ingress)
 - [Create Object - Secrets](#-create-object---secrets)
 - [Create Object - Storage PV / PVC / StorageClass](#-create-object---storage-pv--pvc--storageclass--accessmode)
-- [Create Object - Reclaim Policy PVC / StorageClass](#-create-object---reclaim-policy-pvc--storageclass)
+- [Create Object - Storage CSDriver](#-create-object---storage-csdriver)
+- [Create Object - Storage Reclaim Policy PVC / StorageClass](#-create-object---storage-reclaim-policy-pvc--storageclass)
 - [Create Object - HPA / VPA](#-create-object---hpa--vpa)
 - [Create Object - CNI](#-create-object---cni)
 - [Create Object - DNS](#-create-object---dns)
@@ -57,6 +59,8 @@
 - [Create Object - Affinity / PodAntiAffinity](#-create-object---affinity--podantiaffinity)
 - [Create Object - Affinity / Tolerations](#-create-object---affinity--tolerations)
 - [Create Object - Affinity / Pod Topology Spread Constraints](#-create-object---affinity--pod-topology-spread-constraints)
+- [Create Object - CRD](#-create-object---crd)
+- [Create Object - Operator](#-create-object---operator)
 - [Cluster Upgrade - Ferramentas e Boas Práticas](#-cluster-upgrade---ferramentas-e-boas-práticas)
 - [Cluster Upgrade - Control Plane / Masters](#-cluster-upgrade---control-plane--masters)
 - [Cluster Upgrade - Control Data / Workers](#-cluster-upgrade---control-data--workers)
@@ -253,6 +257,19 @@ k patch svc demo -p '{"spec":{"ports":[{"port":80,"targetPort":80,"nodePort":300
 # kubectl get pods -n kube-system kube-apiserver-master01 -o yaml
 # Add entry
 - --service-node-port-range=20000-40000
+
+# Add a label to a pod
+k label pod <pod-name> <label-key>=<label-value>
+
+# List pods with their labels
+k get po --show-labels
+
+# List pods with specific label
+k get po --selector <label-key>=<label-value>
+
+# Remove a label from a pod
+k label po <pod-name> <label-key>-
+
 ```
 [Menu](#-menu)
 
@@ -353,6 +370,480 @@ Error from server (BadRequest): container "nginx" in pod "nginx" is waiting to s
 k logs nginx -c waitfordns -f
 Clone repo....
 ```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Pod Priority & Preemption
+
+```bash
+#
+# Check Pod with priorityClassName
+
+kubectl get pods -A -o custom-columns=\
+NAMESPACE:.metadata.namespace,\
+POD:.metadata.name,\
+PRIORITYCLASS:.spec.priorityClassName
+
+NAMESPACE            POD                                                         PRIORITYCLASS
+argocd               argo-cd-argocd-application-controller-0                     <none>
+argocd               argo-cd-argocd-applicationset-controller-65f795bdf4-cpb6j   <none>
+argocd               argo-cd-argocd-dex-server-76c9c5f56b-6r5p4                  <none>
+argocd               argo-cd-argocd-notifications-controller-7d746d6f96-mj5s4    <none>
+argocd               argo-cd-argocd-redis-9c859c655-ft58t                        <none>
+argocd               argo-cd-argocd-repo-server-6d9f79976f-8lwtn                 <none>
+argocd               argo-cd-argocd-server-66b994c4fd-k9npx                      <none>
+argocd               gateway-nginx-5b4796c957-lzdfv                              <none>
+kube-system          coredns-66bc5c9577-6w98g                                    system-cluster-critical
+kube-system          coredns-66bc5c9577-jqhx4                                    system-cluster-critical
+kube-system          etcd-prgs-control-plane                                     system-node-critical
+kube-system          kindnet-m5v9f                                               system-node-critical
+kube-system          kube-apiserver-prgs-control-plane                           system-node-critical
+kube-system          kube-controller-manager-prgs-control-plane                  system-node-critical
+kube-system          kube-proxy-gtbpx                                            system-node-critical
+kube-system          kube-scheduler-prgs-control-plane                           system-node-critical
+kube-system          metrics-server-76f9c96799-flfwk                             system-cluster-critical
+local-path-storage   local-path-provisioner-7b8c8ddbd6-9xs62                     <none>
+metallb-system       metallb-controller-67448dd556-662qd                         <none>
+metallb-system       metallb-frr-k8s-rp7rt                                       <none>
+metallb-system       metallb-frr-k8s-statuscleaner-f54cb5894-vrmpd               <none>
+metallb-system       metallb-speaker-9rcz4                                       <none>
+nginx-gateway        ngf-nginx-gateway-fabric-6695c7bb9-rb2xv                    <none>
+
+k get deployments.apps -n kube-system metrics-server -o jsonpath='{.spec.priority}'
+# Didn't you bring anything?
+# Because the priority field does not exist in the Deployment object. In Kubernetes, priority is a property of the Pod, not the Deployment.
+# Deployment only contains a Pod Template (.spec.template.spec) that will be used to create the Pods.
+#
+# The flow is:
+#
+# Deployment has priorityClassName inside .spec.template.spec.
+# The ReplicaSet creates the Pods.
+# Upon Pod creation, the Admission Controller resolves the PriorityClass.
+# Pod receives a numeric value in .spec.priority.
+
+k get pod -n kube-system metrics-server-76f9c96799-flfwk -o jsonpath='{.spec.priority}'
+2000000000
+
+
+# How do I check existing priorityclasses?
+k get priorityclass
+NAME                      VALUE        GLOBAL-DEFAULT   AGE   PREEMPTIONPOLICY
+system-cluster-critical   2000000000   false            41m   PreemptLowerPriority
+system-node-critical      2000001000   false            41m   PreemptLowerPriority
+
+# How to create, if you don't define a PREEMPTIONPOLICY the default is PreemptLowerPriority
+cat <<EOF | k apply -f -
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: critical-app-prgs
+value: 100000
+globalDefault: false
+description: "Apps Critical PRGS"
+EOF
+
+# How to create, already defining a PREEMPTIONPOLICY
+cat <<EOF | k apply -f -
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority-no-preempt-prgs
+value: 100000
+preemptionPolicy: Never
+globalDefault: false
+description: "High priority whitout preempt PRGS"
+EOF
+
+k get priorityclass
+NAME                            VALUE        GLOBAL-DEFAULT   AGE   PREEMPTIONPOLICY
+critical-app-prgs               100000       false            90s   PreemptLowerPriority
+high-priority-no-preempt-prgs   100000       false            29s   Never
+system-cluster-critical         2000000000   false            47m   PreemptLowerPriority
+system-node-critical            2000001000   false            47m   PreemptLowerPriority
+
+
+👉 PreemptionPolicy is not a Kubernetes object.
+
+👉 You don't create a resource called PreemptionPolicy.
+
+👉 It is just a field within the definition of a PriorityClass.
+
+k get priorityclass high-priority-no-preempt-prgs -o yaml
+k get priorityclass system-cluster-critical -o jsonpath='{.preemptionPolicy}'
+
+
+# Resume
+| Objeto        | Campo                                      |
+| ------------- | ------------------------------------------ |
+| Deployment    | .spec.template.spec.priorityClassName      |
+| Pod           | .spec.priorityClassName                    |
+| Pod           | .spec.priority  (valor numérico resolvido) |
+| PriorityClass | .value                                     |
+
+
+# PriorityClass
+#
+# PriorityClass allow you to define which pods are most important when the cluster runs out of resources.
+#
+# PriorityClass decides who is more important.
+#
+# PriorityClass Does not mean that the Pod cannot be removed.
+#
+# PriorityClass just assigns a numeric priority value to pods.
+#
+# It just means:
+#
+# The Pod has high priority for ordering in the scheduler.
+#
+# But it will not preempt lower priority Pods to get resources.
+
+| Pod         | PriorityClass | Valor  |
+| ----------- | ------------- | ------ |
+| coredns     | critical      | 100000 |
+| prometheus  | high          | 50000  |
+| gitlab      | medium        | 10000  |
+| jenkins-dev | low           | 100    |
+
+
+| PriorityClass           | Value      |
+| ----------------------- | ---------- |
+| low                     | -100       |
+| default                 | 0          |
+| medium                  | 1000       |
+| high                    | 10000      |
+| system-cluster-critical | 2000000000 |
+
+# If there is a dispute over resources:urces:
+
+# system-cluster-critical ganha.
+# high                    ganha de medium.
+# medium                  ganha de default.
+# default                 ganha de low.
+
+# When the cluster is unable to schedule new pods, Kubernetes can remove less important pods to make space for more important ones.
+
+What scheduler does?
+
+👉 Is there a node with free resources?
+    ↓
+No
+    ↓
+👉 Are there pods with lower priority?
+    ↓
+Yes
+    ↓
+👉 If I remove some of them can I accommodate the pod?
+    ↓
+Yes
+    ↓
+👉 Preempts lower priority pods
+
+#************************************************************************
+# If I don't define PriorityClass in all pods, what happens?
+#************************************************************************
+
+# When creating a deployment without specifying a priorityClassName, this does not mean that the Pod is not born with a pre-defined priority
+# Pod receives priority: 0
+k create deployment --image=nginx nginx-paulo
+
+k get pod nginx-paulo-78455bbb4-9pmsn -o jsonpath='{.spec.priority}'
+0
+
+# Where is this specified?
+
+metadata:
+  name: prometheus
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      priorityClassName: critical-app
+      containers:
+      - name: prometheus
+        image: prom/prometheus
+
+
+# What is the flow for removing Pods like?
+#
+# If the deployment controls the replicaset to know how many replicas are desired,
+# and if any deployment is very critical with priorityclass Ex: ( 200000199999 ),
+# then it detects pods that have priority = 0,
+# Knowing that this is the way it works, that is, closing this Pod with low priority, to free up computational resources
+# enough for the Pod with high priorityclass to be running.
+#
+# The doubt is:
+# If the pod (nginx-paulo) is controlled by a deployment, when shutting down, the scheduler will try to put it up again,
+# since the desired state fell to 0. How does it deal with this situation?
+#
+
+# Scenario:
+# You have:
+
+Pod A (nginx-paulo)
+priority = 0
+
+Pod B (app-critica)
+priority = 200000199999
+
+# The cluster is out of sufficient resources to schedule Pod B.
+
+👉 Passo 1 - Scheduler detecta falta de recursos
+
+# The Scheduler tries to place Pod B on some node:
+# 0/3 nodes available:
+# Insufficient cpu
+# Insufficient memory
+
+👉 Passo 2 - Scheduler procura vítimas
+
+# As Pod B has much higher priority:
+
+200000199999 > 0
+
+# the Scheduler looks for lower priority Pods that can be removed.
+# Find:
+
+nginx-paulo
+priority = 0
+
+👉 Passo 3 - Preemption
+
+# The Scheduler marks Pod nginx-paulo for removal.
+# You will see events similar to:
+
+Preempting pod nginx-paulo
+
+ou
+
+Preempted by higher priority pod
+
+👉 Passo 4 - Deployment percebe a perda
+
+# Suppose the Deployment is:
+
+replicas: 1
+
+Antes:
+
+Desired: 1
+Current: 1
+
+# After preemption:
+
+Desired: 1
+Current: 0
+
+# Deployment immediately creates a new Pod.
+
+👉 Passo 5 - Novo Pod fica Pending
+
+O novo Pod herda:
+
+priority = 0
+
+e tenta ser agendado.
+
+# But now the critical Pod has already occupied the freed resources.
+
+Resultado:
+
+nginx-paulo-new    Pending
+Estado final
+app-critica        Running
+priority=200000199999
+
+nginx-paulo-new    Pending
+priority=0
+
+# Deployment keeps wanting:
+
+replicas: 1
+
+# but cannot reach this state because there are no resources available.
+# How this appears in practice
+
+Deployment:
+
+k get deploy nginx-paulo
+
+# It will show something like:
+
+READY   UP-TO-DATE   AVAILABLE
+0/1     1            0
+
+ReplicaSet:
+
+k get rs
+
+Mostrará:
+
+DESIRED   CURRENT   READY
+1         1         0
+
+Pod:
+
+k get pods
+nginx-paulo-xxxxx   Pending
+
+# When will the Pod start running again?
+# When any of these situations occur:
+
+# Critical Pod is removed.
+# A new node joins the cluster.
+# Resources are released.
+# The cluster scales out.
+
+# At this point the Scheduler will try again:
+
+Pending -> Running
+
+
+#***********************************************************************
+# How the scheduler chooses Pods that were preempted
+#***********************************************************************
+
+# The mechanism that determines whether to "kill" the pods is Preemption,
+# executed by the scheduler, when a high priority pod cannot be scheduled due to lack of resources.
+#
+# Preemption and which removes less important pods.
+#
+# And does the scheduler remove any lower priority pods?
+# No.
+# It tries to find the smallest possible set of pods to free up resources.
+
+# Notes:
+
+# Node:
+👉 CPU livre = 500m
+
+# Novo pod:
+👉 CPU = 2 cores
+👉 Priority = 100000
+
+# Exist:
+Pod1 Priority=0 CPU=500m
+Pod2 Priority=0 CPU=500m
+Pod3 Priority=0 CPU=1000m
+
+# The scheduler realizes:
+👉 Pod3 sozinho libera 1 CPU
+Não basta.
+
+👉 Pod1 + Pod2 + Pod3
+Libera 2 CPUs
+Basta.
+
+# Scheduler → PriorityClass/Preemption (who enters the node).
+# Kubelet → QoS/Eviction (who leaves the node when there is a lack of memory).
+
+#************************************************************************
+# How to implement
+#************************************************************************
+Ex:
+
+cat <<EOF | k apply -f -
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: critical-app
+value: 100000
+globalDefault: false
+description: "Aplicações críticas"
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      priorityClassName: critical-app
+      containers:
+      - name: prometheus
+        image: prom/prometheus
+EOF
+
+#***********************************************************************
+👉 Are there pods that cannot be preempted?
+#***********************************************************************
+
+Sim.
+
+👉 If I set...
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab-runner
+  template:
+    metadata:
+      labels:
+        app: gitlab-runner
+    spec:
+      priorityClassName: business-critical
+      preemptionPolicy: Never
+
+      containers:
+      - name: runner
+        image: gitlab/gitlab-runner
+
+
+# The preemptionPolicy property is configured in the PodSpec (Deployment, StatefulSet, DaemonSet, Pod, etc.)
+# and controls whether that pod can preempt other pods during scheduling.
+#
+
+| Valor                  | Significado                                          |
+| ---------------------- | ---------------------------------------------------- |
+| PreemptLowerPriority   | Standard. Can remove lower priority pods.            |
+| Never                  | Never remove other pods to get scheduling.           |
+
+
+k describe priorityclass critical-app
+
+k get pod <pod> -o jsonpath='{.spec.priority}'
+
+k get events -A --sort-by=.lastTimestamp
+
+# View pods that have been evicted
+k get pods -A --field-selector=status.phase=Failed
+
+# View events related to preemption
+k get events -A | grep -i preempt
+
+# View scheduler events
+k get events -A --field-selector reason=FailedScheduling
+
+# View Policy
+k get pod <pod> -o jsonpath='{.spec.preemptionPolicy}'
+
+system-cluster-critical → PreemptLowerPriority
+system-node-critical    → PreemptLowerPriority
+longhorn                → PreemptLowerPriority
+postgres                → PreemptLowerPriority
+gitlab                  → PreemptLowerPriority
+jenkins                 → Never
+dev/test                → Never
+```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Replace Entrypoint
@@ -597,6 +1088,23 @@ spec:
 
 k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | k apply -f -
 ```
+[Menu](#-menu)
+
+# 🚀 Create Object - Self-Healing
+
+```bash
+# Self-Healing → fixes faults automatically.
+#
+# It is the ability of Kubernetes to automatically fix problems.
+
+| Concept         | What does it do                          |
+| --------------- | -----------------------------------      |
+| Self-healing    | Maintains desired state (recreates Pods) |
+| Resource limits | Sets maximum consumption                 |
+| Eviction        | Remove Pods due to resource pressure     |
+| Preemption      | Remove Pods by priority                  |
+```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Scale Deployment
@@ -4937,7 +5445,14 @@ accessModes:
 
 [Menu](#-menu)
 
-# 🚀 Create Object - Reclaim Policy PVC / StorageClass
+# 🚀 Create Object - Storage CSDriver
+
+```bash
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Storage Reclaim Policy PVC / StorageClass
 
 ```bash
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reclaim-policy
@@ -8372,6 +8887,130 @@ kubectl rollout restart deploy
 
 k rollout restart deployment/frontend
 k rollout restart -n default deployment frontend
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - CRD
+
+```bash
+# Simple operation of Kubernetes
+
+API Server
+   ↓
+Resources (Pod, Deployment, Service)
+
+🧾 A “contract” that tells Kubernetes: “there is a new type of object here”
+🧩 Extensão da API do Kubernetes / without Operator, CRD is useless
+
+# Cluster whith CRD
+API Server
+   ↓
+Resources padrão + seus recursos personalizados
+
+
+| Conceito             | Função                      |
+| -------------------- | --------------------------- |
+| CRD                  | Define novo tipo de recurso |
+| Custom Resource (CR) | Instância desse tipo        |
+| Operator             | Automatiza comportamento    |
+
+
+# Create My CDR
+cat <<EOF | k apply -f -
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: databases.mycompany.com
+spec:
+  group: mycompany.com
+  names:
+    kind: Database
+    plural: databases
+    singular: database
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              engine:
+                type: string
+              version:
+                type: string
+EOF
+
+k get crd databases.mycompany.com
+NAME                      CREATED AT
+databases.mycompany.com   2026-06-15T12:52:23Z
+
+
+cat <<EOF | k apply -f -
+apiVersion: mycompany.com/v1
+kind: Database
+metadata:
+  name: postgres-db
+spec:
+  engine: postgres
+  version: "15"
+EOF
+
+k get databases
+NAME          AGE
+postgres-db   22s
+
+
+✅ The CRD does nothing alone.
+
+✅ It only defines: "This type of object exists"
+
+✅ But whoever gives the behavior is one: Controller /Operator
+
+# List CRDs
+k get crd
+
+# Describe a CRD
+k describe crd <crd-name>
+
+# Delete a CRD instance
+k delete <resource-name> <name>
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Operator
+
+```bash
+# What is an Operator?
+
+🔁 A controller (Deployment/Pod) running within the cluster
+
+# Observe CRDs
+# Make decisions
+# Create/update real resources (Pods, PVCs, Services)
+
+| Concept              | Function                   |
+| ---------------------| ---------------------------|
+| CRD                  | Defines new resource type  |
+| Custom Resource (CR) | Instance of this type      |
+| Operator             | Automates behavior         |
+
+In this example when creating: Database postgres-db
+
+The Operator could automatically:
+
+creates StatefulSet
+creates PVC
+creates Service
+manage backup
+upgrade
+
 ```
 
 [Menu](#-menu)
