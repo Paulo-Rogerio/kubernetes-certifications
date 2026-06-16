@@ -1087,6 +1087,13 @@ spec:
         name: nginx
 
 k neat <<< $(k create deployment --image=nginx nginx-paulo --dry-run=client -o yaml) | k apply -f -
+
+# Scale deployment replicas
+k scale deploy <deployment-name> --replicas=2
+
+# Update container image in a deployment
+k set image deploy <deployment-name> nginx=<image-name>
+
 ```
 [Menu](#-menu)
 
@@ -5448,6 +5455,209 @@ accessModes:
 # 🚀 Create Object - Storage CSDriver
 
 ```bash
+#
+# Um CSIDriver (Container Storage Interface Driver object) é uma Interface de armazenamento de contêiner (CSI) para Kubernetes (disponibilidade geral).
+#
+# A CSI é um mecanismo padronizado que permite que provedores de armazenamento ofereçam suporte a armazenamento persistente para Kubernetes.
+#
+# Como esse CSI driver deve se comportar dentro do cluster?
+#
+# Ele NÃO:
+
+🚫 create records
+🚫 creates volumes
+🚫 provision storage
+
+✅ It just configures CSI driver behavior.
+
+👉
+👉 For this lab we are going to use Vms
+👉
+
+scp root@10.100.100.11:/root/.kube/config ~/.kube/config
+
+k describe node master01 | grep Taint
+k taint nodes master01 node-role.kubernetes.io/control-plane-
+k get node master01 -o jsonpath='{.spec.taints}'
+
+nodes=("master01" "worker01" )
+
+for i in ${nodes[@]}; do ssh root@$i "apt update && apt install -y nfs-common cryptsetup open-iscsi"; done
+
+helm repo add longhorn https://charts.longhorn.io
+helm repo list
+helm search repo longhorn/longhorn --versions
+
+helm install longhorn longhorn/longhorn \
+    --namespace longhorn-system \
+    --create-namespace \
+    --version 1.12.0
+
+# List Sotrage Class
+kubectl get sc
+
+# Check is enable storage
+kubectl -n longhorn-system get nodes.longhorn.io
+
+kubectl -n longhorn-system get settings.longhorn.io default-replica-count -o yaml
+
+kubectl -n longhorn-system get pods -o wide
+
+kubectl -n longhorn-system get events --sort-by=.lastTimestamp
+
+
+# What is being installed?
+
+✅ CSI controller
+✅ CSI node plugin (DaemonSet)
+✅ CSIDriver object
+✅ StorageClass
+
+kubectl get csidriver
+NAME                 ATTACHREQUIRED   PODINFOONMOUNT   STORAGECAPACITY   TOKENREQUESTS   REQUIRESREPUBLISH   MODES        AGE
+driver.longhorn.io   true             true             false             <unset>         false               Persistent   104s
+
+# AttachRequired
+true → Kubernetes needs to attach/detach the volume
+false → volume can be used directly (e.g. NFS, hostPath CSI, etc.)
+
+# podInfoOnMount
+✅ If true
+- Kubernetes passes information from the Pod to the CSI driver
+
+✅ useful for:
+- identity-based storage
+- volume encryption
+- topology decisions
+
+# storageCapacity
+✅ If true
+- driver reports available capacity
+- scheduler can better decide where to schedule pods
+
+# YAML Structure
+
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: longhorn.io
+spec:
+  attachRequired: true
+  podInfoOnMount: true
+  storageCapacity: true
+
+# How does this connect to CSI in practice
+
+Pod
+ ↓ requests
+PVC
+ ↓ reference
+StorageClass
+ ↓ uses
+CSI Driver
+ ↓ provisions
+PV
+ ↓ bind
+PVC
+ ↓ assemble
+Pod
+
+The StorageClass defines which CSI provisioner will be used.
+The CSI Driver (controller + node plugins) creates the volume.
+The Kubernetes CSIDriver object is just a metadata resource that describes driver capabilities.
+
+kubectl get pods -A | grep csi
+longhorn-system      csi-attacher-6f9c7bc587-ctblp                               1/1     Running   0              2m58s
+longhorn-system      csi-attacher-6f9c7bc587-m9j6d                               1/1     Running   0              2m58s
+longhorn-system      csi-attacher-6f9c7bc587-q5549                               1/1     Running   1 (78s ago)    2m58s
+longhorn-system      csi-provisioner-845c5df44-6r8hf                             1/1     Running   0              2m58s
+longhorn-system      csi-provisioner-845c5df44-l9zqc                             1/1     Running   0              2m58s
+longhorn-system      csi-provisioner-845c5df44-pfm2j                             1/1     Running   1 (65s ago)    2m58s
+longhorn-system      csi-resizer-6d4df5746-5pjgp                                 1/1     Running   0              2m58s
+longhorn-system      csi-resizer-6d4df5746-77pkb                                 1/1     Running   0              2m58s
+longhorn-system      csi-resizer-6d4df5746-pbv6n                                 1/1     Running   0              2m58s
+longhorn-system      csi-snapshotter-55666d7b5-fnpv8                             1/1     Running   0              2m58s
+longhorn-system      csi-snapshotter-55666d7b5-j7p2x                             1/1     Running   0              2m58s
+longhorn-system      csi-snapshotter-55666d7b5-r29nz                             1/1     Running   0              2m58s
+longhorn-system      longhorn-csi-plugin-zhc8l                                   3/3     Running   0              2m58s
+longhorn-system      longhorn-csi-plugin-zx7bp                                   3/3     Running   0              2m58s
+
+
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nginx-data
+  labels:
+    app: nginx-data
+spec:
+  storageClassName: longhorn
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-paulo
+  labels:
+    app: nginx-paulo
+spec:
+  selector:
+    matchLabels:
+      app: nginx-paulo
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: nginx-paulo
+    spec:
+      containers:
+        - name: nginx-paulo
+          image: nginx
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 80
+            name: http
+          volumeMounts:
+          - name: data
+            mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nginx-data
+EOF
+
+k get all
+
+
+# List PVC
+k get pvc
+NAME         STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+nginx-data   Bound    pvc-cf95ce02-4219-4c0b-b0ed-771a91c80e91   1Gi        RWO            longhorn       <unset>                 14m
+
+# Which CSI is used to provision PVC
+k get pv pvc-cf95ce02-4219-4c0b-b0ed-771a91c80e91 -o yaml
+
+csi:
+  driver: driver.longhorn.io
+  fsType: ext4
+
+# Check volume attachments
+k get volumeattachments
+
+# Get Details
+k describe volumeattachment csi-0ce87283acb0da652c480808f0295cf5d6f68052add6fb188d532164e41824b0
+
+# Web-UI
+k port-forward -n longhorn-system svc/longhorn-frontend 8000:80
+
+export POD=$(k get pod -n nginx-paulo -o custom-columns=":metadata.name" | tail -n 1)
+watch -n 1 "k get pod ${POD} -n nginx-paulo"
+k exec -it -n nginx-paulo ${POD} -- bash -c "for i in {0..100}; do touch /data/\$i.txt; done"
+k exec -it -n nginx-paulo ${POD} -- bash -c "ls /data"
 ```
 
 [Menu](#-menu)
