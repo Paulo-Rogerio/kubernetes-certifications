@@ -5658,6 +5658,42 @@ export POD=$(k get pod -n nginx-paulo -o custom-columns=":metadata.name" | tail 
 watch -n 1 "k get pod ${POD} -n nginx-paulo"
 k exec -it -n nginx-paulo ${POD} -- bash -c "for i in {0..100}; do touch /data/\$i.txt; done"
 k exec -it -n nginx-paulo ${POD} -- bash -c "ls /data"
+
+# PVC Pending
+
+# Causes:
+
+Wrong StorageClass
+CSI driver not installed
+CSIDriver not registered
+provisioner does not respond
+
+# Pod ContainerCreating
+
+# Causes:
+
+attachRequired failing
+unmounted volume
+node plugin crashing
+
+# Volume does not mount
+# To check:
+
+kubectl describe pod
+kubectl logs csi-nodeplugin
+
+
+| Object       | Function                               |
+| ------------ | -------------------------------------- |
+| CSIDriver    | driver behavior                        |
+| CSI Driver   | real software (controller/node plugin) |
+| StorageClass | defines storage type                   |
+| PV/PVC       | storage usage                          |
+
+
+kubectl describe pvc
+kubectl get events
+
 ```
 
 [Menu](#-menu)
