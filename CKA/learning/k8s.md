@@ -1,6 +1,7 @@
 # 🚀 Menu
 
-- [Kubernetes Architecture - Components](#-command-line---contexts)
+- [Kubernetes Architecture - Components](#-kubernetes-architecture---components)
+- [Kubernetes Architecture - Terminology]()
 - [Command Line - Contexts](#-command-line---contexts)
 - [Command Line - Nodes](#-command-line---nodes)
 - [Command Line - Explorando API](#-command-line---explorando-api)
@@ -74,6 +75,72 @@
 # 🚀 Kubernetes Architecture - Components
 
 ![alt text](assets/architecture/kubernetes-architecture.png "kubernetes architecture")
+
+```bash
+👉 Control Plane
+
+# The control plane hosts several critical components, including the API server, scheduler, controller managers,
+# and a storage system responsible for maintaining the persistent state of the cluster, container configurations, and networking settings.
+
+👉 API Server
+
+# The API server is the primary interface for interacting with Kubernetes.
+# Users can communicate with it using kubectl, a local client, they can develop custom clients or execute curl commands.
+
+👉 Kube-Scheduler
+
+# When a request to run a container is received, the kube-scheduler processes the pod specification (podSpec)
+# and assigns the workload to a suitable worker node. In summary: He chooses where the pod will be executed (node).
+
+👉 Kubelet
+
+# It is a system process (often managed by systemd), not a container, responsible for receiving pod specifications,
+# downloading necessary resources, and coordinating with the local container runtime
+# (e.g., containerd or another compatible engine) to manage container execution.
+
+👉 kube-proxy
+
+# Works in conjunction with the network plugin to establish and manage networking rules,
+# enabling communication between containers within the cluster and facilitating external access when required.
+
+```
+
+[Menu](#-menu)
+
+# 🚀 Kubernetes Architecture - Terminology
+
+```bash
+
+👉 Pod
+
+# A pod consists of one or more containers that share an IP address, storage access, and a namespace
+
+👉 Namespace
+
+# Namespaces in Kubernetes serve to isolate objects for resource control and multi-tenancy.
+# Some objects exist at the cluster level, while others are confined to a single namespace.
+# Because namespaces segment resources, pods must utilize services to communicate across namespaces.
+
+👉 API Server
+
+# Each operator continuously queries the kube-apiserver to monitor the state and specification of a particular object.
+# The operator initiates actions to achieve the desired state if the actual state does not align with the declared specification.
+
+👉 Kube-Controller-Manager
+
+# The kube-controller-manager includes several built-in controllers,
+# and additional functionality can be introduced via Custom Resource Definitions (CRDs).
+
+👉 ReplicaSet
+
+# The default and most feature-rich operator for managing containers is a Deployment,
+# which does not directly control pods but instead manages ReplicaSets.
+# A ReplicaSet ensures that the required number of pods is maintained by creating or terminating them based on the podSpec
+
+
+```
+
+[Menu](#-menu)
 
 # 🚀 Command Line - Contexts
 
@@ -9561,8 +9628,6 @@ CoreDNS                              v1.12.1   v1.13.1
 etcd                      master01   3.6.5-0   3.6.6-0
 
 You can now apply the upgrade by executing the following command:
-
-	kubeadm upgrade apply v1.35.5
 
 # Upgrade Now
 kubeadm upgrade apply v1.35.5
