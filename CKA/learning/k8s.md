@@ -1,5 +1,6 @@
 # 🚀 Menu
 
+- [Kubernetes Architecture - Components](#-command-line---contexts)
 - [Command Line - Contexts](#-command-line---contexts)
 - [Command Line - Nodes](#-command-line---nodes)
 - [Command Line - Explorando API](#-command-line---explorando-api)
@@ -69,6 +70,10 @@
 - [Dicas - Node NotReady](#-dicas---node-notready)
 - [Explorando Documentação - Kubectl](#-explorando-documentação---kubectl)
 - [Plugins](#-plugins)
+
+# 🚀 Kubernetes Architecture - Components
+
+![alt text](assets/architecture/kubernetes-architecture.png "kubernetes architecture")
 
 # 🚀 Command Line - Contexts
 
