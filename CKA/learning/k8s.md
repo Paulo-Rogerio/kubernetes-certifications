@@ -1,7 +1,8 @@
 # 🚀 Menu
 
 - [Kubernetes Architecture - Components](#-kubernetes-architecture---components)
-- [Kubernetes Architecture - Terminology]()
+- [Kubernetes Architecture - Terminology](#-kubernetes-architecture---terminology)
+- [Kubernetes Architecture - Setup](#-kubernetes-architecture---setup)
 - [Command Line - Contexts](#-command-line---contexts)
 - [Command Line - Nodes](#-command-line---nodes)
 - [Command Line - Explorando API](#-command-line---explorando-api)
@@ -138,6 +139,123 @@
 # A ReplicaSet ensures that the required number of pods is maintained by creating or terminating them based on the podSpec
 
 
+```
+
+[Menu](#-menu)
+
+# 🚀 Kubernetes Architecture - Setup
+
+- [Single Master](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/k8s-singleMaster.md)
+- [Multi Master](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/k8s-multiMaster.md)
+
+```bash
+# Setup Manual ( learning )
+
+apt install -y apt-transport-https tree software-properties-common ca-certificates socat
+
+swapoff -a
+modprobe overlay
+modprobe br_netfilter
+
+cat << EOF | tee /etc/sysctl.d/kubernetes.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOF
+sysctl --system
+
+mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+apt update && apt install -y containerd.io
+
+containerd config default | tee /etc/containerd/config.toml
+sed -e 's/SystemdCgroup = false/SystemdCgroup = true/g' -i /etc/containerd/config.toml
+systemctl restart containerd
+
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.34/deb/Release.key \
+| sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] \
+  https://pkgs.k8s.io/core:/stable:/v1.34/deb/ /" \
+  | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+apt update
+apt install -y kubeadm=1.34.2-1.1 kubelet=1.34.2-1.1 kubectl=1.34.2-1.1
+apt-mark hold kubelet kubeadm kubectl
+
+sed -i "/Environment=/a Environment="KUBELET_EXTRA_ARGS=--node-ip="10.100.100.11" /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
+systemctl daemon-reload
+systemctl restart kubelet
+
+crictl config runtime-endpoint unix:///run/containerd/containerd.sock
+crictl config image-endpoint unix:///run/containerd/containerd.sock
+
+kubeadm config images pull
+
+cat >> /etc/hosts <<EOF
+10.100.100.11 master01.k8s.local master01
+10.100.100.20 worker01.k8s.local worker01
+127.0.0.1 localhost
+EOF
+
+cat > kubeadm-config.yaml <<EOF
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+3kubernetesVersion: 1.34.24
+controlPlaneEndpoint: "master01:6443"
+networking:
+  podSubnet: 10.244.0.0/16
+  serviceSubnet: 10.96.0.0/12
+EOF
+
+kubeadm init \
+--config=kubeadm-config.yaml \
+--upload-certs \
+--node-name=worker01 \
+| tee kubeadm-init.out
+
+mkdir -p root/.kube
+cp -i /etc/kubernetes/admin.conf /root/.kube/config
+chown $(id -u):$(id -g) /root/.kube/config
+less /root/.kube/config
+
+#*************** Save Info to Add Worker ****************
+You can now join any number of control-plane nodes running the following command on each as root:
+
+  kubeadm join master01:6443 --token xqduas.meddzymtzxt5463p \
+	--discovery-token-ca-cert-hash sha256:3987a5d6a4a67526867eb23f588904942b59b157f2d91cf05084c372b33bf925 \
+	--control-plane --certificate-key 0633f8cc3769bd99775b9fc68ef7f6434e861b74602c5ac383c24af5e9cf585d
+
+Please note that the certificate-key gives access to cluster sensitive data, keep it secret!
+As a safeguard, uploaded-certs will be deleted in two hours; If necessary, you can use
+"kubeadm init phase upload-certs --upload-certs" to reload certs afterward.
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join master01:6443 --token xqduas.meddzymtzxt5463p \
+	--discovery-token-ca-cert-hash sha256:3987a5d6a4a67526867eb23f588904942b59b157f2d91cf05084c372b33bf925
+
+#******************************************************
+
+helm repo add cilium https://helm.cilium.io/
+helm repo update
+helm search repo -l cilium/cilium
+helm template cilium cilium/cilium --version 1.19.5 --namespace kube-system > cilium.yaml
+
+find . -name cilium-cni.yaml
+kubectl apply -f /home/student/LFS258/SOLUTIONS/s_03/cilium-cni.yaml
+sudo apt install -y bash-completion
+source <(kubectl completion bash)
+echo "source <(kubectl completion bash)" >> $HOME/.bashrc
+bash
+
+kubectl help
+kubeadm config print init-defaults
 ```
 
 [Menu](#-menu)
@@ -291,8 +409,6 @@ k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash -c "pwd; ls"
 [Menu](#-menu)
 
 # 🚀 Create Object - Pod
-
-# Some examples below make use of plugins, for more details see [Plugins](#-plugins).
 
 ```bash
 # Create Resources

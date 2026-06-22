@@ -105,11 +105,9 @@ echo "======================================================"
 echo
 # List the images used
 # kubeadm config images list --kubernetes-version v1.34.0
-#imagem_pause=$(kubeadm config images list --kubernetes-version v${KUBERNETES_SHORT_VERSION}.0 | grep 'pause' | awk -F/ '{print $NF}')
 
 mkdir -p /etc/containerd
 containerd config default > /etc/containerd/config.toml
-#sed -i "s/pause:3.8/${imagem_pause}/" /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 systemctl enable containerd --now
 systemctl restart containerd
