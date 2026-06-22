@@ -4,6 +4,7 @@ set -eo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 export KUBERNETES_SHORT_VERSION="1.34"
+export KUBERNETES_VERSION_INSTALL="1.34.2-1.1"
 export IP_CONTROL_PLANE="10.100.100.11"
 export TIMEZONE="America/Sao_Paulo"
 
@@ -32,7 +33,7 @@ echo \
   $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" | \
   tee /etc/apt/sources.list.d/docker.list > /dev/null
 apt-get update -y
-apt-get install -y gpg
+apt-get install -y gpg containerd.io
 
 # Helm install
 echo "======================================================"
@@ -95,7 +96,7 @@ echo " Install Kubernetes "
 echo "======================================================"
 echo
 echo "apt-get install -y kubelet kubectl kubeadm"
-apt-get install -y kubelet kubectl kubeadm
+apt-get install -y kubelet=${KUBERNETES_VERSION_INSTALL} kubectl=${KUBERNETES_VERSION_INSTALL} kubeadm=${KUBERNETES_VERSION_INSTALL}
 apt-mark hold kubelet kubeadm kubectl
 
 echo "======================================================"
@@ -104,12 +105,11 @@ echo "======================================================"
 echo
 # List the images used
 # kubeadm config images list --kubernetes-version v1.34.0
-imagem_pause=$(kubeadm config images list --kubernetes-version v${KUBERNETES_SHORT_VERSION}.0 | grep 'pause' | awk -F/ '{print $NF}')
+#imagem_pause=$(kubeadm config images list --kubernetes-version v${KUBERNETES_SHORT_VERSION}.0 | grep 'pause' | awk -F/ '{print $NF}')
 
-echo "containerd config default > /etc/containerd/config.toml"
 mkdir -p /etc/containerd
 containerd config default > /etc/containerd/config.toml
-sed -i "s/pause:3.8/${imagem_pause}/" /etc/containerd/config.toml
+#sed -i "s/pause:3.8/${imagem_pause}/" /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 systemctl enable containerd --now
 systemctl restart containerd
@@ -125,6 +125,8 @@ echo "systemctl restart kubelet"
 sed -i "/Environment=/a Environment="KUBELET_EXTRA_ARGS=--node-ip=${IP_CONTROL_PLANE}"" /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
 systemctl daemon-reload
 systemctl restart kubelet
+crictl config runtime-endpoint unix:///run/containerd/containerd.sock
+crictl config image-endpoint unix:///run/containerd/containerd.sock
 
 echo "======================================================"
 echo " Container Runtime Configured Successfully "
