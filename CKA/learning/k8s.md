@@ -248,7 +248,7 @@ helm search repo -l cilium/cilium
 helm template cilium cilium/cilium --version 1.19.5 --namespace kube-system > cilium.yaml
 
 find . -name cilium-cni.yaml
-kubectl apply -f /home/student/LFS258/SOLUTIONS/s_03/cilium-cni.yaml
+kubectl apply -f ./LFS258/SOLUTIONS/s_03/cilium-cni.yaml
 sudo apt install -y bash-completion
 source <(kubectl completion bash)
 echo "source <(kubectl completion bash)" >> $HOME/.bashrc
