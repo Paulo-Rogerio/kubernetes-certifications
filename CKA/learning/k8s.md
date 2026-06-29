@@ -1282,6 +1282,139 @@ k scale deploy <deployment-name> --replicas=2
 # Update container image in a deployment
 k set image deploy <deployment-name> nginx=<image-name>
 
+# This creates a deployment....
+#
+# ***** If the commands below create Deployments , what is the difference between them? **********
+#
+k create deployment nginx --image=nginx
+k create -f first.yaml
+k apply -f first.yaml
+k replace -f first.yaml --force
+#
+# ************************************************************************************************
+
+# First let's create a deployment
+
+k create deployment nginx --image=nginx
+k get deployments.apps nginx -o yaml  > first.yaml
+
+# Clean the fields ( creationTimestamp: ,resourceVersion: , uuid: and after status: )
+vi first.yaml
+
+k delete deployments.apps nginx
+k create -f first.yaml
+
+# When using ( k create ), a new one is created. If the deployment already exists, the command is refused.
+# The command below should return empty, becasuse as it is a new object, a new deployment.
+k get deploy nginx -o jsonpath='{.metadata.annotations}'
+k get deploy nginx -o yaml > second.yaml
+
+diff first.yaml second.yaml
+5a6
+>   creationTimestamp: "2026-06-26T09:15:34Z"
+10a12,13
+>   resourceVersion: "5152"
+>   uid: bc564860-5598-486c-a1bd-e001e5eac0d7
+39a43,61
+> status:
+>   availableReplicas: 1
+>   conditions:
+>   - lastTransitionTime: "2026-06-26T09:15:37Z"
+>     lastUpdateTime: "2026-06-26T09:15:37Z"
+>     message: Deployment has minimum availability.
+>     reason: MinimumReplicasAvailable
+>     status: "True"
+>     type: Available
+>   - lastTransitionTime: "2026-06-26T09:15:34Z"
+>     lastUpdateTime: "2026-06-26T09:15:37Z"
+>     message: ReplicaSet "nginx-66686b6766" has successfully progressed.
+>     reason: NewReplicaSetAvailable
+>     status: "True"
+>     type: Progressing
+>   observedGeneration: 1
+>   readyReplicas: 1
+>   replicas: 1
+>   updatedReplicas: 1
+
+
+# Apply performs an intelligent update (patch).
+# This annotation is only created with apply and not with create.
+# It stores a complete copy of the manifest that was applied.
+#
+# It compares:
+#
+- The new manifesto
+- The current state of the object
+- The last applied configuration (annotation)
+- And only change what is necessary.
+
+k apply -f first.yaml
+
+k get deploy nginx -o jsonpath='{.metadata.annotations}'
+{"deployment.kubernetes.io/revision":"1","kubectl.kubernetes.io/last-applied-configuration":"{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{\"deployment.kubernetes.io/revision\":\"1\"},\"generation\":1,\"labels\":{\"app\":\"nginx\"},\"name\":\"nginx\",\"namespace\":\"default\"},\"spec\":{\"progressDeadlineSeconds\":600,\"replicas\":1,\"revisionHistoryLimit\":10,\"selector\":{\"matchLabels\":{\"app\":\"nginx\"}},\"strategy\":{\"rollingUpdate\":{\"maxSurge\":\"25%\",\"maxUnavailable\":\"25%\"},\"type\":\"RollingUpdate\"},\"template\":{\"metadata\":{\"labels\":{\"app\":\"nginx\"}},\"spec\":{\"containers\":[{\"image\":\"nginx\",\"imagePullPolicy\":\"Always\",\"name\":\"nginx\",\"resources\":{},\"terminationMessagePath\":\"/dev/termination-log\",\"terminationMessagePolicy\":\"File\"}],\"dnsPolicy\":\"ClusterFirst\",\"restartPolicy\":\"Always\",\"schedulerName\":\"default-scheduler\",\"securityContext\":{},\"terminationGracePeriodSeconds\":30}}}}\n"}
+
+
+| Comand                            | Salve last-applied-configuration?   |
+| --------------------------------- | ----------------------------------- |
+| kubectl create -f                 | ❌ No                               |
+| kubectl create --save-config -f   | ✅ yes                              |
+| kubectl apply -f                  | ✅ yes                              |
+| kubectl replace -f                | ❌ No                               |
+| kubectl edit                      | ❌ No                               |
+
+
+k replace -f first.yaml --force
+
+# replace sends the entire object, i.e.:
+# "Forget the current object and replace with this one."
+#
+# What about --force?
+# Here it changes completely.
+# He literally does...
+#
+# kubectl delete deployment nginx
+# kubectl create -f first.yaml
+
+| Comand              | Create object | Update object exist     | Salve last-applied-configuration |
+| ------------------- | ------------- | ----------------------- | -------------------------------- |
+| kubectl create -f   | ✅            | ❌ (fails if exists)    | ❌                               |
+| kubectl apply -f    | ✅            | ✅                      | ✅                               |
+
+k replace -f first.yaml --force
+deployment.apps "nginx" deleted from default namespace
+deployment.apps/nginx replaced
+
+# Observ the output:
+deployment deleted
+deployment replaced
+
+| Comamnd              | Update           | Recreate object | Keeps UID  | Rolling Update         |
+| -------------------- | ---------------- | --------------- | ---------- | ---------------------- |
+| apply -f             | ✅               | ❌              | ✅          | ✅                    |
+| replace -f           | ✅ (PUT Full)    | ❌              | ✅          | Depends on the change |
+| replace --force -f   | ❌                | ✅             | ❌          | ❌                    |
+| delete` + `create    | ❌                | ✅             | ❌          | ❌                    |
+
+# We will still talk about Service, but out of curiosity....
+# If you want to export this deployment, would we be able to do it?
+#
+k expose deployment/nginx
+error: couldn't find port via --port flag or introspection
+
+# Why can't we do it???
+# Deployment needs to define the port that the container listens to.
+        ports:
+        - containerPort: 80
+          protocol: TCP
+
+# After changing and inserting the port...
+k expose deployment/nginx
+service/nginx exposed
+
+k get svc nginx
+NAME    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+nginx   ClusterIP   10.96.240.171   <none>        80/TCP    35s
+
 ```
 [Menu](#-menu)
 
