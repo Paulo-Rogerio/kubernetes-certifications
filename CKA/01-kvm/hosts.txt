@@ -1,11 +1,11 @@
 #=================================================================
 # Learning K8S
 #=================================================================
-master01    2048  3  10.100.100.11  noble-server-cloudimg-amd64.img
-worker01    2048  3  10.100.100.20  noble-server-cloudimg-amd64.img
+#master01    2048  3  10.100.100.11  noble-server-cloudimg-amd64.img
+#worker01    2048  3  10.100.100.20  noble-server-cloudimg-amd64.img
 #=================================================================
 # Learning ETCD
 #=================================================================
-# master01  2048  3  10.100.100.11  jammy-server-cloudimg-amd64.img
-# master02  2048  3  10.100.100.12  jammy-server-cloudimg-amd64.img
-# master03  2048  3  10.100.100.13  jammy-server-cloudimg-amd64.img
+master01  2048  3  10.100.100.11  noble-server-cloudimg-amd64.img
+master02  2048  3  10.100.100.12  noble-server-cloudimg-amd64.img
+master03  2048  3  10.100.100.13  noble-server-cloudimg-amd64.img
