@@ -32,7 +32,7 @@ echo \
   $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" | \
   tee /etc/apt/sources.list.d/docker.list > /dev/null
 apt-get update -y
-apt-get install -y gpg
+apt-get install -y gpg containerd.io
 
 # helm install
 echo "======================================================"
@@ -120,6 +120,8 @@ echo "systemctl restart kubelet"
 sed -i "/Environment=/a Environment="KUBELET_EXTRA_ARGS=--node-ip=${IP_CONTROL_PLANE}"" /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
 systemctl daemon-reload
 systemctl restart kubelet
+crictl config runtime-endpoint unix:///run/containerd/containerd.sock
+crictl config image-endpoint unix:///run/containerd/containerd.sock
 
 echo "======================================================"
 echo " Container Runtime Configured Successfully "
