@@ -36,7 +36,7 @@ helm install metallb metallb/metallb \
 # Check
 check_pod_running metallb-controller metallb-system
 
-export cidr=$(ip -4 addr show enp1s0 | awk '/inet /{print $2}' | cut -d/ -f1)
+export cidr=$(ip -4 addr show enp1s0 | awk '/inet /{print $2}' | cut -d/ -f1 | head -1)
 output "CIDR...............: ${cidr}"
 
 export cidr_short=$(cut -d '.' -f1-3 <<< ${cidr})

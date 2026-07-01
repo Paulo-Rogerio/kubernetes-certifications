@@ -48,20 +48,24 @@ All VMs have a default password already defined in cloud-init **123456**.
 [Clone the Repository](https://github.com/Paulo-Rogerio/kubernetes-certifications.git), and navigate to the **01-kvm**directory. In this directory, you will find a **hosts.txt**file, which will define the number of hosts your laboratory will have.
 
 ```bash
-#===========================================================================
+#=================================================================
 # Learning K8S
-#===========================================================================
-# Vm Name  |  Ram  | vCPU  |     Ip        |   Imagem Cloud Init
-#===========================================================================
-# master01   2048     3      10.100.100.11   jammy-server-cloudimg-amd64.img
-# master02   2048     3      10.100.100.12   jammy-server-cloudimg-amd64.img
-# worker01   2048     3      10.100.100.20   jammy-server-cloudimg-amd64.img
-#===========================================================================
+#=================================================================
+# master01    2048  3  10.100.100.11  noble-server-cloudimg-amd64.img
+# worker01    2048  3  10.100.100.20  noble-server-cloudimg-amd64.img
+
+#=================================================================
 # Learning ETCD
-#===========================================================================
-master01     2048     3      10.100.100.11    jammy-server-cloudimg-amd64.img
-master02     2048     3      10.100.100.12    jammy-server-cloudimg-amd64.img
-master03     2048     3      10.100.100.13    jammy-server-cloudimg-amd64.img
+#=================================================================
+master01  2048  3  10.100.100.11  noble-server-cloudimg-amd64.img
+master02  2048  3  10.100.100.12  noble-server-cloudimg-amd64.img
+
+#=================================================================
+# Learning K8S - MultiMaster
+#=================================================================
+# master01    2048  3  10.100.100.11  noble-server-cloudimg-amd64.img
+# master02    2048  3  10.100.100.12  noble-server-cloudimg-amd64.img
+# worker01    2048  3  10.100.100.20  noble-server-cloudimg-amd64.img
 ```
 
 The installer already guarantees that this network will be created, so **DO NOT**change the range **10.100.100.**. This network is created in **NAT**mode, to avoid any type of conflict.
