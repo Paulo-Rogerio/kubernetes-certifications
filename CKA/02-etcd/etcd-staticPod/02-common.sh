@@ -4,7 +4,7 @@ set -eo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 export KUBERNETES_SHORT_VERSION="1.34"
-export IP_CONTROL_PLANE="10.100.100.10"
+export IP_CONTROL_PLANE="10.100.100.11"
 export TIMEZONE="America/Sao_Paulo"
 
 # Doc
