@@ -77,14 +77,17 @@
 
 ![alt text](assets/architecture/kubernetes-architecture.png "kubernetes architecture")
 
-```bash
-👉 Control Plane
+[Menu](#-menu)
 
+# 🚀 Kubernetes Architecture - Terminology
+
+```bash
+
+👉 Control Plane
 # The control plane hosts several critical components, including the API server, scheduler, controller managers,
 # and a storage system responsible for maintaining the persistent state of the cluster, container configurations, and networking settings.
 
 👉 Node
-
 # Every Kubernetes node, whether part of the control plane node or a worker node, runs three core components:
 # - The kubelet
 # - the kube-proxy
@@ -103,7 +106,7 @@
 # (e.g., containerd or CRI-O) to start and manage containers.
 
 👉 Pod
-
+# A pod consists of one or more containers that share an IP address, storage access, and a namespace
 # Pod can contain multiple containers that are tightly coupled and need to share storage volumes, networking, or runtime context.
 # All containers in a Pod start in parallel, which means their startup order is not guaranteed.
 # Networking within a Pod is also shared. Each Pod is assigned a single IP address, which is used by all containers inside it.
@@ -113,7 +116,6 @@
 # and setting up its network namespace before the application and sidecar containers start
 
 👉 API Server
-
 # The API server is the primary interface for interacting with Kubernetes.
 # Users can communicate with it using kubectl, a local client, they can develop custom clients or execute curl commands.
 # The kube-apiserver on the control plane acts as the cluster’s front end and sole gateway to etcd, ensuring all changes flow through it for consistency.
@@ -125,7 +127,6 @@
 # while the second receives an HTTP 409 error due to a version mismatch.
 
 👉 Kube-Scheduler
-
 # When a request to run a container is received, the kube-scheduler processes the pod specification (podSpec)
 # and assigns the workload to a suitable worker node. In summary: He chooses where the pod will be executed (node).
 # The kube-scheduler determines the optimal placement of Pods across worker nodes.
@@ -157,7 +158,6 @@
 # Which Kubernetes component is responsible for fixing this automatically?
 # R: Deployment Operator ( The Deployment operator manages ReplicaSets, which in turn manage the creation and scaling of Pods based on a shared PodSpec.)
 
-
 👉 Init Containers
 # Init Containers are specialized containers that run to completion before the main application containers start.
 # They are meant to perform setup tasks or verify conditions necessary for the application to operate correctly.
@@ -167,8 +167,11 @@
 # The Service operator assigns a persistent, virtual IP address that routes traffic to the appropriate Pods behind the scenes.
 # This abstraction ensures that clients do not need to track the ever-changing IPs of individual Pods.
 
-
 👉 Namaspace and Quotas
+# Namespaces in Kubernetes serve to isolate objects for resource control and multi-tenancy.
+# Some objects exist at the cluster level, while others are confined to a single namespace.
+# Because namespaces segment resources, pods must utilize services to communicate across namespaces.
+#
 # Namespaces provide a way to organize resources within a Kubernetes cluster, enabling you to partition a single cluster into virtual clusters.
 # This is particularly useful for multi-tenant environments or separating development, testing, and production workloads.
 #
@@ -210,43 +213,14 @@
 # Enabling faster integration with external cloud providers without modifying the core Kubernetes logic.
 # Obs.:
 # To enable cloud-controller-manager, each kubelet must use the --cloud-provider=external flag.
-
-
-
-```
-
-[Menu](#-menu)
-
-# 🚀 Kubernetes Architecture - Terminology
-
-```bash
-
-👉 Pod
-
-# A pod consists of one or more containers that share an IP address, storage access, and a namespace
-
-👉 Namespace
-
-# Namespaces in Kubernetes serve to isolate objects for resource control and multi-tenancy.
-# Some objects exist at the cluster level, while others are confined to a single namespace.
-# Because namespaces segment resources, pods must utilize services to communicate across namespaces.
-
-👉 API Server
-
-# Each operator continuously queries the kube-apiserver to monitor the state and specification of a particular object.
-# The operator initiates actions to achieve the desired state if the actual state does not align with the declared specification.
-
-👉 Kube-Controller-Manager
-
 # The kube-controller-manager includes several built-in controllers,
 # and additional functionality can be introduced via Custom Resource Definitions (CRDs).
 
-👉 ReplicaSet
 
+👉 ReplicaSet
 # The default and most feature-rich operator for managing containers is a Deployment,
 # which does not directly control pods but instead manages ReplicaSets.
 # A ReplicaSet ensures that the required number of pods is maintained by creating or terminating them based on the podSpec
-
 
 ```
 
