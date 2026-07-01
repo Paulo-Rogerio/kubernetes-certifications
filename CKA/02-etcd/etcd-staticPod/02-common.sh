@@ -116,8 +116,6 @@ echo
 #
 # If you have more than one Interface, you must announce to Kubelet which IP will respond to requests
 #
-echo "systemctl restart kubelet"
-# sed -i "/Environment=/a Environment="KUBELET_EXTRA_ARGS=--node-ip=${IP_CONTROL_PLANE}"" /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
 echo "KUBELET_EXTRA_ARGS=--node-ip=${IP_CONTROL_PLANE}" > /etc/default/kubelet
 systemctl daemon-reload
 systemctl restart kubelet
