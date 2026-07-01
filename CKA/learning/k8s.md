@@ -83,15 +83,57 @@
 # The control plane hosts several critical components, including the API server, scheduler, controller managers,
 # and a storage system responsible for maintaining the persistent state of the cluster, container configurations, and networking settings.
 
+👉 Node
+
+# Every Kubernetes node, whether part of the control plane node or a worker node, runs three core components:
+# - The kubelet
+# - the kube-proxy
+# - and a container runtime such as containerd or CRI-O.
+#
+# Obs.:
+# The Konnectivity service, introduced as a beta feature in Kubernetes v1.18,
+# enhances network efficiency by separating user-initiated traffic from server-initiated traffic.
+#
+# Key responsibilities of the kubelet:
+# • Processes PodSpecs: Accepts and interprets PodSpecs from the kube-apiserver.
+# • Monitor Resource Availability. Ensure that storage, Secrets, and ConfigMaps are correctly provisioned before deployment.
+# • Mounts Volumes: Ensures persistent or ephemeral storage volumes are mounted to the Pod as specified.
+# • Handles Secrets and ConfigMaps: Retrieves and injects configuration data and secrets securely into the Pod environment.
+# • Communicates with the Container Runtime: Passes the necessary instructions to the container runtime engine
+# (e.g., containerd or CRI-O) to start and manage containers.
+
+👉 Pod
+
+# Pod can contain multiple containers that are tightly coupled and need to share storage volumes, networking, or runtime context.
+# All containers in a Pod start in parallel, which means their startup order is not guaranteed.
+# Networking within a Pod is also shared. Each Pod is assigned a single IP address, which is used by all containers inside it.
+#
+# How does IP reservation happen?
+# As with all Pods, there is also a hidden pause container, which is responsible for reserving the Pod’s IP address
+# and setting up its network namespace before the application and sidecar containers start
+
 👉 API Server
 
 # The API server is the primary interface for interacting with Kubernetes.
 # Users can communicate with it using kubectl, a local client, they can develop custom clients or execute curl commands.
+# The kube-apiserver on the control plane acts as the cluster’s front end and sole gateway to etcd, ensuring all changes flow through it for consistency.
+# On worker nodes, the kubelet applies configurations, manages pods, and reports status back to the control plane.
+# It processes all API requests, validates them, and configures data for API objects such as Pods, Services, and Deployments.
+# All updates to etcd pass through the kube-apiserver, which serializes requests to prevent conflicts.
+#
+# For example, if two simultaneous requests attempt to update the same value, the first succeeds,
+# while the second receives an HTTP 409 error due to a version mismatch.
 
 👉 Kube-Scheduler
 
 # When a request to run a container is received, the kube-scheduler processes the pod specification (podSpec)
 # and assigns the workload to a suitable worker node. In summary: He chooses where the pod will be executed (node).
+# The kube-scheduler determines the optimal placement of Pods across worker nodes.
+# It evaluates factors such as resource availability (e.g., CPU, memory, or storage volumes), node labels,
+# taints and tolerations, and quota restrictions to assign Pods to nodes.
+
+👉 Kube-controller-manager
+# The kube-controller-manager is a core control loop daemon that continuously monitors the cluster’s state via the kube-apiserver.
 
 👉 Kubelet
 
@@ -99,10 +141,77 @@
 # downloading necessary resources, and coordinating with the local container runtime
 # (e.g., containerd or another compatible engine) to manage container execution.
 
-👉 kube-proxy
+👉 Kube-proxy
 
 # Works in conjunction with the network plugin to establish and manage networking rules,
 # enabling communication between containers within the cluster and facilitating external access when required.
+
+👉 Operators
+
+# Operators increase the cluster’s ability to handle complex workloads efficiently.
+# They enable you to manage applications or resources with the same declarative model that Kubernetes applies to native objects
+# Extends the cluster API.
+# An Operator is a custom controller that watches custom resources (CRDs) and automatically performs actions to maintain an application in the desired state.
+# Ex:
+# You’ve deployed a new application in Kubernetes, but your Pods don’t match the desired replicas defined in your Deployment.
+# Which Kubernetes component is responsible for fixing this automatically?
+# R: Deployment Operator ( The Deployment operator manages ReplicaSets, which in turn manage the creation and scaling of Pods based on a shared PodSpec.)
+
+
+👉 Init Containers
+# Init Containers are specialized containers that run to completion before the main application containers start.
+# They are meant to perform setup tasks or verify conditions necessary for the application to operate correctly.
+
+👉 Services
+# They provide a stable way to expose applications running within the cluster, either to other applications inside the cluster or to external users.
+# The Service operator assigns a persistent, virtual IP address that routes traffic to the appropriate Pods behind the scenes.
+# This abstraction ensures that clients do not need to track the ever-changing IPs of individual Pods.
+
+
+👉 Namaspace and Quotas
+# Namespaces provide a way to organize resources within a Kubernetes cluster, enabling you to partition a single cluster into virtual clusters.
+# This is particularly useful for multi-tenant environments or separating development, testing, and production workloads.
+#
+# Resource quotas, applied within namespaces, allow you to limit the amount of CPU, memory, or other resources that can be consumed,
+# ensuring fair resource allocation and preventing any single workload from overwhelming the cluster.
+#
+# A ResourceQuota can be applied at the namespace level to define hard or soft limits on various resource types,
+# including CPU, memory, storage, and object counts (e.g., the number of Pods, Services, or PersistentVolumeClaims).
+# This is very useful for multi-tenant environments where resource fairness and isolation are required.
+
+👉 Network and policy
+# Kubernetes defines the following key networking requirements for pod-to-pod communication:
+# • All pods must communicate with each other across nodes without restrictions.
+# • All nodes must communicate with all pods in the cluster.
+# • No Network Address Translation (NAT) should be used.
+#
+# Network policies further enhance security and control by defining rules for how Pods communicate with each other,
+# allowing you to restrict traffic based on labels, namespaces, or other criteria.
+
+# • Cilium(opens in a new tab) is an eBPF-based networking and security platform that provides advanced networking, security, and observability features.
+# • Flannel(opens in a new tab) offers a simple overlay network for basic pod-to-pod connectivity.
+# • Calico(opens in a new tab) supports robust network policies and hybrid cloud deployments.
+# • Multus(opens in a new tab) enables multiple network interfaces per pod for complex use cases.
+
+| CNI         | Connectivity between Pods | NetworkPolicy    | Obs                                                                                         |
+| ----------- | ------------------------  | ---------------- | ------------------------------------------------------------------------------------------- |
+| **Cilium**  |  ✅                       | ✅               | Implementation based on eBPF, with advanced security and observability features.            |
+| **Calico**  |  ✅                       | ✅               | One of the most traditional implementations of NetworkPolicy; you can use iptables or eBPF. |
+| **Flannel** |  ✅                       | ❌ (natively)    | Focused on providing a simple overlay network.                                              |
+| **Multus**  | Not a CNI major           | No               | Only allows you to attach multiple network interfaces to a Pod.                             |
+
+👉 StorageClass
+# Kubernetes provides flexible storage options to support stateful applications.
+# Persistent storage is managed through constructs like Persistent Volumes (PVs) and Persistent Volume Claims (PVCs),
+# which allow Pods to access storage resources dynamically.
+
+👉 Cloud-controller-manager
+# cloud-controller-manager was introduced to handle cloud-specific tasks, previously managed kube-controller-manager.
+# Enabling faster integration with external cloud providers without modifying the core Kubernetes logic.
+# Obs.:
+# To enable cloud-controller-manager, each kubelet must use the --cloud-provider=external flag.
+
+
 
 ```
 
@@ -1526,6 +1635,8 @@ k top nodes
 # 🚀 Create Object - Resources Limits
 
 ```bash
+
+# This configuration ensures that the container has guaranteed access to a minimum amount of resources while preventing it from consuming more than the specified limits, protecting other workloads on the node. In addition to setting resource parameters at the Pod leve.
 
 k explain
 k explain deployment.spec
@@ -3684,6 +3795,9 @@ Server: nginx/1.27.3
                       -----       -----      -----
                        POD         POD        POD
                       -----       -----      -----
+
+# An Ingress Controller or proxy can be layered on top to provide more advanced traffic management,
+# such as HTTP routing, TLS termination, or load balancing.
 
 # Ingress is an application that needs to be deployed on the cluster.
 # The LoadBalancer Service delivers requests to (Ingress Pod).
