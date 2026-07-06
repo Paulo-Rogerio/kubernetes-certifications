@@ -10,4 +10,9 @@ um novo membro deseja-se se tornar membro do cluster.
 bash /root/kubernetes-certifications/CKA/02-etcd/etcd-manager/data/08-new-member.sh
 
 ################################################################
+
+Iniciando Cluster...
+
+bash 08-start.sh
+
 "
