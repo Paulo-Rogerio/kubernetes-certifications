@@ -4,7 +4,7 @@ set -eo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 export KUBERNETES_SHORT_VERSION="1.34"
-export IP_CONTROL_PLANE="10.100.100.10"
+export IP_CONTROL_PLANE="10.100.100.11"
 export TIMEZONE="America/Sao_Paulo"
 
 # Doc
@@ -32,7 +32,7 @@ echo \
   $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" | \
   tee /etc/apt/sources.list.d/docker.list > /dev/null
 apt-get update -y
-apt-get install -y gpg
+apt-get install -y gpg containerd.io
 
 # helm install
 echo "======================================================"
@@ -62,7 +62,7 @@ echo " Install Packages "
 echo "======================================================"
 echo
 apt-get update -y
-apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release containerd bash-completion tree
+apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release cri-tools bash-completion tree
 
 # config containerd
 echo "======================================================"
@@ -102,14 +102,9 @@ echo "======================================================"
 echo " Configure Containerd "
 echo "======================================================"
 echo
-# Listar as imagens usadas
-# kubeadm config images list --kubernetes-version v1.34.0
-imagem_pause=$(kubeadm config images list --kubernetes-version v${KUBERNETES_SHORT_VERSION}.0 | grep 'pause' | awk -F/ '{print $NF}')
 
-echo "containerd config default > /etc/containerd/config.toml"
 mkdir -p /etc/containerd
 containerd config default > /etc/containerd/config.toml
-sed -i "s/pause:3.8/${imagem_pause}/" /etc/containerd/config.toml
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 systemctl enable containerd --now
 systemctl restart containerd
@@ -121,10 +116,11 @@ echo
 #
 # Se tem mais de uma Interface , deve-se anunciar ao Kubelet qual IP respondera as requisicoes
 #
-echo "systemctl restart kubelet"
-sed -i "/Environment=/a Environment="KUBELET_EXTRA_ARGS=--node-ip=${IP_CONTROL_PLANE}"" /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
+echo "KUBELET_EXTRA_ARGS=--node-ip=${IP_CONTROL_PLANE}" > /etc/default/kubelet
 systemctl daemon-reload
 systemctl restart kubelet
+crictl config runtime-endpoint unix:///run/containerd/containerd.sock
+crictl config image-endpoint unix:///run/containerd/containerd.sock
 
 echo "======================================================"
 echo " Container Runtime Configured Successfully "
