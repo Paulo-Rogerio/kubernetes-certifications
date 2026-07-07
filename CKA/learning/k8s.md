@@ -5,7 +5,8 @@
 - [Kubernetes Architecture - Setup](#-kubernetes-architecture---setup)
 - [Command Line - Contexts](#-command-line---contexts)
 - [Command Line - Nodes](#-command-line---nodes)
-- [Command Line - Explorando API](#-command-line---explorando-api)
+- [Command Line - Explorer API](#-command-line---explorer-api)
+- [Command Line - Labels vs Annotations]()
 - [Create Object - Pod](#-create-object---pod)
 - [Create Object - StaticPod](#-create-object---staticpod)
 - [Create Object - Init Containers](#-create-object---init-containers)
@@ -358,17 +359,59 @@ k config set-context --current --namespace=default
 # Which user is logged in (authenticated)
 k auth whoami
 
-# Logged in user can see pods
+
+# SelfSubjectAccessReview
+# This API checks permissions for the requesting user, useful for verifying your own access or delegating tasks.
+k auth can-i get pods
+
+# LocalSubjectAccessReview
+# This API evaluates permissions for a specific user or group within a single namespace, ideal for namespace-specific checks.
+# Logged in user ( r ) can see pods
 k auth can-i get pods --as=r
 k auth can-i list pods --as=r
 
-# Merge 2 kubeconfig
-kubectl config view --flatten
+# To verify permissions for another user, such as bob, use the --as flag.
+kubectl auth can-i create deployments
+kubectl auth can-i create deployments --as bob
+kubectl auth can-i create deployments --as bob --namespace developer
 
+# SelfSubjectRulesReview
+# This API lists all allowed actions for a user within a specified namespace, providing a comprehensive view of their permissions.
+# List permission
+kubectl auth can-i --list --namespace dev
+
+
+# View kubeconfig
+kubectl config view
+
+# Merge 2 kubeconfig
 KUBECONFIG=~/.kube/config:~/.kube/kube_outro_cluster_config kubectl config view --flatten > ~/.kube/kube-merge
 
 # AWS ( EKS )
 aws eks update-kubeconfig --dry-run --name paulo --region us-east-2
+
+# Kubeconfig
+• apiVersion
+Specifies the API version used by the configuration. Like all Kubernetes objects, this must be set so the kube-apiserver knows how to interpret the file.
+
+• clusters
+Defines cluster connection details, including each cluster’s name, the API server URL (e.g., https://10.128.0.3:6443), and the certificate authority (certificate-authority-data) used to authenticate secure connections.
+
+• contexts
+Enables switching between clusters, users, and namespaces. Each context links a cluster, user, and optional namespace (e.g., default).
+
+• current-context
+Identifies which context is active. This tells kubectl which cluster and user credentials to use by default, unless you override them in a specific command.
+
+• kind
+Specifies the object type being defined, in this case, Config. This field is required for all Kubernetes configuration objects.
+
+• preferences
+Stores optional client-side settings for kubectl (for example, output formatting or colorization). This field is currently unused in most setups but reserved for future enhancements.
+
+• users
+Defines user credentials. These may include a client certificate and key, a token, or a username/password combination. Token and username/password are mutually exclusive. These can be configured via the kubectl config set-credentials command.
+
 ```
 [Menu](#-menu)
 
@@ -444,6 +487,58 @@ curl \
 
 openssl x509 -in /tmp/cert.crt -text
 
+# Create Pod via Curl
+
+cat > curlpos.json <<EOF
+{
+    "kind": "Pod",
+    "apiVersion": "v1",
+    "metadata":{
+        "name": "curlpod",
+        "namespace": "default",
+        "labels": {
+            "name": "examplepod"
+        }
+    },
+    "spec": {
+        "containers": [{
+            "name": "nginx",
+            "image": "nginx",
+            "ports": [{"containerPort": 80}],
+            "imagePullPolicy": "IfNotPresent"
+        }]
+    }
+}
+EOF
+
+
+curl \
+  -i \
+  -k \
+  --cert /tmp/cert.crt \
+  --key /tmp/cert.key \
+  --cacert /etc/kubernetes/pki/ca.crt \
+  https://127.0.0.1:6443/namespaces/default/pods \
+  -XPOST -H'Content-Type: application/json' \
+  -d@curlpod.json
+
+HTTP/2 201
+audit-id: cc2e76a9-e39f-4ead-a7cd-48c17ef28976
+cache-control: no-cache, private
+content-type: application/json
+x-kubernetes-pf-flowschema-uid: 52c6213f-ee94-411c-ab55-409bc94b4a67
+x-kubernetes-pf-prioritylevel-uid: a425759f-6b62-4900-a792-0936fca17193
+content-length: 3913
+date: Tue, 07 Jul 2026 10:52:15 GMT
+
+{
+  "kind": "Pod",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "curlpod",
+...
+...
+
 # Consultando Usando Rotas anonymous
 curl -k https://127.0.0.1:6443/version
 curl -k https://127.0.0.1:6443/healthz
@@ -483,10 +578,79 @@ k delete pod -n kube-system etcd-master01
 k logs -n <namespace> <pod>
 k logs -n kube-system etcd-master01
 
+# It enables verbose output, showing the underlying API calls
+kubectl -v
+kubectl --v=10 get pods firstpod
+
 # Connect container
 k exec -it -n <namespace> <pod> -- bash
 k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash
 k exec -it -n kube-flannel kube-flannel-ds-77m55 -- bash -c "pwd; ls"
+
+# Install strace
+sudo apt install -y strace
+kubectl get endpoints
+strace -e openat kubectl get endpoints
+
+# Result save ( /home/paulo/.kube/cache/discovery/<cluster-name> )
+cd /home/paulo/.kube/cache/discovery/master01
+ls
+find .
+
+# Exploring API structure
+cat v1/serverresources.json | jq
+cat v1/serverresources.json | jq | grep kind
+
+# Structure and Type API Routes
+# Alpha:
+👉 features are considered experimental, disabled by default, and may contain significant bugs.
+👉 They are not guaranteed to be backward compatible, and functionality may change or disappear entirely between releases.
+
+# Beta:
+👉 They are expected to support backward compatibility as they evolve, although occasional issues and bugs may still arise.
+
+# Stable:
+👉 Stable APIs are identified by a version number alone, such as v1. These APIs are considered production-ready and are fully supported.
+```
+
+[Menu](#-menu)
+
+# 🚀 Command Line - Labels vs Annotations
+
+```bash
+# Annotations in Kubernetes are metadata in the form of key-value pairs used to store additional
+# information which are not used to filter or select objects.
+#
+# Main features:
+- Flexible content: Allows long, structured and human-readable texts.
+
+# Dados comuns:
+- Records versions, history, timestamps and contacts (such as the creator's email).
+
+# Integration:
+-Store links and references to systems external to Kubernetes.
+
+# Difference in Labels:
+-Labels: Short identifiers used to search, filter and organize resources.
+-Annotations: Detailed information used by tools, automations and teams, with no effect on search.
+
+# Notes.: Using annotations effectively helps improve observability, makes automation more powerful,
+and supports smoother integration with external tools.
+
+Annotations are not used for queries by the end user, but Prometheus uses them internally for automation and target discovery (Service Discovery).
+
+Ex: Automatic Target Discovery (Scraping)
+prometheus.io/scrape: "true" Tells Prometheus: "Can scrape metrics from this Pod"
+prometheus.io/port: "8080" Reports the specific port where the data is exposed.
+prometheus.io/path: "/metrics" Reports the exact HTTP path of the metrics.
+
+Ex:
+kubectl annotate pods --all description='Production Pods' -n prod
+
+# To update an existing annotation, include the --overwrite flag to avoid errors.
+
+kubectl annotate --overwrite pod webpod description="Old Production Pods" -n prod
+
 ```
 
 [Menu](#-menu)
@@ -1312,9 +1476,47 @@ k api-resources | grep namespace
 # Creating by command line
 k create ns familia
 
+$ kubectl get ns linuxcon -o yaml
+
+$ kubectl get ns/linuxcon -o yaml
+
 # If you don't remember how to declare the manifest
 k neat <<< $(k create ns familia --dry-run=client -o yaml)
 k neat <<< $(k create ns familia --dry-run=client -o yaml)
+
+# We will talk later about Resource Limits, but since we are on the namespace topic,
+# and this feature applies to the namespace we will address this issue here.
+#
+# LimitRange works as a "customs policy" for the Namespace.
+# Instead of having to manually write the limits and requests blocks in each Deployment file,
+# LimitRange does this automatically for any Pod that spawns there.
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: low-resource-range
+spec:
+  limits:
+  - default:
+      cpu: 1
+      memory: 500Mi
+    defaultRequest:
+      cpu: 0.5
+      memory: 100Mi
+    type: Container
+EOF
+
+# Create a deployment and link it to the namespace
+kubectl create -f low-resource-range.yaml -n low-usage-limit
+
+# Check
+kubectl get limitrange -A
+
+kubectl -n low-usage-limit get pods
+
+kubectl -n low-usage-limit get pod limited-hog-2556092078-wnpnv -o yaml
+
 ```
 [Menu](#-menu)
 
