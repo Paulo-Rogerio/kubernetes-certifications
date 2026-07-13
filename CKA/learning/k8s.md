@@ -2559,18 +2559,19 @@ kubectl exec -it nginx-0 -- bash -c "echo 'abacate' > /usr/share/nginx/html/inde
 # k port-forward pod/<pod-name> <Minha-Porta>:<Porta-App>
 k port-forward pod/nginx-0 8181:80
 
-# In another terminal, when doing a curl you will always get the response "avocado", as the forward was at the Pod level.
+# In another terminal, when doing a curl you will always get the response "abacate", as the forward was at the Pod level.
 
 # Insert data into Nginx-1 statefulset mount point
 kubectl exec -it nginx-1 -- bash -c "echo 'morango' > /usr/share/nginx/html/index.html"
 
 k port-forward svc/nginx 8181:80
 
-kubectl exec -it nginx-1 -- bash -c "echo 'abacate' > /usr/share/nginx/html/index.html"
+# In another terminal, when doing a curl you will always get the response "morango", as the forward was at the Pod level.
 
 # Test resolv Name containers
 for i in 0 1; do kubectl exec "nginx-$i" -- sh -c 'hostname'; done
 
+# Test DNS
 kubectl run -i --tty --image busybox dns-test --restart=Never --rm
 
 # ping -c 2 nginx-1.nginx
@@ -2597,6 +2598,7 @@ Address:	10.96.0.10:53
 Name:	nginx-1.nginx.default.svc.cluster.local
 Address: 10.244.1.52
 
+# Test Nginx Content Public HTML
 kubectl run -it --image nginx dns-test --rm -- bash
 
 root@dns-test:/# curl nginx-0.nginx
