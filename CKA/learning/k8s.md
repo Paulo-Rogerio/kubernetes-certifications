@@ -2255,6 +2255,10 @@ spec:
         disktype: ssd
 
 
+kubectl patch ds ds-two --type merge -p '{"spec":{"template":{"spec":{"containers":[{"name":"nginx","image":"nginx:1.26-alpine"}]}}}}'
+
+kubectl set image ds/ds-two nginx=nginx:1.26-alpine
+
 ```
 
 [Menu](#-menu)
@@ -2317,6 +2321,58 @@ spec:
       containers:
       - image: nginx
         name: nginx
+
+# Change Role
+kubectl edit deploy webserver
+
+...
+strategy:
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%
+  type: RollingUpdate
+...
+
+# to
+
+....
+strategy:
+  rollingUpdate:              # <-- remove this line
+    maxSurge: 25%             # <-- remove this line
+    maxUnavailable: 25%       # <-- remove this line
+  type: Recreate              # <-- Edit this line
+....
+
+kubectl patch deploy webserver --type merge -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+
+
+# 1. StatefulSets (spec.updateStrategy.type)
+👉 RollingUpdate (Default):
+Updates Pods one by one, in reverse order (from highest index to lowest).
+It is the behavior that you already have configured.
+
+👉 OnDelete:
+The controller does not update Pods automatically. When you change the manifest, nothing happens until you manually delete a Pod.
+When the old Pod is deleted, Kubernetes creates the new one with the updated version.
+
+# 2. DaemonSets (spec.updateStrategy.type)
+👉 RollingUpdate (Default):
+Updates the Pods on the cluster nodes gradually, respecting the maxSurge and maxUnavailable limits.
+
+👉OnDelete:
+As with StatefulSet, the new template is only applied to a node when the old Pod of that specific node is manually deleted.
+
+Ex:
+k get ds ds-one -o yaml | grep -A 4 updateStrategy:
+k patch ds ds-one --type merge -p '{"spec":{"updateStrategy":{"type":"OnDelete"}}}'
+
+# 3. Deployments (spec.strategy.type)
+👉 RollingUpdate:
+Atualização gradual (padrão).
+
+👉 Recreate:
+Kills all old Pods at once before creating new ones (there is no OnDelete for Deployments).
+
 ```
 [Menu](#-menu)
 
