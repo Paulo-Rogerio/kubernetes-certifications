@@ -679,6 +679,10 @@ kubectl annotate pods --all description='Production Pods' -n prod
 
 kubectl annotate --overwrite pod webpod description="Old Production Pods" -n prod
 
+kubectl create deploy ghost --image=ghost
+kubectl annotate deployment/ghost kubernetes.io/change-cause="kubectl create deploy ghost --image=ghost"
+
+
 ```
 
 [Menu](#-menu)
@@ -1758,6 +1762,7 @@ nginx   ClusterIP   10.96.240.171   <none>        80/TCP    35s
 ```bash
 k scale --help
 k scale deployment nginx-paulo --replicas 10
+k scale deploy/dev-web --replicas=4
 ```
 [Menu](#-menu)
 
@@ -2001,6 +2006,159 @@ spec:
 # Filtering by label
 k get pod -l app=nginx-paulo
 k get pod -n kube-system -l k8s-app=kube-dns
+
+
+#**********************************************************************
+# Create
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: rs-one
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      system: ReplicaOne
+  template:
+    metadata:
+      labels:
+        system: ReplicaOne
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.22.1
+        ports:
+        - containerPort: 80
+EOF
+
+# Check
+kubectl describe rs rs-one
+Name:         rs-one
+Namespace:    default
+Selector:     system=ReplicaOne
+...
+
+# Delete
+kubectl delete rs rs-one --cascade=orphan
+replicaset.apps "rs-one" deleted
+
+# Check Pod running
+kubectl get po
+NAME           READY   STATUS    RESTARTS   AGE
+rs-one-2p9x4   1/1     Running   0          7m
+rs-one-3c6pb   1/1     Running   0          7m
+
+kubectl get po -L system
+NAME           READY   STATUS    RESTARTS   AGE   SYSTEM
+rs-one-2p9x4   1/1     Running   0          7m    ReplicaOne
+rs-one-3c6pb   1/1     Running   0          7m    ReplicaOne
+
+# Delete Replicaset
+kubectl describe rs rs-one
+Error from server (NotFound): replicasets.apps "rs-one" not found
+
+# Re-Create
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: rs-one
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      system: ReplicaOne
+  template:
+    metadata:
+      labels:
+        system: ReplicaOne
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.22.1
+        ports:
+        - containerPort: 80
+EOF
+
+# We will now isolate a Pod from its ReplicaSet. Begin by editing the label of a Pod. We will change the system: parameter to be IsolatedPod.
+# ReplicaOne
+
+kubectl edit pod rs-one-c2qs9
+# or
+kubectl get pod rs-one-c2qs9 -o yaml
+# or
+kubectl label pod rs-one-c2qs9 system=IsolatedPod --overwrite
+# or
+kubectl label pod rs-one-c2qs9 system=ReplicaOne --overwrite
+# or
+kubectl patch pod rs-one-c2qs9 -p '{"metadata":{"labels":{"system":"IsolatedPod"}}}'
+
+kubectl get rs
+kubectl get po -L system
+NAME           READY   STATUS    RESTARTS   AGE   SYSTEM
+rs-one-2p9x4   1/1     Running   0          7m    IsolatedPod
+rs-one-3c6pb   1/1     Running   0          7m    ReplicaOne
+rs-one-6ydhe   1/1     Running   0          10s   ReplicaOne
+
+kubectl delete rs rs-one
+
+k get po
+NAME           READY   STATUS    RESTARTS   AGE
+rs-one-2p9x4   1/1     Running   0          7m
+
+kubectl delete pod -l system=IsolatedPod
+
+# Questions
+# 1) Why do pods survive after replicaset has been shut down?
+--cascade=orphan
+
+Delete the replicaset , but do not delete the children.
+
+The ReplicaSet has an ownerReference on the Pods:
+ownerReferences:
+- kind: ReplicaSet
+  name: rs-one
+
+Without the "orphan" parameter the pods would have been killed.
+
+# 2) When recreating the replicaset, shouldn't I recreate the Pods?
+Desired: 2 Pods
+Existing: 2 Pods
+I already have 2 compatible Pods. I don\'t need to create anything
+
+# 3) Does this new replicaset manage the old pods, pods created by the first replicaset?
+The orphaned Pods continued with the label, this allows it to find the Pod.
+selector:
+  matchLabels:
+    system: ReplicaOne
+
+# 4) When isolating a Pod, it creates a third, why? Is it related to the number of replicas?
+Pod A -> system=ReplicaOne
+Pod B -> system=ReplicaOne
+
+Controlled total = 2
+
+Pod A -> system=ReplicaOne
+Pod B -> system=IsolatedPod
+
+Controlled total = 1
+
+then:
+Pod A -> ReplicaOne
+Pod B -> IsolatedPod
+Pod C -> ReplicaOne
+
+# 5) Why did the label change make Kubernetes understand that this pod was no longer part of the replicaset?
+Why ReplicaSet controls Pods by matchLabels
+selector:
+  matchLabels:
+    system: ReplicaOne
+
+# 6) Can I say that the pod that was manipulated by label was unlinked from the replicaset?
+Yes. The Pod no longer corresponds to the selector after the change.
+
 ```
 [Menu](#-menu)
 
@@ -2075,6 +2233,28 @@ k get rs nginx-paulo-78455bbb4 -o yaml | grep deployment.kubernetes.io/revision
 
 # Restart all nginx-paulo Deployment Pods
 k rollout restart deployment/nginx-paulo
+
+
+# You can pause a deployment’s rollout to make multiple changes
+kubectl rollout pause deployment/ghost
+
+# Make changes (e.g., edit the image or resources), then resume the rollout
+kubectl rollout resume deployment/ghost
+
+# Label in Worker
+kubectl label node <node-name> disktype=ssd
+
+....
+spec:
+  template:
+    spec:
+      containers:
+      - image: nginx:1.25
+        name: nginx
+      nodeSelector:
+        disktype: ssd
+
+
 ```
 
 [Menu](#-menu)
