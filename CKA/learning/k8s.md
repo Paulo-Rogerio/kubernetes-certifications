@@ -7,6 +7,7 @@
 - [Command Line - Nodes](#-command-line---nodes)
 - [Command Line - Explorer API](#-command-line---explorer-api)
 - [Command Line - Labels vs Annotations](#-command-line---labels-vs-annotations)
+- [Command Line - Helm Charts](#-command-line---helm-charts)
 - [Create Object - Pod](#-create-object---pod)
 - [Create Object - StaticPod](#-create-object---staticpod)
 - [Create Object - Init Containers](#-create-object---init-containers)
@@ -684,6 +685,99 @@ kubectl annotate deployment/ghost kubernetes.io/change-cause="kubectl create dep
 
 
 ```
+
+[Menu](#-menu)
+
+# 🚀 Command Line - Helm Charts
+
+```bash
+backend/
+├── Chart.yaml
+├── values.yaml
+└── templates/
+    ├── deployment.yaml
+    ├── service.yaml
+    ├── secret.yaml
+    └── _helpers.tpl
+
+#--------------------------
+# Templates
+templates/_helpers.tpl
+{{- define "fullname" -}}
+{{ .Release.Name }}-{{ .Chart.Name }}
+{{- end -}}
+
+#--------------------------
+# Chart
+backend/Chart.yaml
+name: backend
+
+#--------------------------
+# Values
+backend/values.yaml
+environment: development
+
+#--------------------------
+# templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+    name: {{ include "fullname" . }}-{{ .Values.environment }}
+
+# NOTES.:
+
+# What is the difference between template and include?
+
+{{ template "fullname" . }} => Template executes a named template and writes the result directly to the output.
+
+{{ include "fullname" . }} => Include does exactly the same rendering, but returns a string. This means you can pass this string to other functions.
+
+Ex:
+{{ include "fullname" . | upper }}
+{{ include "fullname" . | lower }}
+{{ include "fullname" . | replace "-" "_" }}
+{{ include "fullname" . | quote }}
+
+#--------------------------
+# Build
+.Release.Name       = api
+<CHART_PATH>        = backend
+.Chart.Name         = backend (vem do Chart.yaml, não do nome da pasta)
+.Values.environment = production
+
+# Usage
+helm install <RELEASE_NAME> <CHART_PATH>
+helm install api backend --set environment=production
+
+#--------------------------
+Then... Result build....
+
+metadata:
+  name: api-backend-production
+
+#********************************************
+# List all available products
+helm search repo gitlab
+
+# List all redis products available on (Artifact Hub)
+helm search hub redis
+
+# Add repositorios
+helm repo add bitnami ht‌tps://charts.bitnami.com/bitnami
+helm repo add gitlab https://charts.gitlab.io
+
+# List repositorios existents
+helm repo list
+
+# Listing by a specific product
+helm search repo gitlab/gitlab-runner
+
+# Download
+helm pull gitlab/gitlab-runner --untar
+cd gitlab-runner
+ls
+```
+
 
 [Menu](#-menu)
 
