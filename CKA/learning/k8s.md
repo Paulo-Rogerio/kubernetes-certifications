@@ -895,8 +895,22 @@ kubectl apply -k ./dir
      Manifest final
 
 
-
 mkdir -p k8s/base k8s/overlays/{production,sandbox}
+
+myapp
+├── base
+│   ├── deployment.yaml
+│   ├── kustomization.yaml
+│   └── service.yaml
+└── overlays
+    ├── sandbox
+    │   ├── deployment.yaml
+    │   ├── kustomization.yaml
+    │   └── service.yaml
+    └── production
+        ├── deployment.yaml
+        ├── kustomization.yaml
+        └── service-patch.yaml
 
 #-----------------------------------
 # Base Deployment
@@ -1117,6 +1131,9 @@ goapp-7558f999d9-r7bz9   1/1     Running   0          46s
 cd overlays/sandbox
 export tag=1.34
 kustomize edit set image goapp=nginx:${tag}
+
+# Delete implementation
+k delete -k myapp/overlays/dev/
 ```
 
 [Menu](#-menu)
@@ -8372,6 +8389,97 @@ spec:
         value: 100
         periodSeconds: 15
 EOF
+
+# Another laboratory
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hpa-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hpa-app
+  template:
+    metadata:
+      labels:
+        app: hpa-app
+    spec:
+      containers:
+      - name: web
+        image: registry.k8s.io/hpa-example
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 5m
+          limits:
+            cpu: 10m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hpa-app
+spec:
+  type: ClusterIP
+  selector:
+    app: hpa-app
+  ports:
+  - port: 80
+    targetPort: 80
+EOF
+
+
+k get deploy,rs,pods,svc -o wide
+k autoscale deployment hpa-app \
+  --cpu=50% --min=2 --max=10 \
+  --dry-run=client -o yaml > hpa.yaml
+
+k apply -f hpa.yaml
+k get hpa
+
+k get svc
+NAMESPACE     NAME             TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                  AGE
+default       hpa-app          ClusterIP   10.104.151.90   <none>        80/TCP                   4m1s
+default       kubernetes       ClusterIP   10.96.0.1       <none>        443/TCP                  53d
+kube-system   cilium-envoy     ClusterIP   None            <none>        9964/TCP                 53d
+kube-system   hubble-peer      ClusterIP   10.105.238.72   <none>        443/TCP                  53d
+kube-system   kube-dns         ClusterIP   10.96.0.10      <none>        53/UDP,53/TCP,9153/TCP   53d
+kube-system   metrics-server   ClusterIP   10.108.128.61   <none>        443/TCP                  53d
+
+sudo apt update && sudo apt install -y siege
+New configuration template added to /home/student/.siege
+Run siege -C to view the current settings in that file
+
+# Run
+siege -q -c 5 -t 2m http://10.104.151.90
+{       "transactions":                           51,
+        "availability":                       100.00,
+        "elapsed_time":                       119.16,
+        "data_transferred":                     0.00,
+        "response_time":                       11.06,
+        "transaction_rate":                     0.43,
+        "throughput":                           0.00,
+        "concurrency":                          4.73,
+        "successful_transactions":                51,
+        "failed_transactions":                     0,
+        "longest_transaction":                 26.41,
+        "shortest_transaction":                 6.42
+}
+
+k get hpa
+NAME      REFERENCE            TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
+hpa-app   Deployment/hpa-app   cpu: 125%/50%   2         10        6          4m49s
+
+watch k get pods -o wide
+NAME                       READY   STATUS    RESTARTS   AGE   NODE
+hpa-app-6d7d9c7c9c-hbw9t   1/1     Running   0          6m    worker
+hpa-app-6d7d9c7c9c-8qj9d   1/1     Running   0          2m    cp
+hpa-app-6d7d9c7c9c-7k2h4   1/1     Running   0          1m    worker
+...
+
 
 #*************************** Extending or calculating HPA *****************************
 #
