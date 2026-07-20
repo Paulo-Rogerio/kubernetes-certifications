@@ -8,6 +8,7 @@
 - [Command Line - Explorer API](#-command-line---explorer-api)
 - [Command Line - Labels vs Annotations](#-command-line---labels-vs-annotations)
 - [Command Line - Helm Charts](#-command-line---helm-charts)
+- [Command Line - Kustomize](#-command-line---kustomize)
 - [Create Object - Pod](#-create-object---pod)
 - [Create Object - StaticPod](#-create-object---staticpod)
 - [Create Object - Init Containers](#-create-object---init-containers)
@@ -772,12 +773,298 @@ helm repo list
 # Listing by a specific product
 helm search repo gitlab/gitlab-runner
 
+# Display yaml render
+helm template frontend -n production .
+
 # Download
 helm pull gitlab/gitlab-runner --untar
 cd gitlab-runner
 ls
 ```
 
+[Menu](#-menu)
+
+# 🚀 Command Line - Kustomize
+
+```bash
+#
+# To preview the rendered YAML after applying Kustomize, you can use something like:
+#
+kubectl kustomize ./dir
+
+# To apply the customized resources directly to your cluster, you can do:
+kubectl apply -k ./dir
+
+# This file defines the resources (Kubernetes manifests such as deployment.yaml or service.yaml) you want to manage and the modifications
+# (instructions for customizing these resources) you want to apply to them.
+
+# Kustomize promotes modularity by organizing configurations into bases and overlays.
+
+# Base
+# These are directories that contain the shared, common configuration for an application.
+# For example, a Deployment definition that should be consistent across all environments.
+
+# Overlays
+# They allow you to apply environment-specific changes without duplicating or editing the base files.
+# For instance, a development overlay might increase replica counts or update image tags, while a production overlay keeps them stable.
+
+# To modify resources, Kustomize supports several powerful mechanisms.
+
+# Patches
+# They allow fine-grained changes to specific resources, such as adding a new environment variable or modifying a single field.
+# Kustomize supports two types of patches:
+# strategic merge patches (they allow you to modify specific fields in a resource, such as updating replicas or adding environment variables).
+# JSON patches (JSON 6902) (they allow you to apply precise, low-level changes using the JSON patch syntax).
+
+# Transformers
+# They apply broad, consistent modifications across multiple resources, such as injecting a label or annotation into every object in a deployment.
+
+# Generators
+# They create resources dynamically, such as ConfigMaps or Secrets, often from literal values or external files at deployment time. This ensures sensitive or environment-specific data can be managed without hardcoding it into YAML.
+
+# To ensure maintainability and scalability, organize your Kustomize files into a clean hierarchy with separate base and overlay directories.
+#
+         Base
+          │
+          │
+     deployment.yaml
+     service.yaml
+          │
+          ▼
+   Overlay escolhido
+          │
+    altera namespace
+    altera imagem
+    altera replicas
+     gera ConfigMap
+          │
+          ▼
+     Manifest final
+
+
+
+mkdir -p k8s/base k8s/overlays/{production,sandbox}
+
+#-----------------------------------
+# Base Deployment
+#-----------------------------------
+cat > k8s/base/deployment.yaml <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goapp
+spec:
+  selector:
+    matchLabels:
+      app: goapp
+  template:
+    metadata:
+      labels:
+        app: goapp
+    spec:
+      containers:
+      - name: goapp
+        image: goapp
+        ports:
+        - containerPort: 80
+EOF
+
+#-----------------------------------
+# Base Service
+#-----------------------------------
+cat > k8s/base/service.yaml <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: goapp
+spec:
+  selector:
+    app: goapp
+  ports:
+  - port: 80
+    targetPort: 80
+EOF
+
+#-----------------------------------
+# Base Kustomization
+#-----------------------------------
+cat > k8s/base/kustomization.yaml <<EOF
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- deployment.yaml
+- service.yaml
+
+images:
+- name: goapp
+EOF
+
+#-----------------------------------
+# Overlay Kustomization - Sandbox
+#-----------------------------------
+cat > k8s/overlays/sandbox/kustomization.yaml <<EOF
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+- namespace.yaml
+
+namespace: sandbox
+
+images:
+- name: goapp
+  newName: nginx
+  newTag: "1.30"
+
+patches:
+- path: deployment.yaml
+EOF
+
+#-----------------------------------
+# Overlay Deployment - Sandbox
+#-----------------------------------
+cat > k8s/overlays/sandbox/deployment.yaml <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goapp
+spec:
+  replicas: 1
+EOF
+
+#-----------------------------------
+# Overlay Namespace - Sandbox
+#-----------------------------------
+cat > k8s/overlays/sandbox/namespace.yaml <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sandbox
+  labels:
+    environment: sandbox
+EOF
+
+#-----------------------------------
+# Overlay Kustomization - Production
+#-----------------------------------
+cat > k8s/overlays/production/kustomization.yaml <<EOF
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+- namespace.yaml
+
+namespace: production
+
+images:
+- name: goapp
+  newName: nginx
+  newTag: "1.30"
+
+patches:
+- path: deployment.yaml
+EOF
+
+#-----------------------------------
+# Overlay Deployment - Production
+#-----------------------------------
+cat > k8s/overlays/production/deployment.yaml <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goapp
+spec:
+  replicas: 5
+EOF
+
+#-----------------------------------
+# Overlay Namespace - Production
+#-----------------------------------
+cat > k8s/overlays/production/namespace.yaml <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    environment: production
+EOF
+
+#+++++++++++++++++++++++++++++++++++
+# Build - Display Only
+#+++++++++++++++++++++++++++++++++++
+kubectl kustomize k8s/overlays/sandbox
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    environment: sandbox
+  name: sandbox
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: goapp
+  namespace: sandbox
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: goapp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goapp
+  namespace: sandbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: goapp
+  template:
+    metadata:
+      labels:
+        app: goapp
+    spec:
+      containers:
+      - image: nginx:1.31
+        name: goapp
+        ports:
+        - containerPort: 80
+
+
+#+++++++++++++++++++++++++++++++++++
+# Build Apply
+#+++++++++++++++++++++++++++++++++++
+k apply -k k8s/overlays/sandbox
+namespace/sandbox created
+service/goapp created
+deployment.apps/goapp created
+
+k get po -n sandbox
+NAME                    READY   STATUS    RESTARTS   AGE
+goapp-79645885b-nbtrq   1/1     Running   0          2m8s
+
+k apply -k k8s/overlays/production
+k get po -n production
+NAME                     READY   STATUS    RESTARTS   AGE
+goapp-7558f999d9-9tklq   1/1     Running   0          46s
+goapp-7558f999d9-fnkjq   1/1     Running   0          46s
+goapp-7558f999d9-l697l   1/1     Running   0          46s
+goapp-7558f999d9-pq9jd   1/1     Running   0          46s
+goapp-7558f999d9-r7bz9   1/1     Running   0          46s
+
+# Se eu tiver em uma pipeline CI/CD , como posso fazer replace?
+# Modificando diretamente o kustomization.yaml do overlay
+#
+cd overlays/sandbox
+export tag=1.34
+kustomize edit set image goapp=nginx:${tag}
+```
 
 [Menu](#-menu)
 
