@@ -692,6 +692,13 @@ kubectl annotate deployment/ghost kubernetes.io/change-cause="kubectl create dep
 # 🚀 Command Line - Helm Charts
 
 ```bash
+#
+# A Chart is a collection of files to deploy an application.
+# There is a good starting repo available here, provides by vendors. (https://artifacthub.io/packages/search), or you can make your own.
+# Search the current Charts in the Artifact Hub for available stable echo servers.
+# Repos change often, so the following output may be different from what you see.
+#
+
 backend/
 ├── Chart.yaml
 ├── values.yaml
@@ -733,7 +740,7 @@ metadata:
 
 {{ include "fullname" . }} => Include does exactly the same rendering, but returns a string. This means you can pass this string to other functions.
 
-Ex:
+# Ex:
 {{ include "fullname" . | upper }}
 {{ include "fullname" . | lower }}
 {{ include "fullname" . | replace "-" "_" }}
@@ -766,6 +773,10 @@ helm search hub redis
 # Add repositorios
 helm repo add bitnami ht‌tps://charts.bitnami.com/bitnami
 helm repo add gitlab https://charts.gitlab.io
+helm repo add ealenn https://ealenn.github.io/charts
+
+# After add repository, run update.
+helm repo update
 
 # List repositorios existents
 helm repo list
@@ -780,6 +791,48 @@ helm template frontend -n production .
 helm pull gitlab/gitlab-runner --untar
 cd gitlab-runner
 ls
+
+# The --debug option will create a lot of output. The output will typically suggest ways to access the software.
+helm upgrade -i tester ealenn/echo-server --debug
+helm upgrade -i tester ealenn/echo-server --dry-run --debug
+
+# Remove
+helm uninstall tester
+
+find $HOME -name *echo*
+~/.cache/helm/repository/echo-server-0.5.0.tgz
+
+# Add Metric Server
+helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+
+# Dowload
+helm pull metrics-server/metrics-server --untar
+
+# Form 1
+#
+# Edit Values
+# Default values for metrics-server.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+image:
+  repository: registry.k8s.io/metrics-server/metrics-server
+##
+defaultArgs:
+  - --cert-dir=/tmp
+  - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+  - --kubelet-use-node-status-port
+  - --metric-resolution=15s
+  - --kubelet-insecure-tls    # <---- add this line
+
+# Form 2
+#
+helm install \
+  --namespace kube-system \
+  --create-namespace metrics-server metrics-server/metrics-server \
+  --set-string args[0]=--kubelet-insecure-tls \
+  --set-string args[1]="--kubelet-preferred-address-types=InternalIP\,Hostname\,ExternalIP"
+
+kubectl get pods -n kube-system | grep metrics
 ```
 
 [Menu](#-menu)
