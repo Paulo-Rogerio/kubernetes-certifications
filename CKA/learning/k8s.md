@@ -968,7 +968,7 @@ namespace: sandbox
 images:
 - name: goapp
   newName: nginx
-  newTag: "1.30"
+  newTag: "1.31"
 
 patches:
 - path: deployment.yaml
@@ -1014,7 +1014,7 @@ namespace: production
 images:
 - name: goapp
   newName: nginx
-  newTag: "1.30"
+  newTag: "1.29"
 
 patches:
 - path: deployment.yaml
