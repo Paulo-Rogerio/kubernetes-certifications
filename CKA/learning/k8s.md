@@ -694,10 +694,42 @@ kubectl annotate deployment/ghost kubernetes.io/change-cause="kubectl create dep
 ```bash
 #
 # A Chart is a collection of files to deploy an application.
+# A collection of Kubernetes manifests bundled with metadata and templates
 # There is a good starting repo available here, provides by vendors. (https://artifacthub.io/packages/search), or you can make your own.
 # Search the current Charts in the Artifact Hub for available stable echo servers.
 # Repos change often, so the following output may be different from what you see.
 #
+
+# In which scenarios is Helm Chart not recommended?
+#
+# Automatic creation of cluster-wide PersistentVolumes
+
+# A PersistentVolume represents a physical or logical resource of the cluster (NFS, iSCSI, Fiber Channel, local disk, Ceph, etc.)
+# The application should only request storage via a PersistentVolumeClaim (PVC).
+# PV is a shared resource
+#
+# Um PV pode ser consumido por diferentes workloads (dependendo do modo de acesso).
+#
+# Imagine a Chart that creates:
+
+kind: PersistentVolume
+metadata:
+  name: nfs-pv
+
+Error: persistentvolumes "nfs-pv" already exists
+
+# Dynamic provisioning exists precisely to avoid this
+
+StorageClass
+        │
+        ▼
+PVC --------> CSI Driver
+                  │
+                  ▼
+             PersistentVolume
+
+# The application only creates
+kind: PersistentVolumeClaim
 
 backend/
 ├── Chart.yaml
