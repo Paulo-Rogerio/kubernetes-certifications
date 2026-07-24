@@ -7223,12 +7223,12 @@ nginx-7b98f58f85-wq6mg-9.txt
 
 # 🚀 Create Object - Storage AccessMode
 
-| Modo de Acesso | Descrição | Exemplo de Uso Válido | Exemplo de Uso Inválido |
+| Access Mode | Description | Valid Usage Example | Invalid Usage Example |
 | :--- | :--- | :--- | :--- |
-| **ReadWriteOnce (RWO)** | O volume pode ser montado como leitura e escrita por um único nó. | Dois Pods no mesmo nó podem escrever no volume. | Um Pod em um nó diferente tenta montar o mesmo volume → Erro `FailedAttachVolume`. |
-| **ReadOnlyMany (ROX)** | O volume pode ser montado como leitura por múltiplos nós. | Vários Pods em nós diferentes montam o mesmo volume em modo somente leitura. | O Pod tenta montar o volume em modo de leitura e escrita → Acesso negado. |
-| **ReadWriteMany (RWX)** | O volume pode ser montado como leitura e escrita por múltiplos nós. | Pods em múltiplos nós podem ler e escrever simultaneamente no volume compartilhado. | O backend de armazenamento não suporta RWX (ex: alguns discos em nuvem) → Falha no agendamento do Pod. |
-| **ReadWriteOncePod (RWOP)** | O volume pode ser montado como leitura e escrita por um único Pod em um único nó. | Um Pod monta o volume exclusivamente, garantindo que nenhum outro Pod no cluster o acesse. | Um segundo Pod tenta montar o volume (no mesmo nó ou em outro) → Montagem rejeitada por exclusividade. |
+| **ReadWriteOnce (RWO)** | The volume can be mounted as read and write by a single node. | Two Pods on the same node can write to the volume. | A Pod on a different node tries to mount the same volume → Error `FailedAttachVolume`. |
+| **ReadOnlyMany (ROX)** | The volume can be mounted as readable by multiple nodes. | Multiple Pods on different nodes mount the same volume in read-only mode. | The Pod attempts to mount the volume in read-write mode → Access Denied. |
+| **ReadWriteMany (RWX)** | The volume can be mounted as read and write by multiple nodes. | Pods on multiple nodes can simultaneously read and write to the shared volume. | Storage backend does not support RWX (e.g. some cloud disks) → Pod scheduling failed. |
+| **ReadWriteOncePod (RWOP)** | The volume can be mounted as read and write by a single Pod on a single node. | A Pod mounts the volume exclusively, ensuring that no other Pods in the cluster access it. | A second Pod attempts to mount the volume (on the same or another node) → Mount rejected due to uniqueness. |
 
 ```bash
 
