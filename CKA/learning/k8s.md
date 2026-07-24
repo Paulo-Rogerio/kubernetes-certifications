@@ -5855,6 +5855,8 @@ strict-transport-security: max-age=31536000; includeSubDomains
 # They can be populated from literal values, individual files, or entire directories and consumed in Pods as environment variables,
 # command arguments, or volume files.
 
+# ConfigMaps store non-sensitive configuration data, such as environment variables or configuration files
+
 # A ConfigMap can be consumed by Pods and other Kubernetes components in several ways:
 
 • As environment variables
@@ -6616,6 +6618,7 @@ index2.html
 ```bash
 
 # Secrets can be mounted as volumes or exposed as environment variables in Pods, providing secure access to containers.
+# Secrets store sensitive data, such as passwords or SSH keys, in base64-encoded format
 
 #**************** Encrypting Secrets at Rest *******************
 #
@@ -6816,6 +6819,11 @@ spec:
 # 🚀 Create Object - Storage PV
 
 ```bash
+
+# A PersistentVolume is a cluster-wide storage resource, either pre-provisioned by an administrator or
+# dynamically provisioned by a storage class.
+# PVs can be backed by various storage systems, such as NFS, cloud storage (e.g., AWS EBS), or Ceph.
+#
 # Let's separate the storage block into 3 themes:
 # -Dynamic Provisioning
 # -Static Provisioning
@@ -6939,6 +6947,9 @@ prgs-worker-pv   1Gi        RWO            Retain           Available           
 # 🚀 Create Object - Storage PVC
 
 ```bash
+
+# A PersistentVolumeClaim is a request by a Pod to use a PV that meets specific criteria (e.g., size, access mode).
+# Once bound, the PV is reserved for the Pod and persists after the Pod terminates, allowing other Pods to claim and reuse the data.
 
 ###################
 # Create PVC
@@ -7211,6 +7222,13 @@ nginx-7b98f58f85-wq6mg-9.txt
 [Menu](#-menu)
 
 # 🚀 Create Object - Storage AccessMode
+
+| Modo de Acesso | Descrição | Exemplo de Uso Válido | Exemplo de Uso Inválido |
+| :--- | :--- | :--- | :--- |
+| **ReadWriteOnce (RWO)** | O volume pode ser montado como leitura e escrita por um único nó. | Dois Pods no mesmo nó podem escrever no volume. | Um Pod em um nó diferente tenta montar o mesmo volume → Erro `FailedAttachVolume`. |
+| **ReadOnlyMany (ROX)** | O volume pode ser montado como leitura por múltiplos nós. | Vários Pods em nós diferentes montam o mesmo volume em modo somente leitura. | O Pod tenta montar o volume em modo de leitura e escrita → Acesso negado. |
+| **ReadWriteMany (RWX)** | O volume pode ser montado como leitura e escrita por múltiplos nós. | Pods em múltiplos nós podem ler e escrever simultaneamente no volume compartilhado. | O backend de armazenamento não suporta RWX (ex: alguns discos em nuvem) → Falha no agendamento do Pod. |
+| **ReadWriteOncePod (RWOP)** | O volume pode ser montado como leitura e escrita por um único Pod em um único nó. | Um Pod monta o volume exclusivamente, garantindo que nenhum outro Pod no cluster o acesse. | Um segundo Pod tenta montar o volume (no mesmo nó ou em outro) → Montagem rejeitada por exclusividade. |
 
 ```bash
 
