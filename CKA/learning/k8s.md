@@ -47,7 +47,10 @@
 - [Create Object - ConfigMap](#-create-object---configmap)
 - [Create Object - ConfigMap Vhost Ingress](#-create-object---configmap-vhost-ingress)
 - [Create Object - Secrets](#-create-object---secrets)
-- [Create Object - Storage PV / PVC / StorageClass](#-create-object---storage-pv--pvc--storageclass--accessmode)
+- [Create Object - Storage PV](#-create-object---storage-pv)
+- [Create Object - Storage PVC](#-create-object---storage-pvc)
+- [Create Object - Storage StorageClass](#-create-object---storage-storageclass)
+- [Create Object - Storage AccessMode](#-create-object---storage-accessmode)
 - [Create Object - Storage CSDriver](#-create-object---storage-csdriver)
 - [Create Object - Storage Reclaim Policy PVC / StorageClass](#-create-object---storage-reclaim-policy-pvc--storageclass)
 - [Create Object - HPA / VPA](#-create-object---hpa--vpa)
@@ -5846,6 +5849,21 @@ strict-transport-security: max-age=31536000; includeSubDomains
 # 🚀 Create Object - ConfigMap
 
 ```bash
+
+# A ConfigMap is a Kubernetes API resource that stores non-sensitive configuration data as key-value pairs or files.
+# ConfigMaps decouple configuration from container images, allowing you to modify application settings without rebuilding images.
+# They can be populated from literal values, individual files, or entire directories and consumed in Pods as environment variables,
+# command arguments, or volume files.
+
+# A ConfigMap can be consumed by Pods and other Kubernetes components in several ways:
+
+• As environment variables
+• In commands or arguments
+• As mounted volumes
+• To customize file names and permissions when mounted.
+• By system components
+
+
 k get cm -n kube-system
 NAME                                                   DATA   AGE
 coredns                                                1      7h35m
@@ -5971,6 +5989,22 @@ Events:
   Normal   Pulling    9s (x5 over 56s)  kubelet            Pulling image "nginx"
   Warning  Failed     8s (x5 over 54s)  kubelet            Error: configmap "virtualhost" not found
   Normal   Pulled     8s                kubelet            Successfully pulled image "nginx" in 1.25s (1.25s including waiting). Image size: 62960006 bytes.
+
+
+# Notes
+# To avoid the above error, use optional true
+
+# By default, a ConfigMap must exist before a Pod can reference it. To make a ConfigMap optional, add .
+optional: true
+
+# Example:
+env:
+- name: SPECIAL_LEVEL_KEY
+  valueFrom:
+    configMapKeyRef:
+      name: special-config
+      key: special.how
+      optional: true
 
 
 cat <<EOF | k apply -f -
@@ -6192,6 +6226,129 @@ k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
     Index.html Prgs Corp
   </h1>
 </html>
+
+# Another Exemplos....
+
+mkdir primary
+echo "c" > primary/cyan && \
+echo "m" > primary/magenta && \
+echo "y" > primary/yellow && \
+echo "k" > primary/black && \
+echo "known as key" >> primary/black && \
+echo "blue" > favorite
+
+k create configmap colors \
+    --from-literal=text=black \
+    --from-file=./favorite \
+    --from-file=./primary/
+
+k get configmap colors -o yaml
+apiVersion: v1
+data:
+black: |
+    k
+    known as key
+cyan: |
+    c
+favorite: |
+    blue
+magenta: |
+    m
+text: black
+yellow: |
+    y
+kind: ConfigMap
+<output_omitted>
+
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: shell-demo
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.29.6
+    env:
+    - name: ilike
+      valueFrom:
+        configMapKeyRef:
+          name: colors
+          key: favorite
+EOF
+
+# Check enviroments variables...
+k exec shell-demo -- /bin/bash -c 'echo $ilike'
+blue
+
+
+k delete pod shell-demo
+cat <<EOF | k create -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: shell-demo
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.29.6
+    envFrom:
+    - configMapRef:
+        name: colors
+EOF
+
+kubectl exec shell-demo -- /bin/bash -c 'env | egrep "cyan|yellow|black|favorite|magenta"'
+
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fast-car
+  namespace: default
+data:
+  car.make: Ford
+  car.model: Mustang
+  car.trim: Shelby
+EOF
+
+kubectl get configmap fast-car -o yaml
+
+
+k delete pod shell-demo
+cat <<EOF | k create -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: shell-demo
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.29.6
+    volumeMounts:
+    - name: car-vol
+      mountPath: /etc/cars
+    envFrom:
+    - configMapRef:
+        name: colors
+  volumes:
+  - name: car-vol
+    configMap:
+      name: fast-car
+EOF
+
+# For the pod /etc/cars is a mount point.
+# The pod fills the mount point as a partition within the container's mount namespace
+# But this does not necessarily mean that there is a dedicated physical partition for /etc/cars.
+
+kubectl exec shell-demo -- /bin/bash -c 'df -ha |grep car'
+/dev/vda1        96G  4.1G   92G   5% /etc/cars
+
+# Print content file
+kubectl exec shell-demo -- /bin/bash -c 'cat /etc/cars/car.trim && xargs'
+Shelby
+
 ```
 [Menu](#-menu)
 
@@ -6457,6 +6614,30 @@ index2.html
 # 🚀 Create Object - Secrets
 
 ```bash
+
+# Secrets can be mounted as volumes or exposed as environment variables in Pods, providing secure access to containers.
+
+#**************** Encrypting Secrets at Rest *******************
+#
+# To enable encryption, you must:
+
+👉 Create an EncryptionConfiguration with one or more encryption keys.
+
+👉 Start the API server with the --encryption-provider-config flag, pointing to the configuration file.
+
+👉 Choose an encryption provider, such as aescbc or kms.
+
+# Once enabled, Secrets are encrypted when written to etcd.
+# To fully enable encryption for existing Secrets, you must recreate them, since encryption only occurs on write.
+
+👉 During decryption, all keys for a provider are tried.
+
+👉 For encryption, the first key of the first provider is always used.
+
+👉 To rotate keys, create a new key, restart the kube-apiserver, and then recreate all Secrets to encrypt them with the new key.
+
+# Secrets can be exposed to Pods in two main ways: ( volume file or environment variables )
+
 k create secret --help
 
 # Available Commands:
@@ -6602,11 +6783,37 @@ k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}'
 
 k exec -it $(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}') -- cat /segredo/username && echo
 admin
+
+#*************** Limitacoes ********************
+#
+# Secrets are stored on the node in tmpfs (in-memory storage), ensuring they are not written to disk.
+# They are only delivered to nodes running the requesting Pod.
+
+
+# Another Exemplos:
+
+kubectl create secret generic mysql --from-literal=password=root
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db-pod
+  namespace: default
+spec:
+  containers:
+  - name: dbpod
+    image: mysql:8.0
+    env:
+    - name: MYSQL_ROOT_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: mysql
+          key: password
 ```
 
 [Menu](#-menu)
 
-# 🚀 Create Object - Storage PV / PVC / StorageClass / AccessMode
+# 🚀 Create Object - Storage PV
 
 ```bash
 # Let's separate the storage block into 3 themes:
@@ -6725,6 +6932,13 @@ EOF
 k get pv
 NAME             CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM   STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
 prgs-worker-pv   1Gi        RWO            Retain           Available                          <unset>
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Storage PVC
+
+```bash
 
 ###################
 # Create PVC
@@ -6841,7 +7055,13 @@ Filesystem                         Size  Used Avail Use% Mounted on
 overlay                            466G  255G  188G  58% /
 tmpfs                               64M     0   64M   0% /dev
 overlay                            466G  255G  188G  58% /data
+```
 
+[Menu](#-menu)
+
+# 🚀 Create Object - Storage StorageClass
+
+```bash
 
 #============================= Dynamic Provisioning =============================
 
@@ -6986,7 +7206,13 @@ nginx-7b98f58f85-wq6mg-7.txt
 nginx-7b98f58f85-wq6mg-8.txt
 nginx-7b98f58f85-wq6mg-9.txt
 -------------------
+```
 
+[Menu](#-menu)
+
+# 🚀 Create Object - Storage AccessMode
+
+```bash
 
 # By having this access mode (ReadWriteOnce) all Pods scheduled on this Node can write.
 #
