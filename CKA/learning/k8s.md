@@ -48,6 +48,7 @@
 - [Create Object - ConfigMap Vhost Ingress](#-create-object---configmap-vhost-ingress)
 - [Create Object - Secrets](#-create-object---secrets)
 - [Create Object - Storage PV](#-create-object---storage-pv)
+- [Create Object - Storage Local Ephemeral Volumes](#-create-object---storage-local-ephemeral-volumes)
 - [Create Object - Storage PVC](#-create-object---storage-pvc)
 - [Create Object - Storage StorageClass](#-create-object---storage-storageclass)
 - [Create Object - Storage AccessMode](#-create-object---storage-accessmode)
@@ -6944,6 +6945,97 @@ prgs-worker-pv   1Gi        RWO            Retain           Available           
 
 [Menu](#-menu)
 
+# 🚀 Create Object - Storage Local Ephemeral Volumes
+
+```bash
+
+# The kubelet creates a directory in the Node's local filesystem.
+# This directory now represents the emptyDir volume.
+# The kubelet binds mount this directory into the container at:
+
+┌────────────────────────────────────┐
+│ /var/lib/kubelet/pods/<UID>/       │
+│     volumes/kubernetes.io~empty-dir│
+│         /scratch-volume            │
+│              │                     │
+└──────────────┼─────────────────────┘
+               │ bind mount
+               ▼
+           Container
+           /scratch
+
+#**************** Local & Ephemeral Volumes ************************
+
+# emptyDir creates a temporary directory on the host node’s filesystem, initialized when
+# the Pod is created and deleted when the Pod terminates. Useful for scratch space or temporary caching.
+#
+# Temporary storage for scratch space, caching, or data sharing between containers in a Pod.
+
+✅ Pros: Simple to set up; no external dependencies.
+
+✅ Cons: Non-persistent; data is lost when the Pod is deleted.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fordpinto
+  namespace: default
+spec:
+  containers:
+  - name: gastank
+    image: simpleapp
+    command:
+    - sleep
+    - "3600"
+    volumeMounts:
+    - name: scratch-volume
+      mountPath: /scratch
+  volumes:
+  - name: scratch-volume
+    emptyDir: {}
+
+
+# emptyDir uses the local storage of the Node where the Pod is running.
+
+#************************* HostPath ********************************
+
+# * hostPath mounts a file, directory, or device (e.g., file socket, block device) from the host node’s filesystem directly into the Pod.
+
+# Used to access node-specific resources, such as logs or configuration files.
+
+✅ Pros: Direct access to host resources; for flexibility, DirectoryOrCreate and FileOrCreate options allow Kubernetes to create resources on the host if they don’t already exist.
+
+✅ Cons: Tightly coupled to the node; not portable across clusters; potential security risks.
+
+
+#************************* Network-Based Volumes *********************
+
+• nfs (Network File System): Provides shared file storage that multiple Pods can mount simultaneously.
+
+• iscsi (Internet Small Computer Systems Interface): Offers block-level storage that can be attached over a network.
+
+
+#************************* Other Volume Types *************************
+
+• downwardAPI: Exposes Pod metadata (e.g., labels, annotations) as files.
+
+• secret: Mounts sensitive data from a Kubernetes Secret (e.g., API keys).
+
+• configMap: Mounts configuration data from a ConfigMap (e.g., settings files).
+
+• projected: Combines multiple sources (e.g., Secrets, ConfigMaps, downwardAPI) into a single volume.
+
+• local: Mounts a local disk or partition, useful for high-performance workloads.
+
+• fc (Fibre Channel), flocker, portworxVolume, quobyte, scaleIO, storageos: Specialized storage for specific platforms or providers.
+
+• persistentVolumeClaim: References a PersistentVolumeClaim for persistent storage.
+
+• csi: Uses a Container Storage Interface driver for flexible, vendor-specific storage.
+```
+
+[Menu](#-menu)
+
 # 🚀 Create Object - Storage PVC
 
 ```bash
@@ -7217,6 +7309,165 @@ nginx-7b98f58f85-wq6mg-7.txt
 nginx-7b98f58f85-wq6mg-8.txt
 nginx-7b98f58f85-wq6mg-9.txt
 -------------------
+
+#******************** Dynamic Provisioning ************************
+
+# Allows the cluster to automatically request and provision storage from an external source when a PVC is created.
+# This eliminates the need for cluster administrators to manually pre-create Persistent Volumes. Instead,
+# when a user submits a PVC, the Kubernetes API server automatically provisions a PV using a predefined StorageClass.
+
+#*************** Using Rook for Storage Orchestration *************
+
+# With Rook, administrators and developers can unify the management of both compute and storage within Kubernetes,
+# reducing complexity and embracing the Kubernetes-native pattern of declarative configuration and automation
+
+# Another Exempla using NFS
+#
+# Master - Control Plane
+
+sudo apt update && sudo apt install -y nfs-kernel-server
+sudo mkdir /opt/sfw
+sudo chmod 1777 /opt/sfw/
+sudo bash -c 'echo software > /opt/sfw/hello.txt'
+sudo cp /etc/exports{,.ori}
+echo "/opt/sfw/ *(rw,sync,no_root_squash,subtree_check)" | sudo tee -a /etc/exports
+sudo exportfs -ra
+
+# Workers - Control Nodes
+# Notes.: My control-plane called cp
+
+sudo apt install -y nfs-common
+showmount -e cp
+Export list for cp:
+/opt/sfw *
+
+sudo mount cp:/opt/sfw /mnt
+Filesystem      Size  Used Avail Use% Mounted on
+tmpfs           190M  3.0M  187M   2% /run
+/dev/vda1        96G  4.0G   92G   5% /
+tmpfs           950M     0  950M   0% /dev/shm
+tmpfs           5.0M     0  5.0M   0% /run/lock
+/dev/vda16      881M   64M  756M   8% /boot
+/dev/vda15      105M  6.2M   99M   6% /boot/efi
+tmpfs           190M  8.0K  190M   1% /run/user/60000
+cp:/opt/sfw      96G  4.4G   92G   5% /mnt
+
+ls -l /mnt
+cat /mnt/hello.txt
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pvvol-1
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    path: /opt/sfw
+    server: cp
+    readOnly: false
+EOF
+
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-one
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 200Mi
+EOF
+
+k get pv
+NAME      CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM             STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+pvvol-1   1Gi        RWX            Retain           Bound    default/pvc-one                  <unset>                          68d
+
+k get pvc
+NAME      STATUS   VOLUME    CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+pvc-one   Bound    pvvol-1   1Gi        RWX                           <unset>                 13s
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+  generation: 1
+  labels:
+    run: nginx
+  name: nginx-nfs
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: nginx
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        run: nginx
+    spec:
+      containers:
+        - image: nginx:1.29.6
+          imagePullPolicy: Always
+          name: nginx
+          volumeMounts:
+            - name: nfs-vol
+              mountPath: /opt
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      volumes:
+        - name: nfs-vol
+          persistentVolumeClaim:
+            claimName: pvc-one
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+EOF
+
+# Describe Pod
+k describe pod nginx-nfs-76b968c96c-wg8gj
+<output_omitted>
+
+Name:         nginx-nfs-1054709768-s8g28
+Namespace:    default
+Priority:     0
+Node:         worker/10.244.0.4
+
+<output_omitted>
+
+    Mounts:
+      /opt from nfs-vol (rw)
+
+<output_omitted>
+
+Volumes:
+  nfs-vol:
+    Type:       PersistentVolumeClaim (a reference to a PersistentV...
+    ClaimName:  pvc-one
+    ReadOnly:   false
+<output_omitted>
+
 ```
 
 [Menu](#-menu)
