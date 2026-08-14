@@ -50,6 +50,7 @@
 - [Create Object - Storage PV](#-create-object---storage-pv)
 - [Create Object - Storage Local Ephemeral Volumes](#-create-object---storage-local-ephemeral-volumes)
 - [Create Object - Storage PVC](#-create-object---storage-pvc)
+- [Create Object - Storage PVC ResourceQuota](#-create-object---storage-pvc-resourcequota)
 - [Create Object - Storage StorageClass](#-create-object---storage-storageclass)
 - [Create Object - Storage AccessMode](#-create-object---storage-accessmode)
 - [Create Object - Storage CSDriver](#-create-object---storage-csdriver)
@@ -947,6 +948,19 @@ myapp
         ├── deployment.yaml
         ├── kustomization.yaml
         └── service-patch.yaml
+
+# base     -> provides a shared structure, which any environment will need to have,
+# what is common in all deployments.
+
+# overlays -> provides the granularity of changes at the environment level.
+#
+# This ( name: goapp ) in base/kustomization is an attribute that was nicknamed goapp that will be
+# referenced by the environments kustomization.
+
+# Overlays define what will be replaced at compile time.
+# In the example the patch references a complete block as namespace,
+# or just part of it as a deployment.
+
 
 #-----------------------------------
 # Base Deployment
@@ -7158,6 +7172,173 @@ Filesystem                         Size  Used Avail Use% Mounted on
 overlay                            466G  255G  188G  58% /
 tmpfs                               64M     0   64M   0% /dev
 overlay                            466G  255G  188G  58% /data
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Storage PVC ResourceQuota
+
+```bash
+
+# Setup
+
+kubectl create namespace small
+
+# Consider that /opt/sfw is an NFS mount point, or even a partition on your operating system.
+
+cat <<EOF | kubectl create -f -
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pvvol-1
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    path: /opt/sfw
+    server: cp
+    readOnly: false
+EOF
+
+
+cat <<EOF | kubectl -n small create -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-one
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+     requests:
+       storage: 200Mi
+EOF
+
+cat <<EOF | kubectl -n small create -f -
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: storagequota
+spec:
+  hard:
+    persistentvolumeclaims: "10"
+    requests.storage: "500Mi"
+EOF
+
+cat <<EOF | kubectl -n small create -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+  generation: 1
+  labels:
+    run: nginx
+  name: nginx-nfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: nginx
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        run: nginx
+    spec:
+      containers:
+      - image: nginx:1.29.6
+        name: nginx
+        volumeMounts:
+        - name: nfs-vol
+          mountPath: /opt
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      volumes:
+      - name: nfs-vol
+        persistentVolumeClaim:
+          claimName: pvc-one
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+EOF
+
+# Display
+kubectl describe ns small
+Name:         small
+Labels:       kubernetes.io/metadata.name=small
+Annotations:  <none>
+Status:       Active
+
+Resource Quotas
+  Name:                   storagequota
+  Resource                Used   Hard
+  --------                ---    ---
+  persistentvolumeclaims  1      10
+  requests.storage        200Mi  500Mi
+
+
+# I have a PVC that consumes a PV that is allocated in /opt/sfw
+#
+# ResourceQuota of 500Mi was created, as shown below.
+#
+# My pod is consuming this PVC and has already shown that it is consuming 200Mi of the 500Mi
+#
+# Create a 300MB file randomly on the worker where the /opt/sfw folder that PV delivers is located
+
+sudo dd if=/dev/zero of=/opt/sfw/bigfile bs=1M count=300
+
+# The dd command was made outside the pod, in the worker that serves the PV folder.
+# After creating 300MB of random data, my resourcequota continued to show the same values.
+
+kubectl describe ns small
+Name:         small
+Labels:       kubernetes.io/metadata.name=small
+Annotations:  <none>
+Status:       Active
+
+Resource Quotas
+  Name:                   storagequota
+  Resource                Used   Hard
+  --------                ---    ---
+  persistentvolumeclaims  1      10
+  requests.storage        200Mi  500Mi
+
+# Why?
+# The resourcequota only monitors the size that was defined in the PVC manifest
+# It does not manage the filesystem itself. ResourceQuota works at the Kubernetes API level.
+# It reads the spec.resources.requests.storage field
+
+# Assuming that the PVC was deleted before and recreated now with a value above the quota.
+
+cat <<EOF | kubectl -n small create -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-one
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+     requests:
+       storage: 600Mi
+EOF
+
+Error from server (Forbidden): error when creating "pvc.yaml": persistentvolumeclaims "pvc-one" is forbidden: exceeded quota: storagequota, requested: requests.storage=200Mi, used: requests.storage=0, limited: requests.storage=600Mi
 ```
 
 [Menu](#-menu)
