@@ -31,10 +31,12 @@
 - [Create Object - PDB / PodDisruptionBudget](#-create-object---pdb--poddisruptionbudget)
 - [Create Object - Jobs](#-create-object---jobs)
 - [Create Object - CronJobs](#-create-object---cronjobs)
-- [Create Object - Services Tipos](#-create-object---services-tipos)
+- [Create Object - Services ClusterIP](#-create-object---services-clusterip)
+- [Create Object - Services NodePort](#-create-object---services-nodeport)
+- [Create Object - Services LoadBalancer](#-create-object---services-loadbalancer)
+- [Create Object - Services ExternalName](#-create-object---services-externalname)
+- [Create Object - Services Headless Service](#-create-object---services-headless-service)
 - [Create Object - Ipvs Vs Iptables](#-create-object---ipvs-vs-iptables)
-- [Create Object - Manutenção em Membros do Cluster](#-create-object---manutenção-em-membros-do-cluster)
-- [Create Object - External Name](#-create-object---external-name)
 - [Create Object - Trafic Policy](#-create-object---trafic-policy)
 - [Create Object - Estratégias Deploy](#-create-object---estratégias-deploy)
 - [Create Object - Deploy Canary](#-create-object---deploy-canary)
@@ -75,6 +77,7 @@
 - [Cluster Upgrade - Ferramentas e Boas Práticas](#-cluster-upgrade---ferramentas-e-boas-práticas)
 - [Cluster Upgrade - Control Plane / Masters](#-cluster-upgrade---control-plane--masters)
 - [Cluster Upgrade - Control Data / Workers](#-cluster-upgrade---control-data--workers)
+- [Cluster Upgrade - Maintenance on Cluster Members](#-cluster-upgrade---maintenance-on-cluster-members)
 - [Dicas - CrashLoopBackOff](#-dicas---crashloopbackoff)
 - [Dicas - ImagePullBackOff](#-dicas---imagepullbackoff)
 - [Dicas - Node NotReady](#-dicas---node-notready)
@@ -3958,7 +3961,7 @@ sleepy   Running     0/1         11s         11s
 
 [Menu](#-menu)
 
-# 🚀 Create Object - Services Tipos
+# 🚀 Create Object - Services ClusterIP
 
 ```bash
 # Internal communication within k8s and access does not happen directly in the Pod.
@@ -4054,26 +4057,6 @@ mymysql-wvtvv       IPv4          <unset>   <unset>                   12d
 nginx-mjb56         IPv4          80        10.244.1.66,10.244.1.67   3d
 nginx-paulo-hspkj   IPv4          80        10.244.1.129              5m10s
 
-
-# ============================== Node Port ========================================
-#
-# Little used
-# Range => 30000-32767
-# If I choose port 30000, this port is opened on each of the nodes.
-# To access I need to inform the Node IP:Port
-# Purpose (tests and demos)
-
-# ============================== LoadBalancer =====================================
-#
-# It is customary to have one L.B per application
-# If you use this service to expose your app to the world, remember that each endpoint will have its L.B.
-# Ideal for TCP/UDP (Layer 4)
-
-# Note:
-# If I am working in the http application layer (Layer 7)
-# the Gateway Api e (Deceeded Ingress) is the best alternative, as it is only used
-# a single LoabBalancer and creates access routes and endpoints.
-
 # ============================== External Name ====================================
 #
 # Services => ( CNAME ) => DNS
@@ -4087,8 +4070,143 @@ nginx-paulo-hspkj   IPv4          80        10.244.1.129              5m10s
 # so when your bank URL changes you only change this service and your app remains the same as before.
 #
 # All services are done on the node
+```
 
-# ============================== Headless Service =================================
+[Menu](#-menu)
+
+# 🚀 Create Object - Services NodePort
+
+```bash
+# Little used
+# Range => 30000-32767
+# If I choose port 30000, this port is opened on each of the nodes.
+# To access I need to inform the Node IP:Port
+# Purpose (tests and demos)
+
+# This will open and listen on port 30999 on all worker nodes and control-planes
+# (unless there is some very specific network configuration that isolates nodes from the control plane).
+k neat -o yaml <<< $(k create service nodeport mymysql --tcp=30999:80 --dry-run=client -o json | jq '.spec.ports[0].nodePort = 30999')
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: mymysql
+  name: mymysql
+spec:
+  ports:
+  - name: 30999-80
+    nodePort: 30999
+    port: 30999
+    targetPort: 80
+  selector:
+    app: mymysql
+  type: NodePort
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Services LoadBalancer
+
+```bash
+#
+# It is customary to have one L.B per application
+# If you use this service to expose your app to the world, remember that each endpoint will have its L.B.
+# Ideal for TCP/UDP (Layer 4)
+
+# Note:
+# If I am working in the http application layer (Layer 7)
+# the Gateway Api e (Deceeded Ingress) is the best alternative, as it is only used
+# a single LoabBalancer and creates access routes and endpoints.
+
+k neat <<< $(k create service loadbalancer mymysql --tcp=3306:3306 --dry-run=client -o yaml)
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: mymysql
+  name: mymysql
+spec:
+  ports:
+  - name: 3306-3306
+    port: 3306
+  selector:
+    app: mymysql
+  type: LoadBalancer
+
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Services ExternalName
+
+```bash
+#
+# This is a type of service where a CNAME is created on the Kubernetes DNS Server.
+#
+# Services => (CNAME) => DNS
+#
+# It is a service used to resolve names.
+# Suppose you use AWS's RDS to give you a URL (Endpoint), but you don't want to use the DNS that AWS sent you,
+# because if it changes you will have to redeploy all your apps.
+#
+# Then you can create this service (External Name) to create a valid DNS within the Cluster
+#
+# Service , it would be your service ex: "db" which is nothing more than a cname for (AWS DNS URL),
+# so when your bank URL changes you only change this service and your app remains the same as before.
+#
+# All services are done on the node
+k neat <<< $(kubectl create service externalname url-remota --external-name bar.com --dry-run=client -o yaml)
+
+# Result
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: url-remota
+  name: url-remota
+spec:
+  externalName: paulo-rogerio.github.io
+  type: ExternalName
+
+# Apply
+k neat <<< $(kubectl create service externalname url-remota --external-name paulo-rogerio.github.io --dry-run=client -o yaml) | k apply -f -
+
+k get svc
+
+NAME         TYPE           CLUSTER-IP   EXTERNAL-IP               PORT(S)   AGE
+kubernetes   ClusterIP      10.96.0.1    <none>                    443/TCP   119m
+url-remota   ExternalName   <none>       paulo-rogerio.github.io   <none>    3s
+
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+/ # apk add bind-tools
+
+/ # host paulo-rogerio.github.io
+paulo-rogerio.github.io has address 185.199.110.153
+paulo-rogerio.github.io has address 185.199.111.153
+paulo-rogerio.github.io has address 185.199.109.153
+paulo-rogerio.github.io has address 185.199.108.153
+
+/ # host url-remota
+url-remota.default.svc.cluster.local is an alias for paulo-rogerio.github.io.
+paulo-rogerio.github.io has address 185.199.110.153
+paulo-rogerio.github.io has address 185.199.111.153
+paulo-rogerio.github.io has address 185.199.108.153
+paulo-rogerio.github.io has address 185.199.109.153
+
+/ # host -t cname url-remota
+url-remota.default.svc.cluster.local is an alias for paulo-rogerio.github.io.
+
+k delete svc url-remota
+
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Services Headless Service
+
+```bash
 #
 # We have already talked about this service in (Create Object -Statefullset), but here we will deal with it in isolation.
 #
@@ -4199,7 +4317,9 @@ Address 1: 10.96.0.10 kube-dns.kube-system.svc.cluster.local
 
 Name:      nginx-1.nginx
 Address 1: 10.244.2.14 nginx-1.nginx.default.svc.cluster.local
+
 ```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Ipvs Vs Iptables
@@ -4425,122 +4545,7 @@ egrep 'KUBE-SVC-2CMXP7HKUVJN7L6M' /tmp/iptables
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.6:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-C4VXQDW52UV45WW3
 -A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.2.6:80" -j KUBE-SEP-UOZCNMEBPO5JGMU4
 ```
-[Menu](#-menu)
 
-# 🚀 Create Object - Manutenção em Membros do Cluster
-
-```bash
-# Daemonset cannot be migrated (1 pod on each node)
-# Take all Pods allocated to the worker (prgs-worker2) to another node.
-k drain prgs-worker2
-k drain prgs-worker2 --ignore-daemonsets
-k drain prgs-worker2 --ignore-daemonsets --delete-emptydir-data
-node/prgs-worker2 already cordoned
-Warning: ignoring DaemonSet-managed Pods: kube-system/kindnet-6vxfh, kube-system/kube-proxy-jrxg8, metallb-system/metallb-speaker-9vkng
-evicting pod kube-system/metrics-server-7bb58f4dcb-bxswj
-evicting pod ingress-nginx/ingress-nginx-controller-5f4f4d9787-t7x8k
-evicting pod default/nginx-1
-evicting pod ingress-nginx/ingress-nginx-admission-patch-7w88w
-pod/ingress-nginx-admission-patch-7w88w evicted
-pod/ingress-nginx-controller-5f4f4d9787-t7x8k evicted
-pod/nginx-1 evicted
-pod/metrics-server-7bb58f4dcb-bxswj evicted
-node/prgs-worker2 drained
-
-# Maintaining worker2
-# None Can be scheduled on worker2
-k get node
-NAME                 STATUS                     ROLES             AGE    VERSION
-prgs-control-plane   Ready                      control-plane     172m   v1.31.2
-prgs-worker          Ready                      worker-apps       172m   v1.31.2
-prgs-worker2         Ready,SchedulingDisabled   worker-postgres   172m   v1.31.2
-
-# It will remain pending as the stateful set cannot be migrated to another node.
-# then I should delete it.
-k get pod -o wide
-NAME      READY   STATUS    RESTARTS   AGE     IP            NODE          NOMINATED NODE   READINESS GATES
-nginx-0   1/1     Running   0          8m3s    10.244.1.26   prgs-worker   <none>           <none>
-nginx-1   0/1     Pending   0          3m32s   <none>        <none>        <none>           <none>
-
-# After maintenance I resurrect the Host
-kubectl uncordon prgs-worker2
-
-k get nodes
-NAME                 STATUS   ROLES             AGE    VERSION
-prgs-control-plane   Ready    control-plane     3h     v1.31.2
-prgs-worker          Ready    worker-apps       179m   v1.31.2
-prgs-worker2         Ready    worker-postgres   179m   v1.31.2
-
-k get pods
-NAME      READY   STATUS    RESTARTS   AGE
-nginx-0   1/1     Running   0          12m
-nginx-1   1/1     Running   0          7m53s
-```
-
-[Menu](#-menu)
-
-# 🚀 Create Object - External Name
-
-```bash
-# ============================== External Name ====================================
-#
-# This is a type of service where a CNAME is created on the Kubernetes DNS Server.
-#
-# Services => (CNAME) => DNS
-#
-# It is a service used to resolve names.
-# Suppose you use AWS's RDS to give you a URL (Endpoint), but you don't want to use the DNS that AWS sent you,
-# because if it changes you will have to redeploy all your apps.
-#
-# Then you can create this service (External Name) to create a valid DNS within the Cluster
-#
-# Service , it would be your service ex: "db" which is nothing more than a cname for (AWS DNS URL),
-# so when your bank URL changes you only change this service and your app remains the same as before.
-#
-# All services are done on the node
-k neat <<< $(kubectl create service externalname url-remota --external-name bar.com --dry-run=client -o yaml)
-
-# Result
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: url-remota
-  name: url-remota
-spec:
-  externalName: paulo-rogerio.github.io
-  type: ExternalName
-
-# Apply
-k neat <<< $(kubectl create service externalname url-remota --external-name paulo-rogerio.github.io --dry-run=client -o yaml) | k apply -f -
-
-k get svc
-
-NAME         TYPE           CLUSTER-IP   EXTERNAL-IP               PORT(S)   AGE
-kubernetes   ClusterIP      10.96.0.1    <none>                    443/TCP   119m
-url-remota   ExternalName   <none>       paulo-rogerio.github.io   <none>    3s
-
-kubectl run -i --tty --image alpine apline --restart=Never --rm
-/ # apk add bind-tools
-
-/ # host paulo-rogerio.github.io
-paulo-rogerio.github.io has address 185.199.110.153
-paulo-rogerio.github.io has address 185.199.111.153
-paulo-rogerio.github.io has address 185.199.109.153
-paulo-rogerio.github.io has address 185.199.108.153
-
-/ # host url-remota
-url-remota.default.svc.cluster.local is an alias for paulo-rogerio.github.io.
-paulo-rogerio.github.io has address 185.199.110.153
-paulo-rogerio.github.io has address 185.199.111.153
-paulo-rogerio.github.io has address 185.199.108.153
-paulo-rogerio.github.io has address 185.199.109.153
-
-/ # host -t cname url-remota
-url-remota.default.svc.cluster.local is an alias for paulo-rogerio.github.io.
-
-k delete svc url-remota
-```
 [Menu](#-menu)
 
 # 🚀 Create Object - Trafic Policy
@@ -12255,6 +12260,58 @@ kubectl get nodes
 NAME       STATUS   ROLES           AGE   VERSION
 master01   Ready    control-plane   89d   v1.35.5
 worker01   Ready    worker          89d   v1.35.5
+```
+
+[Menu](#-menu)
+
+# 🚀 Cluster Upgrade - Maintenance on Cluster Members
+
+```bash
+# Daemonset cannot be migrated (1 pod on each node)
+# Take all Pods allocated to the worker (prgs-worker2) to another node.
+k drain prgs-worker2
+k drain prgs-worker2 --ignore-daemonsets
+k drain prgs-worker2 --ignore-daemonsets --delete-emptydir-data
+node/prgs-worker2 already cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-system/kindnet-6vxfh, kube-system/kube-proxy-jrxg8, metallb-system/metallb-speaker-9vkng
+evicting pod kube-system/metrics-server-7bb58f4dcb-bxswj
+evicting pod ingress-nginx/ingress-nginx-controller-5f4f4d9787-t7x8k
+evicting pod default/nginx-1
+evicting pod ingress-nginx/ingress-nginx-admission-patch-7w88w
+pod/ingress-nginx-admission-patch-7w88w evicted
+pod/ingress-nginx-controller-5f4f4d9787-t7x8k evicted
+pod/nginx-1 evicted
+pod/metrics-server-7bb58f4dcb-bxswj evicted
+node/prgs-worker2 drained
+
+# Maintaining worker2
+# None Can be scheduled on worker2
+k get node
+NAME                 STATUS                     ROLES             AGE    VERSION
+prgs-control-plane   Ready                      control-plane     172m   v1.31.2
+prgs-worker          Ready                      worker-apps       172m   v1.31.2
+prgs-worker2         Ready,SchedulingDisabled   worker-postgres   172m   v1.31.2
+
+# It will remain pending as the stateful set cannot be migrated to another node.
+# then I should delete it.
+k get pod -o wide
+NAME      READY   STATUS    RESTARTS   AGE     IP            NODE          NOMINATED NODE   READINESS GATES
+nginx-0   1/1     Running   0          8m3s    10.244.1.26   prgs-worker   <none>           <none>
+nginx-1   0/1     Pending   0          3m32s   <none>        <none>        <none>           <none>
+
+# After maintenance I resurrect the Host
+kubectl uncordon prgs-worker2
+
+k get nodes
+NAME                 STATUS   ROLES             AGE    VERSION
+prgs-control-plane   Ready    control-plane     3h     v1.31.2
+prgs-worker          Ready    worker-apps       179m   v1.31.2
+prgs-worker2         Ready    worker-postgres   179m   v1.31.2
+
+k get pods
+NAME      READY   STATUS    RESTARTS   AGE
+nginx-0   1/1     Running   0          12m
+nginx-1   1/1     Running   0          7m53s
 ```
 
 [Menu](#-menu)
