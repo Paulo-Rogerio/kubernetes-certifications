@@ -36,15 +36,15 @@
 - [Create Object - Services LoadBalancer](#-create-object---services-loadbalancer)
 - [Create Object - Services ExternalName](#-create-object---services-externalname)
 - [Create Object - Services Headless Service](#-create-object---services-headless-service)
+- [Create Object - Ingress Controller](#-create-object---ingress-controller)
+- [Create Object - Ingress Múltiplos Paths](#-create-object---ingress-múltiplos-paths)
+- [Create Object - Ingress Error 503](#-create-object---ingress-error-503)
+- [Create Object - Ingress TLS](#-create-object---ingress-tls)
 - [Create Object - Ipvs Vs Iptables](#-create-object---ipvs-vs-iptables)
 - [Create Object - Trafic Policy](#-create-object---trafic-policy)
 - [Create Object - Estratégias Deploy](#-create-object---estratégias-deploy)
 - [Create Object - Deploy Canary](#-create-object---deploy-canary)
 - [Create Object - Deploy Blue Green](#-create-object---deploy-blue-green)
-- [Create Object - Ingress Controller](#-create-object---ingress-controller)
-- [Create Object - Ingress Múltiplos Paths](#-create-object---ingress-múltiplos-paths)
-- [Create Object - Ingress Error 503](#-create-object---ingress-error-503)
-- [Create Object - Ingress TLS](#-create-object---ingress-tls)
 - [Create Object - ConfigMap Vs Secrets](#-create-object---configmap-vs-secrets)
 - [Create Object - ConfigMap](#-create-object---configmap)
 - [Create Object - ConfigMap Vhost Ingress](#-create-object---configmap-vhost-ingress)
@@ -3964,6 +3964,9 @@ sleepy   Running     0/1         11s         11s
 # 🚀 Create Object - Services ClusterIP
 
 ```bash
+
+#  kube-controller-manager => object responsible for creating services
+
 # Internal communication within k8s and access does not happen directly in the Pod.
 # Communication happens through a services.
 # Internal communication (2 pods in the same namespace communicate through service Cluster IP).
@@ -4085,6 +4088,10 @@ nginx-paulo-hspkj   IPv4          80        10.244.1.129              5m10s
 
 # This will open and listen on port 30999 on all worker nodes and control-planes
 # (unless there is some very specific network configuration that isolates nodes from the control plane).
+
+# NodePort Services are built on top of ClusterIP, forwarding traffic from the node’s external IP
+# and designated port to the internal ClusterIP.
+
 k neat -o yaml <<< $(k create service nodeport mymysql --tcp=30999:80 --dry-run=client -o json | jq '.spec.ports[0].nodePort = 30999')
 
 apiVersion: v1
@@ -4118,6 +4125,9 @@ spec:
 # If I am working in the http application layer (Layer 7)
 # the Gateway Api e (Deceeded Ingress) is the best alternative, as it is only used
 # a single LoabBalancer and creates access routes and endpoints.
+
+# When supported, the cloud provider provisions a load balancer and directs external traffic
+# to the appropriate nodes and Pods, distributing requests automatically.
 
 k neat <<< $(k create service loadbalancer mymysql --tcp=3306:3306 --dry-run=client -o yaml)
 
@@ -4320,682 +4330,6 @@ Address 1: 10.244.2.14 nginx-1.nginx.default.svc.cluster.local
 
 ```
 
-[Menu](#-menu)
-
-# 🚀 Create Object - Ipvs Vs Iptables
-
-```bash
-# Kubernetes Componetes
-https://kubernetes.io/docs/concepts/overview/components/
-
-# Kube-Proxy Comandos Referência
-https://kubernetes.io/docs/reference/command-line-tools-reference/kube-proxy/
-
-# =================================== IPVS ========================================
-#
-# How to check if you are using Iptables or Ipvs?
-# -If you are using ipvs, the interface has the prefix ipvs
-# -Here the interfaces have the name (ipvs)
-ip a
-#
-#
-apt update && apt install ipvsadm -y
-ipvsadm -L -n
-TCP  10.102.184.126:8080 rr ( Esse rr significa Round Robin )
-  -> 10.244.1.117:80     Masq  1  0  0
-  -> 10.244.1.118:80     Masq  1  0  0
-  -> 10.244.1.119:80     Masq  1  0  0
-
-# ================================= Iptables ======================================
-#
-# Cloud Provides ( AWS ) uses iptables to route traffic between pods
-#
-# ================================= How to Change =================================
-#
-# How to change the routing mode?
-# Does the cloud provider support this?
-#
-# kube-proxy is configured via a configmap
-
-k get cm -n kube-system
-NAME                                                   DATA   AGE
-coredns                                                1      4h13m
-extension-apiserver-authentication                     6      4h13m
-kube-apiserver-legacy-service-account-token-tracking   1      4h13m
-kube-proxy                                             2      4h13m
-kube-root-ca.crt                                       1      4h13m
-kubeadm-config                                         1      4h13m
-kubelet-config                                         1      4h13m
-
-# By default, kind operates with Iptables
-#
-k neat <<< $(k get cm -n kube-system kube-proxy -o yaml) | grep mode
-mode: iptables
-
-# Ensure kernel modules are enabled
-modprobe ip_vs
-modprobe ip_vs_rr
-modprobe ip_vs_wrr
-modprobe ip_vs_sh
-modprobe nf_conntrack
-
-# Change requires recycling of pods.
-k edit cm -n kube-system kube-proxy -o yaml
-
-kubectl rollout restart daemonset kube-proxy -n kube-system
-
-# ================================= Debug Iptables ==================================
-
-# By default this image exposes port 80
-k create deployment --image nginx --replicas 3 nginx
-
-# Creating a service of type ClusterIP 8080 and redirects to port 80
-kubectl expose deployment nginx --port=8080 --type='ClusterIP' --target-port=80
-
-k get pod -o wide
-NAME                     READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
-nginx-66686b6766-9h4cw   1/1     Running   0          48s   10.244.0.22   prgs-control-plane   <none>           <none>
-nginx-66686b6766-hq2h2   1/1     Running   0          48s   10.244.0.20   prgs-control-plane   <none>           <none>
-nginx-66686b6766-kcbr2   1/1     Running   0          48s   10.244.0.21   prgs-control-plane   <none>           <none>
-
-k get svc
-NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
-kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP    17m
-nginx        ClusterIP   10.96.175.117   <none>        8080/TCP   52s
-
-k run --image alpine --rm -it teste-curl sh
-apk add curl
-ping nginx
-ping nginx.default.svc.cluster.local
-curl nginx:8080
-
-<!DOCTYPE html>
-<html>
-<head>
-<title>Welcome to nginx!</title>
-...
-...
-
-# =========================== Como Debugar ( ClusterIP ) ==========================
-#
-# The Debug method is the same, regardless of the service. I left it separated by service type, just for organization purposes.
-#
-docker exec -it prgs-control-plane bash
-
-root@prgs-control-plane:/# iptables-save > /tmp/iptables
-root@prgs-control-plane:/# egrep '10.96.175.117' /tmp/iptables
-
--A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
--A KUBE-SVC-2CMXP7HKUVJN7L6M ! -s 10.244.0.0/16 -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-MARK-MASQ
-
-# Add rules at the end of the ruleset
-iptables -A
-
-# This rule here that does the redirection
-# Iptables Rules on the Host (Worker)
-# Packet destined for host 10.96.175.117/32 (Service) on port 8080 action (KUBE-SVC-2CMXP7HKUVJN7L6M)
--A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
-
-root@prgs-control-plane:/# egrep 'KUBE-SVC-2CMXP7HKUVJN7L6M' /tmp/iptables
-
--A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
--A KUBE-SVC-2CMXP7HKUVJN7L6M ! -s 10.244.0.0/16 -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-MARK-MASQ
--A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.20:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-BRZDTZFF2SFWJV4H
--A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.21:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-OI2S57TQ5WH5FOMC
--A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.22:80" -j KUBE-SEP-473MVOWGJMIYYUKK
-
-# This 10.244.0.0/16 is the CDIR that K8S will use for the Pods
-# Here Everything that comes from this Chain (KUBE-SVC-2CMXP7HKUVJN7L6M) except the Pod network will be Masked to leave.
--A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
--A KUBE-SVC-2CMXP7HKUVJN7L6M ! -s 10.244.0.0/16 -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-MARK-MASQ
-
-# Here That Balancedly Happens
-
-# 30% of requests that arrive on this host will be forwarded to (10.244.0.20) -m statistic (load balancer module)
--A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.20:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-BRZDTZFF2SFWJV4H
-
-# 50% of requests that arrive at this host will be forwarded to (10.244.0.21)
--A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.21:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-OI2S57TQ5WH5FOMC
-
-# the remaining % of requests that arrive at this host will be forwarded to (10.244.0.22)
--A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.22:80" -j KUBE-SEP-473MVOWGJMIYYUKK
-
-# =========================== Como Debugar ( NodePort ) ===========================
-#
---port # (It is the service port)
---target-port # (It is the nginx port running in the container)
-
-k create deployment --image nginx --replicas 3 nginx
-k expose deployment nginx --type=NodePort --name=nginx --port=80 --target-port=80
-
-k get svc
-NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
-kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP        99m
-nginx        NodePort    10.106.211.96   <none>        80:32674/TCP   4s
-
-# Essa Porta (32674) é aberta no Node ( Worker )
-docker exec -it prgs-worker2 bash -c "curl localhost:32674"
-
-
-# =========================  Local Port  ( Kind ) ===============================
-k delete svc nginx
-
-# If you are using Kind , you can redirect the NodePort port to your local machine
-- role: worker
-  kubeadmConfigPatches:
-  - |
-    kind: JoinConfiguration
-    nodeRegistration:
-      kubeletExtraArgs:
-        node-labels: "prgs/postgres=true"
-  extraPortMappings:
-  - containerPort: 30999
-    hostPort: 30999
-    listenAddress: "0.0.0.0"
-    protocol: TCP
-
-# No seu host local
-netstat -an | grep 30999
-tcp4       0      0  *.30999                *.*                    LISTEN
-
-k create service nodeport nginx --node-port=30999 --tcp=80:80
-
-k get svc
-NAME         TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
-kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP        104m
-nginx        NodePort    10.107.225.100   <none>        80:30999/TCP   3s
-
-curl localhost:30999
-
-# ============================== Debug ( LoadBalancer ) =========================
-# The LoadBalancer is triggered by the cloud-controller (This guy talks to the cloud Provider (via api))
-
-https://metallb.universe.tf/installation/
-https://metallb.universe.tf/configuration/
-
-k create deployment --image nginx --replicas 3 nginx
-k expose deployment nginx --type=LoadBalancer --port=80 --target-port=80
-
-k get svc
-NAME         TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)        AGE
-kubernetes   ClusterIP      10.96.0.1       <none>           443/TCP        74m
-nginx        LoadBalancer   10.109.124.25   172.18.255.201   80:30606/TCP   68m
-
-iptables-save > /tmp/iptables
-
-egrep '172.18.255.201' /tmp/iptables
--A KUBE-SERVICES -d 172.18.255.201/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
-
-# Here it balances for ClusterIp ( KUBE-SVC-2CMXP7HKUVJN7L6M )
-
-egrep 'KUBE-EXT-2CMXP7HKUVJN7L6M' /tmp/iptables
-:KUBE-EXT-2CMXP7HKUVJN7L6M - [0:0]
--A KUBE-EXT-2CMXP7HKUVJN7L6M -m comment --comment "masquerade traffic for default/nginx external destinations" -j KUBE-MARK-MASQ
--A KUBE-EXT-2CMXP7HKUVJN7L6M -j KUBE-SVC-2CMXP7HKUVJN7L6M
--A KUBE-NODEPORTS -d 127.0.0.0/8 -p tcp -m comment --comment "default/nginx" -m tcp --dport 30606 -m nfacct --nfacct-name  localhost_nps_accepted_pkts -j KUBE-EXT-2CMXP7HKUVJN7L6M
--A KUBE-NODEPORTS -p tcp -m comment --comment "default/nginx" -m tcp --dport 30606 -j KUBE-EXT-2CMXP7HKUVJN7L6M
--A KUBE-SERVICES -d 172.18.255.201/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
-
-egrep 'KUBE-SVC-2CMXP7HKUVJN7L6M' /tmp/iptables
-:KUBE-SVC-2CMXP7HKUVJN7L6M - [0:0]
--A KUBE-EXT-2CMXP7HKUVJN7L6M -j KUBE-SVC-2CMXP7HKUVJN7L6M
--A KUBE-SERVICES -d 10.109.124.25/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 80 -j KUBE-SVC-2CMXP7HKUVJN7L6M
--A KUBE-SVC-2CMXP7HKUVJN7L6M ! -s 10.244.0.0/16 -d 10.109.124.25/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 80 -j KUBE-MARK-MASQ
--A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.5:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-IZW656N5ZXYN5BEC
--A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.6:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-C4VXQDW52UV45WW3
--A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.2.6:80" -j KUBE-SEP-UOZCNMEBPO5JGMU4
-```
-
-[Menu](#-menu)
-
-# 🚀 Create Object - Trafic Policy
-
-```bash
-# This feature is interesting when we have critical applications that require performance.
-#
-# Traffic Policies, in a scenario with LoadBalancer, work as follows:
-#
-# Requests arrive via the LoadBalancer external IP and are received by a Node in the cluster.
-# When entering the Node, traffic is directed to the Service (ClusterIP),
-# From here, kube-proxy comes into action to decide which Pod will fulfill the request.
-#
-# To view the available Pods, we can list the EndpointSlices:
-#
-k get endpointslices.discovery.k8s.io
-NAME         ADDRESSTYPE   PORTS   ENDPOINTS    AGE
-kubernetes   IPv4          6443    172.17.0.2   27m
-
-# These endpoints only inform which Pods are available for the Service.
-#
-# Routing operation
-#
-# The important point is that, by default, kube-proxy can forward the request to any Pod in the cluster,
-# regardless of the Node it is running on.
-#
-# That is:
-#
-# The request can arrive at Node-A and be forwarded to a Pod on Node-B
-#
-# This ensures greater resilience and load distribution between Pods.
-#
-# How does this happen internally
-#
-# The kube-proxy, running on Node (not inside Pods), programs iptables rules into the operating system kernel.
-#
-# These rules load balance using probability, for example:
-#
-# Ex: 33% of requests served by this Pod.
-
--A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.5:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-IZW656N5ZXYN5BEC
-
-# This means that approximately 33% of requests will be forwarded to this specific Pod.
-#
-# Network impact
-#
-# As this communication occurs within the cluster network, normally (same VPC or datacenter) this is not a relevant problem.
-#
-# However, it can become a problem when:
-#
-# The cluster is distributed across multiple zones or regions
-# There is significant latency between Nodes
-#
-# In this case, a request that arrives at Node A may end up being served by a Pod on Node B, generating:
-#
-# Increased latency
-# Higher network consumption
-# Possible impact on response time sensitive applications
-#
-# In this mode:
-#
-# Traffic is only forwarded to Pods local to the Node
-# Avoid traffic between Nodes
-# Preserves the client's origin IP
-#
-# On the other hand:
-#
-# If there is no local Pod, the request may fail
-# Global balancing between Pods becomes less efficient
-#
-# In a practical way
-
-k create deployment --image nginx --replicas 4 nginx
-k expose deployment nginx --type=LoadBalancer --port=80 --target-port=80
-
-k get svc
-NAME         TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)        AGE
-kubernetes   ClusterIP      10.96.0.1       <none>         443/TCP        44m
-nginx        LoadBalancer   10.96.247.192   172.17.0.241   80:30340/TCP   2m7s
-
-
-k get endpointslices.discovery.k8s.io
-NAME          ADDRESSTYPE   PORTS   ENDPOINTS                                         AGE
-kubernetes    IPv4          6443    172.17.0.2                                        43m
-nginx-t9tfk   IPv4          80      10.244.0.23,10.244.0.22,10.244.0.24 + 1 more...   48s
-
-kubectl run -i --tty --image alpine apline --restart=Never --rm
-/ # apk add curl
-
-# If I access the ClusterIP IP it will route traffic between all 4 Pods
-curl -I http://10.96.247.192
-
-k get pods
-NAME                     READY   STATUS    RESTARTS   AGE
-apline                   1/1     Running   0          2m30s
-nginx-676b6c5bbc-8kggb   1/1     Running   0          4m37s
-nginx-676b6c5bbc-n4slr   1/1     Running   0          4m37s
-nginx-676b6c5bbc-pbmjh   1/1     Running   0          4m37s
-nginx-676b6c5bbc-xkmqp   1/1     Running   0          4m37s
-
-# Open 4 terminals
-k logs nginx-676b6c5bbc-8kggb -f
-k logs nginx-676b6c5bbc-n4slr -f
-k logs nginx-676b6c5bbc-pbmjh -f
-k logs nginx-676b6c5bbc-xkmqp -f
-
-# Requests will arrive at all POds, even if these Pods are in other Workers
-kubectl run -i --tty --image alpine apline --restart=Never --rm
-apk add curl
-while true; do curl -I http://10.96.247.192; done
-
-# ======================= Configuring Trafic Policy ==============================
-
-# How do I know the default Traffic Policies policy?
-#
-# The default is "Cluster", change it to "Local"
-
-k get svc nginx -o yaml
-
-spec:
-  allocateLoadBalancerNodePorts: true
-  clusterIP: 10.96.247.192
-  clusterIPs:
-  - 10.96.247.192
-  externalTrafficPolicy: Cluster
-  internalTrafficPolicy: Cluster
-  ipFamilies:
-
-# Change to Location
-k neat <<< $(k get svc nginx -o yaml) > svc.yaml
-
-  externalTrafficPolicy: Local
-  internalTrafficPolicy: Local
-
-# =========================== Debung Trafic Policy =================================
-
-iptables-save > /tmp/iptables
-
-egrep '172.17.0.241' /tmp/iptables
--A KUBE-SERVICES -d 172.17.0.241/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
-
-
-egrep 'KUBE-EXT-2CMXP7HKUVJN7L6M' /tmp/iptables
-:KUBE-EXT-2CMXP7HKUVJN7L6M - [0:0]
--A KUBE-EXT-2CMXP7HKUVJN7L6M -s 10.244.0.0/16 -m comment --comment "pod traffic for default/nginx external destinations" -j KUBE-SVC-2CMXP7HKUVJN7L6M
--A KUBE-EXT-2CMXP7HKUVJN7L6M -m comment --comment "masquerade LOCAL traffic for default/nginx external destinations" -m addrtype --src-type LOCAL -j KUBE-MARK-MASQ
--A KUBE-EXT-2CMXP7HKUVJN7L6M -m comment --comment "route LOCAL traffic for default/nginx external destinations" -m addrtype --src-type LOCAL -j KUBE-SVC-2CMXP7HKUVJN7L6M
--A KUBE-EXT-2CMXP7HKUVJN7L6M -j KUBE-SVL-2CMXP7HKUVJN7L6M
--A KUBE-NODEPORTS -d 127.0.0.0/8 -p tcp -m comment --comment "default/nginx" -m tcp --dport 30655 -m nfacct --nfacct-name  localhost_nps_accepted_pkts -j KUBE-EXT-2CMXP7HKUVJN7L6M
--A KUBE-NODEPORTS -p tcp -m comment --comment "default/nginx" -m tcp --dport 30655 -j KUBE-EXT-2CMXP7HKUVJN7L6M
--A KUBE-SERVICES -d 172.17.0.241/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
-
-# Now routing is only for Pods belonging to the same Worker.
-
-egrep 'KUBE-SVL-2CMXP7HKUVJN7L6M' /tmp/iptables
--A KUBE-SVL-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.6:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-C4VXQDW52UV45WW3
--A KUBE-SVL-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.7:80" -j KUBE-SEP-DST4PJJC54MIXJRG
-
-# Requests will only arrive in Pods on the same Node
-#
-kubectl run -i --tty --image alpine apline --restart=Never --rm
-apk add curl
-while true; do curl -I http://10.96.247.192; done
-
-```
-
-[Menu](#-menu)
-
-# 🚀 Create Object - Estratégias Deploy
-
-```bash
-Deployment   => Aplicação stateless ( Aplicação escaláveis )
-
-                           -----------
-                           Deployment
-                           -----------
-                                |
-                ________________|_____________
-                |               |             |
-                |               |             |
-           ReplicaSet1     ReplicaSet2     ReplicaSet3
-                |               |             |
-                |               |             |
-          -----------------------------------------------
-           |    |   |       |   |   |      |   |    |
-           |    |   |       |   |   |      |   |    |
-         Pod1 Pod2 Pod3   Pod1 Pod2 Pod3  Pod1 Pod2 Pod3
-
-# How does Deployment interact with replicasets?
-O deployments orquestra os replicaset, e são os replicaset que cria os pods. Os Replicaset defini a quantidade de replicas que estaram rodando.
-
-# What is a Rolling Update?
-# It is a term used when I update my products ( pods ). Ex: My manifest (Deployment)
-#
-# Deployment creates 1 replicaset with 3 pods, now I need to change the manifest image.
-#
-# When applying the deployment, another replicaset ( replicaset2 ) will be created with 3 new Pods, this happens gradually.
-#
-# There are other ways to deploy Ex: canary, but in this format ( rolling Update ) Replicaset1 removes (-) a pod as the
-# Replicaset2 adds (+) a pod.
-#
-# This allows me to UNDO another replicaset
-```
-
-[Menu](#-menu)
-
-# 🚀 Create Object - Deploy Canary
-
-```bash
-Canary Deploy ( Root )
-
-( Joao ) => LoadBalance
-               |
-               |
-               |
-         -----------------
-        |                 |
-        |                 |
-        |                 |
-    80%( v1/old )    20%( v2/new )
-
-# Generating Model
-k neat <<< $(k create deployment --image nginx --replicas 0 nginx-blue --dry-run=client -o yaml)
-
-# Create 2 Deployments, blue with 1 replica and green with 9 replicas
-
-cat <<EOF | k apply -f -
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: nginx-blue
-  name: nginx-blue
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: nginx
-  template:
-    metadata:
-      labels:
-        app: nginx
-    spec:
-      containers:
-      - image: nginx
-        name: httpd
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: nginx-green
-  name: nginx-green
-spec:
-  replicas: 9
-  selector:
-    matchLabels:
-      app: nginx
-  template:
-    metadata:
-      labels:
-        app: nginx
-    spec:
-      containers:
-      - image: httpd
-        name: nginx
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: nginx
-  name: nginx
-spec:
-  ports:
-  - port: 80
-    protocol: TCP
-    targetPort: 80
-  selector:
-    app: nginx
-  type: LoadBalancer
-EOF
-
-# All Pods enter the same Pool
-selector:
-  app: nginx
-
-
-k get deployments.apps
-NAME          READY   UP-TO-DATE   AVAILABLE   AGE
-nginx-blue    1/1     1            1           38s
-nginx-green   9/9     9            9           38s
-
-kubectl run -i --tty --image alpine apline --restart=Never --rm
-apk add curl
-
-i=0; while [[ $i -le 10 ]]; do echo $i; curl nginx -I; let i=i+1; done
-
-# Forcing each request to create a new TCP connection, each request 1 Pod
-keep-alive     # → reuse connection → same pod
---no-keepalive # → new connection → new pod
-
-i=0; while [[ $i -le 10 ]]; do echo $i; curl -s -I --no-keepalive nginx | grep nginx; let i=i+1; done
-
-...
-...
-
-9
-HTTP/1.1 200 OK
-Server: nginx/1.29.8
-Date: Tue, 14 Apr 2026 14:16:28 GMT
-Content-Type: text/html
-Content-Length: 896
-Last-Modified: Tue, 07 Apr 2026 11:37:12 GMT
-Connection: close
-ETag: "69d4ec68-380"
-Accept-Ranges: bytes
-
-10
-HTTP/1.1 200 OK
-Date: Tue, 14 Apr 2026 14:16:28 GMT
-Server: Apache/2.4.66 (Unix)
-Last-Modified: Fri, 07 Nov 2025 08:23:08 GMT
-ETag: "bf-642fce432f300"
-Accept-Ranges: bytes
-Content-Length: 191
-Connection: close
-Content-Type: text/html
-```
-[Menu](#-menu)
-
-# 🚀 Create Object - Deploy Blue Green
-
-```bash
-# Blue-Green Deploy ( Root )
-#
-# I upload the entire application infrastructure to other Pods and switch the application to the Service selector.
-
-cat <<EOF | k apply -f -
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: nginx-blue
-  name: nginx-blue
-spec:
-  replicas: 5
-  selector:
-    matchLabels:
-      app: nginx-blue-service
-  template:
-    metadata:
-      labels:
-        app: nginx-blue-service
-    spec:
-      containers:
-      - image: httpd
-        name: httpd
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: nginx-green
-  name: nginx-green
-spec:
-  replicas: 5
-  selector:
-    matchLabels:
-      app: nginx-green-service
-  template:
-    metadata:
-      labels:
-        app: nginx-green-service
-    spec:
-      containers:
-      - image: nginx
-        name: nginx
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: nginx
-  name: nginx
-spec:
-  ports:
-  - port: 80
-    protocol: TCP
-    targetPort: 80
-  selector:
-    app: nginx-blue-service
-  type: LoadBalancer
-EOF
-
-k get deployments.apps
-NAME          READY   UP-TO-DATE   AVAILABLE   AGE
-nginx-blue    5/5     5            5           99s
-nginx-green   5/5     5            5           99s
-
-kubectl run -i --tty --image alpine apline --restart=Never --rm
-apk add curl
-
-# Blue represents apache
-
-/ # i=0; while [[ $i -le 10 ]]; do curl -sSL nginx -I | grep Server; let i=i+1; done
-Server: Apache/2.4.62 (Unix)
-Server: Apache/2.4.62 (Unix)
-Server: Apache/2.4.62 (Unix)
-Server: Apache/2.4.62 (Unix)
-Server: Apache/2.4.62 (Unix)
-Server: Apache/2.4.62 (Unix)
-Server: Apache/2.4.62 (Unix)
-Server: Apache/2.4.62 (Unix)
-Server: Apache/2.4.62 (Unix)
-Server: Apache/2.4.62 (Unix)
-Server: Apache/2.4.62 (Unix)
-
-cat <<EOF | k apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: nginx
-  name: nginx
-spec:
-  ports:
-  - port: 80
-    protocol: TCP
-    targetPort: 80
-  selector:
-    app: nginx-green-service
-  type: LoadBalancer
-EOF
-
-# Green represents nginx
-
-/ # i=0; while [[ $i -le 10 ]]; do curl -sSL nginx -I | grep Server; let i=i+1; done
-Server: nginx/1.27.3
-Server: nginx/1.27.3
-Server: nginx/1.27.3
-Server: nginx/1.27.3
-Server: nginx/1.27.3
-Server: nginx/1.27.3
-Server: nginx/1.27.3
-Server: nginx/1.27.3
-Server: nginx/1.27.3
-Server: nginx/1.27.3
-Server: nginx/1.27.3
-```
 [Menu](#-menu)
 
 # 🚀 Create Object - Ingress Controller
@@ -5844,6 +5178,684 @@ etag: "69d4ec68-380"
 accept-ranges: bytes
 strict-transport-security: max-age=31536000; includeSubDomains
 ```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Ipvs Vs Iptables
+
+```bash
+# Kubernetes Componetes
+https://kubernetes.io/docs/concepts/overview/components/
+
+# Kube-Proxy Comandos Referência
+https://kubernetes.io/docs/reference/command-line-tools-reference/kube-proxy/
+
+# =================================== IPVS ========================================
+#
+# How to check if you are using Iptables or Ipvs?
+# -If you are using ipvs, the interface has the prefix ipvs
+# -Here the interfaces have the name (ipvs)
+ip a
+#
+#
+apt update && apt install ipvsadm -y
+ipvsadm -L -n
+TCP  10.102.184.126:8080 rr ( Esse rr significa Round Robin )
+  -> 10.244.1.117:80     Masq  1  0  0
+  -> 10.244.1.118:80     Masq  1  0  0
+  -> 10.244.1.119:80     Masq  1  0  0
+
+# ================================= Iptables ======================================
+#
+# Cloud Provides ( AWS ) uses iptables to route traffic between pods
+#
+# ================================= How to Change =================================
+#
+# How to change the routing mode?
+# Does the cloud provider support this?
+#
+# kube-proxy is configured via a configmap
+
+k get cm -n kube-system
+NAME                                                   DATA   AGE
+coredns                                                1      4h13m
+extension-apiserver-authentication                     6      4h13m
+kube-apiserver-legacy-service-account-token-tracking   1      4h13m
+kube-proxy                                             2      4h13m
+kube-root-ca.crt                                       1      4h13m
+kubeadm-config                                         1      4h13m
+kubelet-config                                         1      4h13m
+
+# By default, kind operates with Iptables
+#
+k neat <<< $(k get cm -n kube-system kube-proxy -o yaml) | grep mode
+mode: iptables
+
+# Ensure kernel modules are enabled
+modprobe ip_vs
+modprobe ip_vs_rr
+modprobe ip_vs_wrr
+modprobe ip_vs_sh
+modprobe nf_conntrack
+
+# Change requires recycling of pods.
+k edit cm -n kube-system kube-proxy -o yaml
+
+kubectl rollout restart daemonset kube-proxy -n kube-system
+
+# ================================= Debug Iptables ==================================
+
+# By default this image exposes port 80
+k create deployment --image nginx --replicas 3 nginx
+
+# Creating a service of type ClusterIP 8080 and redirects to port 80
+kubectl expose deployment nginx --port=8080 --type='ClusterIP' --target-port=80
+
+k get pod -o wide
+NAME                     READY   STATUS    RESTARTS   AGE   IP            NODE                 NOMINATED NODE   READINESS GATES
+nginx-66686b6766-9h4cw   1/1     Running   0          48s   10.244.0.22   prgs-control-plane   <none>           <none>
+nginx-66686b6766-hq2h2   1/1     Running   0          48s   10.244.0.20   prgs-control-plane   <none>           <none>
+nginx-66686b6766-kcbr2   1/1     Running   0          48s   10.244.0.21   prgs-control-plane   <none>           <none>
+
+k get svc
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP    17m
+nginx        ClusterIP   10.96.175.117   <none>        8080/TCP   52s
+
+k run --image alpine --rm -it teste-curl sh
+apk add curl
+ping nginx
+ping nginx.default.svc.cluster.local
+curl nginx:8080
+
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+...
+...
+
+# =========================== Como Debugar ( ClusterIP ) ==========================
+#
+# The Debug method is the same, regardless of the service. I left it separated by service type, just for organization purposes.
+#
+docker exec -it prgs-control-plane bash
+
+root@prgs-control-plane:/# iptables-save > /tmp/iptables
+root@prgs-control-plane:/# egrep '10.96.175.117' /tmp/iptables
+
+-A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
+-A KUBE-SVC-2CMXP7HKUVJN7L6M ! -s 10.244.0.0/16 -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-MARK-MASQ
+
+# Add rules at the end of the ruleset
+iptables -A
+
+# This rule here that does the redirection
+# Iptables Rules on the Host (Worker)
+# Packet destined for host 10.96.175.117/32 (Service) on port 8080 action (KUBE-SVC-2CMXP7HKUVJN7L6M)
+-A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
+
+root@prgs-control-plane:/# egrep 'KUBE-SVC-2CMXP7HKUVJN7L6M' /tmp/iptables
+
+-A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
+-A KUBE-SVC-2CMXP7HKUVJN7L6M ! -s 10.244.0.0/16 -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-MARK-MASQ
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.20:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-BRZDTZFF2SFWJV4H
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.21:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-OI2S57TQ5WH5FOMC
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.22:80" -j KUBE-SEP-473MVOWGJMIYYUKK
+
+# This 10.244.0.0/16 is the CDIR that K8S will use for the Pods
+# Here Everything that comes from this Chain (KUBE-SVC-2CMXP7HKUVJN7L6M) except the Pod network will be Masked to leave.
+-A KUBE-SERVICES -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-SVC-2CMXP7HKUVJN7L6M
+-A KUBE-SVC-2CMXP7HKUVJN7L6M ! -s 10.244.0.0/16 -d 10.96.175.117/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 8080 -j KUBE-MARK-MASQ
+
+# Here That Balancedly Happens
+
+# 30% of requests that arrive on this host will be forwarded to (10.244.0.20) -m statistic (load balancer module)
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.20:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-BRZDTZFF2SFWJV4H
+
+# 50% of requests that arrive at this host will be forwarded to (10.244.0.21)
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.21:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-OI2S57TQ5WH5FOMC
+
+# the remaining % of requests that arrive at this host will be forwarded to (10.244.0.22)
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.0.22:80" -j KUBE-SEP-473MVOWGJMIYYUKK
+
+# =========================== Como Debugar ( NodePort ) ===========================
+#
+--port # (It is the service port)
+--target-port # (It is the nginx port running in the container)
+
+k create deployment --image nginx --replicas 3 nginx
+k expose deployment nginx --type=NodePort --name=nginx --port=80 --target-port=80
+
+k get svc
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP        99m
+nginx        NodePort    10.106.211.96   <none>        80:32674/TCP   4s
+
+# Essa Porta (32674) é aberta no Node ( Worker )
+docker exec -it prgs-worker2 bash -c "curl localhost:32674"
+
+
+# =========================  Local Port  ( Kind ) ===============================
+k delete svc nginx
+
+# If you are using Kind , you can redirect the NodePort port to your local machine
+- role: worker
+  kubeadmConfigPatches:
+  - |
+    kind: JoinConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "prgs/postgres=true"
+  extraPortMappings:
+  - containerPort: 30999
+    hostPort: 30999
+    listenAddress: "0.0.0.0"
+    protocol: TCP
+
+# No seu host local
+netstat -an | grep 30999
+tcp4       0      0  *.30999                *.*                    LISTEN
+
+k create service nodeport nginx --node-port=30999 --tcp=80:80
+
+k get svc
+NAME         TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
+kubernetes   ClusterIP   10.96.0.1        <none>        443/TCP        104m
+nginx        NodePort    10.107.225.100   <none>        80:30999/TCP   3s
+
+curl localhost:30999
+
+# ============================== Debug ( LoadBalancer ) =========================
+# The LoadBalancer is triggered by the cloud-controller (This guy talks to the cloud Provider (via api))
+
+https://metallb.universe.tf/installation/
+https://metallb.universe.tf/configuration/
+
+k create deployment --image nginx --replicas 3 nginx
+k expose deployment nginx --type=LoadBalancer --port=80 --target-port=80
+
+k get svc
+NAME         TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)        AGE
+kubernetes   ClusterIP      10.96.0.1       <none>           443/TCP        74m
+nginx        LoadBalancer   10.109.124.25   172.18.255.201   80:30606/TCP   68m
+
+iptables-save > /tmp/iptables
+
+egrep '172.18.255.201' /tmp/iptables
+-A KUBE-SERVICES -d 172.18.255.201/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
+
+# Here it balances for ClusterIp ( KUBE-SVC-2CMXP7HKUVJN7L6M )
+
+egrep 'KUBE-EXT-2CMXP7HKUVJN7L6M' /tmp/iptables
+:KUBE-EXT-2CMXP7HKUVJN7L6M - [0:0]
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -m comment --comment "masquerade traffic for default/nginx external destinations" -j KUBE-MARK-MASQ
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -j KUBE-SVC-2CMXP7HKUVJN7L6M
+-A KUBE-NODEPORTS -d 127.0.0.0/8 -p tcp -m comment --comment "default/nginx" -m tcp --dport 30606 -m nfacct --nfacct-name  localhost_nps_accepted_pkts -j KUBE-EXT-2CMXP7HKUVJN7L6M
+-A KUBE-NODEPORTS -p tcp -m comment --comment "default/nginx" -m tcp --dport 30606 -j KUBE-EXT-2CMXP7HKUVJN7L6M
+-A KUBE-SERVICES -d 172.18.255.201/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
+
+egrep 'KUBE-SVC-2CMXP7HKUVJN7L6M' /tmp/iptables
+:KUBE-SVC-2CMXP7HKUVJN7L6M - [0:0]
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -j KUBE-SVC-2CMXP7HKUVJN7L6M
+-A KUBE-SERVICES -d 10.109.124.25/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 80 -j KUBE-SVC-2CMXP7HKUVJN7L6M
+-A KUBE-SVC-2CMXP7HKUVJN7L6M ! -s 10.244.0.0/16 -d 10.109.124.25/32 -p tcp -m comment --comment "default/nginx cluster IP" -m tcp --dport 80 -j KUBE-MARK-MASQ
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.5:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-IZW656N5ZXYN5BEC
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.6:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-C4VXQDW52UV45WW3
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.2.6:80" -j KUBE-SEP-UOZCNMEBPO5JGMU4
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Trafic Policy
+
+```bash
+# This feature is interesting when we have critical applications that require performance.
+#
+# Traffic Policies, in a scenario with LoadBalancer, work as follows:
+#
+# Requests arrive via the LoadBalancer external IP and are received by a Node in the cluster.
+# When entering the Node, traffic is directed to the Service (ClusterIP),
+# From here, kube-proxy comes into action to decide which Pod will fulfill the request.
+#
+# To view the available Pods, we can list the EndpointSlices:
+#
+k get endpointslices.discovery.k8s.io
+NAME         ADDRESSTYPE   PORTS   ENDPOINTS    AGE
+kubernetes   IPv4          6443    172.17.0.2   27m
+
+# These endpoints only inform which Pods are available for the Service.
+#
+# Routing operation
+#
+# The important point is that, by default, kube-proxy can forward the request to any Pod in the cluster,
+# regardless of the Node it is running on.
+#
+# That is:
+#
+# The request can arrive at Node-A and be forwarded to a Pod on Node-B
+#
+# This ensures greater resilience and load distribution between Pods.
+#
+# How does this happen internally
+#
+# The kube-proxy, running on Node (not inside Pods), programs iptables rules into the operating system kernel.
+#
+# These rules load balance using probability, for example:
+#
+# Ex: 33% of requests served by this Pod.
+
+-A KUBE-SVC-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.5:80" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-IZW656N5ZXYN5BEC
+
+# This means that approximately 33% of requests will be forwarded to this specific Pod.
+#
+# Network impact
+#
+# As this communication occurs within the cluster network, normally (same VPC or datacenter) this is not a relevant problem.
+#
+# However, it can become a problem when:
+#
+# The cluster is distributed across multiple zones or regions
+# There is significant latency between Nodes
+#
+# In this case, a request that arrives at Node A may end up being served by a Pod on Node B, generating:
+#
+# Increased latency
+# Higher network consumption
+# Possible impact on response time sensitive applications
+#
+# In this mode:
+#
+# Traffic is only forwarded to Pods local to the Node
+# Avoid traffic between Nodes
+# Preserves the client's origin IP
+#
+# On the other hand:
+#
+# If there is no local Pod, the request may fail
+# Global balancing between Pods becomes less efficient
+#
+# In a practical way
+
+k create deployment --image nginx --replicas 4 nginx
+k expose deployment nginx --type=LoadBalancer --port=80 --target-port=80
+
+k get svc
+NAME         TYPE           CLUSTER-IP      EXTERNAL-IP    PORT(S)        AGE
+kubernetes   ClusterIP      10.96.0.1       <none>         443/TCP        44m
+nginx        LoadBalancer   10.96.247.192   172.17.0.241   80:30340/TCP   2m7s
+
+
+k get endpointslices.discovery.k8s.io
+NAME          ADDRESSTYPE   PORTS   ENDPOINTS                                         AGE
+kubernetes    IPv4          6443    172.17.0.2                                        43m
+nginx-t9tfk   IPv4          80      10.244.0.23,10.244.0.22,10.244.0.24 + 1 more...   48s
+
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+/ # apk add curl
+
+# If I access the ClusterIP IP it will route traffic between all 4 Pods
+curl -I http://10.96.247.192
+
+k get pods
+NAME                     READY   STATUS    RESTARTS   AGE
+apline                   1/1     Running   0          2m30s
+nginx-676b6c5bbc-8kggb   1/1     Running   0          4m37s
+nginx-676b6c5bbc-n4slr   1/1     Running   0          4m37s
+nginx-676b6c5bbc-pbmjh   1/1     Running   0          4m37s
+nginx-676b6c5bbc-xkmqp   1/1     Running   0          4m37s
+
+# Open 4 terminals
+k logs nginx-676b6c5bbc-8kggb -f
+k logs nginx-676b6c5bbc-n4slr -f
+k logs nginx-676b6c5bbc-pbmjh -f
+k logs nginx-676b6c5bbc-xkmqp -f
+
+# Requests will arrive at all POds, even if these Pods are in other Workers
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+apk add curl
+while true; do curl -I http://10.96.247.192; done
+
+# ======================= Configuring Trafic Policy ==============================
+
+# How do I know the default Traffic Policies policy?
+#
+# The default is "Cluster", change it to "Local"
+
+k get svc nginx -o yaml
+
+spec:
+  allocateLoadBalancerNodePorts: true
+  clusterIP: 10.96.247.192
+  clusterIPs:
+  - 10.96.247.192
+  externalTrafficPolicy: Cluster
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+
+# Change to Location
+k neat <<< $(k get svc nginx -o yaml) > svc.yaml
+
+  externalTrafficPolicy: Local
+  internalTrafficPolicy: Local
+
+# =========================== Debung Trafic Policy =================================
+
+iptables-save > /tmp/iptables
+
+egrep '172.17.0.241' /tmp/iptables
+-A KUBE-SERVICES -d 172.17.0.241/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
+
+
+egrep 'KUBE-EXT-2CMXP7HKUVJN7L6M' /tmp/iptables
+:KUBE-EXT-2CMXP7HKUVJN7L6M - [0:0]
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -s 10.244.0.0/16 -m comment --comment "pod traffic for default/nginx external destinations" -j KUBE-SVC-2CMXP7HKUVJN7L6M
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -m comment --comment "masquerade LOCAL traffic for default/nginx external destinations" -m addrtype --src-type LOCAL -j KUBE-MARK-MASQ
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -m comment --comment "route LOCAL traffic for default/nginx external destinations" -m addrtype --src-type LOCAL -j KUBE-SVC-2CMXP7HKUVJN7L6M
+-A KUBE-EXT-2CMXP7HKUVJN7L6M -j KUBE-SVL-2CMXP7HKUVJN7L6M
+-A KUBE-NODEPORTS -d 127.0.0.0/8 -p tcp -m comment --comment "default/nginx" -m tcp --dport 30655 -m nfacct --nfacct-name  localhost_nps_accepted_pkts -j KUBE-EXT-2CMXP7HKUVJN7L6M
+-A KUBE-NODEPORTS -p tcp -m comment --comment "default/nginx" -m tcp --dport 30655 -j KUBE-EXT-2CMXP7HKUVJN7L6M
+-A KUBE-SERVICES -d 172.17.0.241/32 -p tcp -m comment --comment "default/nginx loadbalancer IP" -m tcp --dport 80 -j KUBE-EXT-2CMXP7HKUVJN7L6M
+
+# Now routing is only for Pods belonging to the same Worker.
+
+egrep 'KUBE-SVL-2CMXP7HKUVJN7L6M' /tmp/iptables
+-A KUBE-SVL-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.6:80" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-C4VXQDW52UV45WW3
+-A KUBE-SVL-2CMXP7HKUVJN7L6M -m comment --comment "default/nginx -> 10.244.1.7:80" -j KUBE-SEP-DST4PJJC54MIXJRG
+
+# Requests will only arrive in Pods on the same Node
+#
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+apk add curl
+while true; do curl -I http://10.96.247.192; done
+
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Estratégias Deploy
+
+```bash
+Deployment   => Aplicação stateless ( Aplicação escaláveis )
+
+                           -----------
+                           Deployment
+                           -----------
+                                |
+                ________________|_____________
+                |               |             |
+                |               |             |
+           ReplicaSet1     ReplicaSet2     ReplicaSet3
+                |               |             |
+                |               |             |
+          -----------------------------------------------
+           |    |   |       |   |   |      |   |    |
+           |    |   |       |   |   |      |   |    |
+         Pod1 Pod2 Pod3   Pod1 Pod2 Pod3  Pod1 Pod2 Pod3
+
+# How does Deployment interact with replicasets?
+O deployments orquestra os replicaset, e são os replicaset que cria os pods. Os Replicaset defini a quantidade de replicas que estaram rodando.
+
+# What is a Rolling Update?
+# It is a term used when I update my products ( pods ). Ex: My manifest (Deployment)
+#
+# Deployment creates 1 replicaset with 3 pods, now I need to change the manifest image.
+#
+# When applying the deployment, another replicaset ( replicaset2 ) will be created with 3 new Pods, this happens gradually.
+#
+# There are other ways to deploy Ex: canary, but in this format ( rolling Update ) Replicaset1 removes (-) a pod as the
+# Replicaset2 adds (+) a pod.
+#
+# This allows me to UNDO another replicaset
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Deploy Canary
+
+```bash
+Canary Deploy ( Root )
+
+( Joao ) => LoadBalance
+               |
+               |
+               |
+         -----------------
+        |                 |
+        |                 |
+        |                 |
+    80%( v1/old )    20%( v2/new )
+
+# Generating Model
+k neat <<< $(k create deployment --image nginx --replicas 0 nginx-blue --dry-run=client -o yaml)
+
+# Create 2 Deployments, blue with 1 replica and green with 9 replicas
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-blue
+  name: nginx-blue
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: httpd
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-green
+  name: nginx-green
+spec:
+  replicas: 9
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: httpd
+        name: nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx
+  type: LoadBalancer
+EOF
+
+# All Pods enter the same Pool
+selector:
+  app: nginx
+
+
+k get deployments.apps
+NAME          READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-blue    1/1     1            1           38s
+nginx-green   9/9     9            9           38s
+
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+apk add curl
+
+i=0; while [[ $i -le 10 ]]; do echo $i; curl nginx -I; let i=i+1; done
+
+# Forcing each request to create a new TCP connection, each request 1 Pod
+keep-alive     # → reuse connection → same pod
+--no-keepalive # → new connection → new pod
+
+i=0; while [[ $i -le 10 ]]; do echo $i; curl -s -I --no-keepalive nginx | grep nginx; let i=i+1; done
+
+...
+...
+
+9
+HTTP/1.1 200 OK
+Server: nginx/1.29.8
+Date: Tue, 14 Apr 2026 14:16:28 GMT
+Content-Type: text/html
+Content-Length: 896
+Last-Modified: Tue, 07 Apr 2026 11:37:12 GMT
+Connection: close
+ETag: "69d4ec68-380"
+Accept-Ranges: bytes
+
+10
+HTTP/1.1 200 OK
+Date: Tue, 14 Apr 2026 14:16:28 GMT
+Server: Apache/2.4.66 (Unix)
+Last-Modified: Fri, 07 Nov 2025 08:23:08 GMT
+ETag: "bf-642fce432f300"
+Accept-Ranges: bytes
+Content-Length: 191
+Connection: close
+Content-Type: text/html
+```
+[Menu](#-menu)
+
+# 🚀 Create Object - Deploy Blue Green
+
+```bash
+# Blue-Green Deploy ( Root )
+#
+# I upload the entire application infrastructure to other Pods and switch the application to the Service selector.
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-blue
+  name: nginx-blue
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: nginx-blue-service
+  template:
+    metadata:
+      labels:
+        app: nginx-blue-service
+    spec:
+      containers:
+      - image: httpd
+        name: httpd
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-green
+  name: nginx-green
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: nginx-green-service
+  template:
+    metadata:
+      labels:
+        app: nginx-green-service
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx-blue-service
+  type: LoadBalancer
+EOF
+
+k get deployments.apps
+NAME          READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-blue    5/5     5            5           99s
+nginx-green   5/5     5            5           99s
+
+kubectl run -i --tty --image alpine apline --restart=Never --rm
+apk add curl
+
+# Blue represents apache
+
+/ # i=0; while [[ $i -le 10 ]]; do curl -sSL nginx -I | grep Server; let i=i+1; done
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+Server: Apache/2.4.62 (Unix)
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: nginx-green-service
+  type: LoadBalancer
+EOF
+
+# Green represents nginx
+
+/ # i=0; while [[ $i -le 10 ]]; do curl -sSL nginx -I | grep Server; let i=i+1; done
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+Server: nginx/1.27.3
+```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - ConfigMap Vs Secrets
