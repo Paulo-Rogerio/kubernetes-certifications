@@ -36,6 +36,7 @@
 - [Create Object - Services LoadBalancer](#-create-object---services-loadbalancer)
 - [Create Object - Services ExternalName](#-create-object---services-externalname)
 - [Create Object - Services Headless Service](#-create-object---services-headless-service)
+- [Create Object - Kube-Proxy](#-create-object---kube-proxy)
 - [Create Object - Ingress Controller](#-create-object---ingress-controller)
 - [Create Object - Ingress Múltiplos Paths](#-create-object---ingress-múltiplos-paths)
 - [Create Object - Ingress Error 503](#-create-object---ingress-error-503)
@@ -3974,7 +3975,23 @@ sleepy   Running     0/1         11s         11s
 #
 # DNS Name ( Service Discovery )
 
-# ============================= Cluster IP ========================================
+# Kubernetes Services use labels and selectors to identify which Pods receive traffic.
+# Labels are key-value pairs assigned to Pods, and a Service’s selector matches Pods
+# with specific labels to route traffic to them.
+#
+# Because labels can be dynamically updated, they play a critical role in managing how Services
+# connect to Pods during application updates, ensuring seamless transitions
+# as Pods are created or terminated.
+
+# For example, you might label your current Pods with app=web, version=v1.
+# When deploying the next release, the new Pods could be created with app=web, version=v2.
+# Because the Service is still configured to select version=v1,
+# only the old Pods receive traffic until you deliberately change the selector.
+# Once the new Pods are created, tested, and fully initialized,
+# you can update the Service’s label selector to point to version=v2.
+# At that moment, traffic cleanly shifts to the new version, avoiding client confusion and ensuring a smoother transition.
+
+# Cluster IP
 # Cluster IP is only for internal communication within the cluster.
 # When creating the service, you indicate the selector and it already knows who to send the request to.
 k get svc kubernetes -o yaml
@@ -4060,19 +4077,91 @@ mymysql-wvtvv       IPv4          <unset>   <unset>                   12d
 nginx-mjb56         IPv4          80        10.244.1.66,10.244.1.67   3d
 nginx-paulo-hspkj   IPv4          80        10.244.1.129              5m10s
 
-# ============================== External Name ====================================
+
+#************************************************************************
+# How to Apply Blue-Green Deployment
+#************************************************************************
 #
-# Services => ( CNAME ) => DNS
-# It is a service used to resolve names.
-# Suppose you use AWS's RDS to give you a URL (Endpoint), but you don't want to use the DNS that AWS sent you,
-# because if it changes you will have to redeploy all your apps.
-#
-# Then you can create this service (External Name) to create a valid DNS within the Cluster
-#
-# Service , it would be your service ex: "db" which is nothing more than a cname for (AWS DNS URL),
-# so when your bank URL changes you only change this service and your app remains the same as before.
-#
-# All services are done on the node
+# ------------- Create Pod - V1 ---------------
+
+k run nginx-v1 \
+  --image=nginx:1.25 \
+  --port=80 \
+  --dry-run=client -o yaml |
+yq '
+  .metadata.labels = {
+    "app": "web",
+    "version": "v1"
+  } |
+  .spec.containers[0].name = "nginx-v1"
+' | k apply -f -
+
+k exec -it nginx-v1 -- bash -c "echo 'v1' > /usr/share/nginx/html/index.html"
+
+# ------------- Create Pod - V2 ---------------
+
+k run nginx-v2 \
+  --image=nginx:1.25 \
+  --port=80 \
+  --dry-run=client -o yaml |
+yq '
+  .metadata.labels = {
+    "app": "web",
+    "version": "v2"
+  } |
+  .spec.containers[0].name = "nginx-v2"
+' | k apply -f -
+
+k exec -it nginx-v2 -- bash -c "echo 'v2' > /usr/share/nginx/html/index.html"
+
+# ------------ Create Services - V1 --------------
+
+k create service clusterip nginx-service \
+  --tcp=80:80 \
+  --dry-run=client -o yaml |
+yq '
+  .spec.selector = {"app": "web", "version": "v1"} |
+  .spec.ports[0].name = "nginx-service"
+' | k apply -f -
+
+
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ubuntu
+spec:
+  containers:
+  - name: ubuntu
+    image: ubuntu:latest
+    command: [ "sleep" ]
+    args: [ "infinity" ]
+EOF
+
+# ---------------------- Check --------------------
+k get po
+NAME       READY   STATUS    RESTARTS   AGE
+nginx-v1   1/1     Running   0          147m
+nginx-v2   1/1     Running   0          5m38s
+ubuntu     1/1     Running   0          169m
+
+k get svc
+NAME            TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+kubernetes      ClusterIP   10.96.0.1      <none>        443/TCP   44m
+nginx-service   ClusterIP   10.96.154.207  <none>        80/TCP    2m19s
+
+k exec ubuntu -- /bin/bash -c "apt update && apt install curl -y"
+k exec ubuntu -- /bin/bash -c "curl -sSL 10.96.154.207"
+v1
+
+# ------------ Update Selector - v2 ----------------
+
+k patch service nginx-service -p '{"spec":{"selector":{"version":"v2"}}}'
+service/nginx-service patched
+
+k exec ubuntu -- /bin/bash -c "curl -sSL 10.96.154.207"
+v2
+
 ```
 
 [Menu](#-menu)
@@ -4091,6 +4180,16 @@ nginx-paulo-hspkj   IPv4          80        10.244.1.129              5m10s
 
 # NodePort Services are built on top of ClusterIP, forwarding traffic from the node’s external IP
 # and designated port to the internal ClusterIP.
+
+# Note that both the range of ClusterIPs and the range of NodePorts are configurable in the API server’s startup options.
+# Defined by the --service-node-port-range flag.
+#
+# cat /etc/kubernetes/manifests/kube-apiserver.yaml
+
+
+kubectl expose deployment/nginx --port=80 --type=NodePort
+
+or
 
 k neat -o yaml <<< $(k create service nodeport mymysql --tcp=30999:80 --dry-run=client -o json | jq '.spec.ports[0].nodePort = 30999')
 
@@ -4332,9 +4431,65 @@ Address 1: 10.244.2.14 nginx-1.nginx.default.svc.cluster.local
 
 [Menu](#-menu)
 
+# 🚀 Create Object - Kube-Proxy
+
+```bash
+k get po
+NAME       READY   STATUS    RESTARTS   AGE
+nginx-v1   1/1     Running   0          162m
+nginx-v2   1/1     Running   0          20m
+ubuntu     1/1     Running   0          3h4m
+
+k get svc
+NAME            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+kubernetes      ClusterIP   10.96.0.1       <none>        443/TCP   3h48m
+nginx-service   ClusterIP   10.96.154.207   <none>        80/TCP    162m
+
+# Proxy
+k proxy
+
+curl -sSL http://localhost:8001
+{
+  "paths": [
+    "/.well-known/openid-configuration",
+    "/api",
+    "/api/v1"
+    ...
+    ...
+    ...
+
+
+# Explorer API Kubernetes ( objeto Service )
+curl -sSL http://localhost:8001/api/v1/namespaces/default/services/nginx-service
+{
+  "kind": "Service",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "nginx-service",
+    "namespace": "default",
+    "uid": "c1a09936-ec19-4f5c-bbe6-7ebf59805e17",
+    "resourceVersion": "24608",
+    ...
+    ...
+
+
+# When passed this in the URL ":80/proxy/" it proxy the request through this Service.
+curl -sSL http://localhost:8001/api/v1/namespaces/default/services/nginx-service:80/proxy/
+v2
+```
+
+[Menu](#-menu)
+
 # 🚀 Create Object - Ingress Controller
 
 ```bash
+#
+# An Ingress controller runs as a Pod and listens for incoming traffic based on hostnames or URLs.
+# It then routes those requests to the correct Services within the cluster.
+# Ingress is not a built-in Service type, but it is often used in combination with Services to provide centralized,
+# advanced routing for external traffic. We will explore Ingress in more detail in a later chapter.
+
+
                  Usuário ( http://app.meudominio.com.br)
                                     |
                                     |
@@ -10064,6 +10219,281 @@ PING vault.interno.prgs.corp (192.168.56.56): 56 data bytes
 64 bytes from 192.168.56.56: seq=1 ttl=62 time=0.519 ms
 64 bytes from 192.168.56.56: seq=2 ttl=62 time=0.719 ms
 
+#****************************** Rewrite Domain ***************************
+
+# What is the use case for this?
+# Let's assume there is a Pod (sidecar).
+# 1 - container listening on port 3000 (Rails)
+# 1 - container listening on port 80 (Nginx)
+
+monolito.financas.example.com
+        │
+        ▼
+rewrite
+        │
+        ▼
+nginx.default.svc.cluster.local
+        │
+        ▼
+Kubernetes plugin
+        │
+        ▼
+10.104.248.141
+
+
+# This Nginx container performs a (proxy_pass) to the Rails port when a request requires processing within the Rails pod.
+# When the request is for a static file, Nginx serves it directly.
+# This assumes the Nginx pod is configured to accept requests for this virtual host only under the name ( api.example.com )
+# because application required certificates into pod.
+
+server {
+    server_name monolito.financas.example.com;
+
+    location /assets/ {
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+    }
+}
+
+DNS
+monolito.financas.example.com
+      │
+      ▼
+Service monolito
+      │
+      ▼
+Pod
+      │
+      ▼
+Nginx
+Host: monolito.financas.example.com
+      │
+      ├── /assets → static files
+      │
+      └── /users → proxy → Rails :3000
+
+
+# Setup Rewrite
+
+k -n kube-system get svc kube-dns -o yaml
+k get pod -l k8s-app=kube-dns -n kube-system --show-labels
+NAMESPACE     NAME                       READY   STATUS    RESTARTS   AGE   LABELS
+kube-system   coredns-66bc5c9577-v27mk   1/1     Running   0          71m   k8s-app=kube-dns,pod-template-hash=66bc5c9577
+kube-system   coredns-66bc5c9577-vzmg4   1/1     Running   0          71m   k8s-app=kube-dns,pod-template-hash=66bc5c9577
+
+k -n kube-system get configmaps
+k -n kube-system get configmaps coredns -o yaml
+k -n kube-system get configmaps coredns -o yaml > /tmp/coredns-backup.yaml
+k -n kube-system edit configmaps coredns
+
+# What does this configuration do?
+#
+# CoreDNS rewrites the name in the response before delivering it to the client.
+#
+# With this setup, you are telling CoreDNS:
+#
+# "If you receive a query for <something>.example.com, transform that query into <something>.default.svc.cluster.local."
+#
+# This does not mean that CoreDNS has become an authoritative DNS server for the entire example.com domain.
+#
+# It transforms this:
+# monolito.financas.example.com
+#
+# Into this:
+# nginx.default.svc.cluster.local
+#
+# CoreDNS rewrites the name in the response before delivering it to the client.
+#
+# The `stop` directive tells the rewrite plugin:
+#
+# If a rule in this block matches, stop processing other rewrite rules.
+#
+# Why is this particularly interesting?
+#
+# Because now you can make example.com function as a transparent alias for Kubernetes Services.
+#
+# This is important for clients that perform name validation/TLS.
+
+....
+data:
+  Corefile: |
+.:53 {
+    rewrite stop {
+        name regex ^([^.]+)\.([a-z0-9-]+)\.example\.com\. {1}.{2}.svc.cluster.local.
+        answer name ^([^.]+)\.([a-z0-9-]+)\.svc\.cluster\.local\.$ {1}.{2}.example.com.
+    }
+    log
+    debug
+    errors
+    health
+    ....
+    ....
+
+
+^([^.]+)\.([a-z0-9-]+)\.example\.com\.
+  │             │
+  │             └── {2} = financas
+  └──────────────── {1} = monolito
+
+
+Componente Regex      |  Group  |         Matching            |  Exemple
+---------------------------------------------------------------------------
+      ^([^.]+)        |   {1}   |   The name of the service   |   monolito
+                      |         |   (anyr character           |
+                      |         |   except a dot)             |
+----------------------------------------------------------------------------
+    ([a-z0-9-]+)      |   {2}   |   The name of the namespace |  financas
+                      |         |    / aplication             |
+---------------------------------------------------------------------------
+    \.example\.com    |   N/A   |   The sufixo your domain    |   .example.com
+
+
+
+# Rollout os Pods
+k rollout restart deployment coredns -n kube-system
+k get pod -l k8s-app=kube-dns -n kube-system --show-labels
+
+# ndots define how many dots (.) the name needs to have [it] to be considered "absolute" for resolution.
+
+| Nome consultado               | Nº de pontos | Com `ndots:2`           |
+| ----------------------------- | -----------: | ----------------------- |
+| `nginx`                       |            0 | tenta `search` primeiro |
+| `nginx.financas`              |            1 | tenta `search` primeiro |
+| `nginx.financas.example.com`  |            2 | trata como absoluto     |
+| `nginx.financas.example.com.` |           3+ | absoluto                |
+
+# Why Kubernetes used ndots:5?
+#
+# This is optimized to facilitate the resolution of internal Kubernetes names..
+curl http://nginx
+curl http://nginx.default
+
+search default.svc.cluster.local
+       svc.cluster.local
+       cluster.local
+
+nginx.financas.default.svc.cluster.local
+ping nginx.default.svc.cluster.local
+
+# NOTES.
+
+# Marketing
+k create ns marketing
+
+k neat <<< "$(
+  k create deployment --image=nginx nginx -n marketing --dry-run=client -o yaml |
+  yq '.spec.template.spec.dnsConfig.options += [{"name":"ndots","value":"2"}]'
+)" | k apply -f -
+
+k expose deployment nginx --type=ClusterIP --port=80 -n marketing
+
+# Financas
+k create ns financas
+
+k neat <<< "$(
+  k create deployment --image=nginx nginx -n financas --dry-run=client -o yaml |
+  yq '.spec.template.spec.dnsConfig.options += [{"name":"ndots","value":"2"}]'
+)" | k apply -f -
+
+k expose deployment nginx --type=ClusterIP --port=80 -n financas
+
+
+k get svc -A
+NAMESPACE        NAME         TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)     AGE
+financas         nginx        ClusterIP      10.96.25.21     <none>        80/TCP      12s
+marketing        nginx        ClusterIP      10.96.181.143   <none>        80/TCP      20s
+
+# Test
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ubuntu
+spec:
+  dnsConfig:
+    options:
+      - name: ndots
+        value: "2"
+  containers:
+  - name: ubuntu
+    image: ubuntu:latest
+    command: [ "sleep" ]
+    args: [ "infinity" ]
+EOF
+
+# Logs
+k logs -n kube-system -l k8s-app=kube-dns -f
+
+kubectl exec -it ubuntu -- /bin/bash
+
+apt update ; apt install -y curl dnsutils iputils-ping
+
+root@ubuntu:/# cat /etc/resolv.conf
+search default.svc.cluster.local svc.cluster.local cluster.local
+nameserver 10.96.0.10
+options ndots:2
+
+root@ubuntu:/# getent hosts nginx.financas.example.com.
+10.96.25.21     nginx.financas.example.com
+
+root@ubuntu:/# dig +short nginx.financas.svc.cluster.local.
+10.96.25.21
+
+root@ubuntu:/# getent hosts nginx.marketing.example.com.
+10.96.181.143   nginx.marketing.example.com
+
+root@ubuntu:/# dig +short nginx.marketing.svc.cluster.local.
+10.96.181.143
+
+
+root@ubuntu:/# dig nginx.financas.example.com
+
+;; QUESTION SECTION:
+;nginx.financas.example.com.	IN	A
+
+;; ANSWER SECTION:
+nginx.financas.example.com. 30	IN	A	10.96.25.21
+
+root@ubuntu:/# dig nginx.marketing.example.com
+
+;nginx.marketing.example.com.	IN	A
+
+;; ANSWER SECTION:
+nginx.marketing.example.com. 30	IN	A	10.96.181.143
+
+root@ubuntu:/# ping -c 1 nginx.financas.example.com
+PING nginx.financas.example.com (10.96.25.21) 56(84) bytes of data.
+
+root@ubuntu:/# curl nginx.financas.example.com
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+<style>
+html { color-scheme: light dark; }
+body { width: 35em; margin: 0 auto;
+font-family: Tahoma, Verdana, Arial, sans-serif; }
+</style>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, nginx is successfully installed and working.
+Further configuration is required for the web server, reverse proxy,
+API gateway, load balancer, content cache, or other features.</p>
+
+<p>For online documentation and support please refer to
+<a href="https://nginx.org/">nginx.org</a>.<br/>
+To engage with the community please visit
+<a href="https://community.nginx.org/">community.nginx.org</a>.<br/>
+For enterprise grade support, professional services, additional
+security features and capabilities please refer to
+<a href="https://f5.com/nginx">f5.com/nginx</a>.</p>
+
+<p><em>Thank you for using nginx.</em></p>
+</body>
+</html>
 ```
 
 [Menu](#-menu)
