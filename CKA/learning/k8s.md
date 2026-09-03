@@ -5463,7 +5463,7 @@ service/foo-service   ClusterIP   10.96.43.7   <none>        80/TCP    12s
 service/kubernetes    ClusterIP   10.96.0.1    <none>        443/TCP   39m
 
 
-# Role infrastructure the Cluster
+# Role infrastructure manager Cluster
 # Allows only routes created in the same namespace as this Gateway.
 #
 cat <<EOF | k apply -f -
