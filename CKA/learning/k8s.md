@@ -41,6 +41,8 @@
 - [Create Object - Ingress Múltiplos Paths](#-create-object---ingress-múltiplos-paths)
 - [Create Object - Ingress Error 503](#-create-object---ingress-error-503)
 - [Create Object - Ingress TLS](#-create-object---ingress-tls)
+- [Create Object - Gateway API](#-create-object---gateway-api)
+- [Create Object - Service Mesh](#-create-object---service-mesh)
 - [Create Object - Ipvs Vs Iptables](#-create-object---ipvs-vs-iptables)
 - [Create Object - Trafic Policy](#-create-object---trafic-policy)
 - [Create Object - Estratégias Deploy](#-create-object---estratégias-deploy)
@@ -4527,6 +4529,20 @@ v2
 # Ingress, in turn, redirects to the application service (ClusterIP)
 # Ingress is a reverse proxy
 
+
+# Limitacoes
+# The Ingress specification is designed to handle basic HTTP and HTTPS routing based on hostnames and paths,
+# along with TLS termination for secure connections.
+#
+# TCP or gRPC Traffic
+# You can’t route non-HTTP protocols like TCP or gRPC directly.
+#
+# Header-Based Routing
+# Routing based on HTTP headers isn’t supported out of the box.
+#
+# Canary Traffic Splitting
+# Gradually shifting traffic to a new version of an application isn’t natively available.
+
 # Ingress Maintained by the F5 Nginx Corporation itself
 https://docs.nginx.com/nginx-ingress-controller/
 
@@ -5332,6 +5348,201 @@ last-modified: Tue, 07 Apr 2026 11:37:12 GMT
 etag: "69d4ec68-380"
 accept-ranges: bytes
 strict-transport-security: max-age=31536000; includeSubDomains
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Gateway API
+
+```bash
+
+# The Gateway API is an evolution of the Kubernetes network routing model,
+# designed to replace and extend the capabilities of the traditional Ingress.
+# It provides a collection of API resources (such as GatewayClass, Gateway, HTTPRoute, GRPCRoute, TLSRoute, TCPRoute )
+# that make Layer 4 (L4) and Layer 7 (L7) traffic routing more expressive, extensible,
+# and aligned with operational roles (infrastructure, cluster, and development).
+#
+# Main Components
+
+GatewayClass:
+# Defines the underlying controller (such as Envoy or Istio) and manages common behavior at the cluster scope.
+# GatewayClass separates the role of administrators and developers.
+# Administrators define GatewayClasses to enforce consistent policies and select the appropriate controllers.
+# At the same time, developers can confidently use those classes when creating Gateways and Routes
+# without needing to understand the underlying implementation details.
+
+Gateway:
+# Represents the physical or logical instance of the load balancer, containing the listeners (inbound ports and protocols).
+# Gateways act as the "front door" of your Kubernetes cluster, while GatewayClasses determine who builds and manages that door.
+# Developers define how traffic should flow, and administrators ensure that it is handled securely and consistently.
+# This resource works closely with a GatewayClass.
+# While the Gateway resource declares the desired configuration (for example, "accept HTTP traffic on port 80"),
+# the GatewayClass specifies which controller is responsible for implementing that configuration.
+
+Listeners:
+# Specify which ports, hosts, and protocols (HTTP, TCP, TLS) the Gateway will listen on.
+
+#
+# Route Types
+#
+
+HTTPRoute:
+# Manages Layer 7 traffic for HTTP/HTTPS requests, allowing rules based on path or header.
+# Defines the rules for routing HTTP traffic from a Gateway listener to backend services,
+# often based on conditions like hostnames, paths, or headers.
+# HTTPRoutes are associated with one or more Gateways.
+# This association ensures a clear separation of responsibilities: platform administrators manage
+# the Gateways and their listeners (infrastructure and entry points).
+# In contrast, developers manage the HTTPRoutes that define how traffic should flow to backend Services
+# (application-level logic). This separation makes the system both more secure and easier to maintain,
+# especially in multi-team or multi-tenant environments.
+# NOTES.:
+# HTTPRoutes enable you to define how HTTP traffic reaches your applications,
+# while Gateways control where traffic enters the cluster.
+# Together, they provide a powerful and flexible model for managing application networking.
+
+GRPCRoute:
+# Routes gRPC calls based on specific methods and services.
+
+TLSRoute:
+# Routes encapsulated TLS connections without decrypting the content.
+
+TCPRoute / UDPRoute:
+# Control Layer 4 (pure transport) traffic based on IP ports, ideal for databases or specific services
+# running on a particular port.
+
+
+# Setup Install
+#
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+  --namespace nginx-gateway \
+  --create-namespace \
+  --set nginx.service.type=LoadBalancer
+
+
+# Deploy App
+#
+cat <<EOF | k apply -f -
+kind: Pod
+apiVersion: v1
+metadata:
+  name: foo-app
+  labels:
+    app: foo
+spec:
+  containers:
+  - command:
+    - /agnhost
+    - serve-hostname
+    - --http=true
+    - --port=8080
+    image: registry.k8s.io/e2e-test-images/agnhost:2.39
+    name: foo-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: foo-service
+spec:
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: foo
+EOF
+
+# Check
+k get po,svc
+NAME          READY   STATUS    RESTARTS   AGE
+pod/foo-app   1/1     Running   0          12s
+
+NAME                  TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+service/foo-service   ClusterIP   10.96.43.7   <none>        80/TCP    12s
+service/kubernetes    ClusterIP   10.96.0.1    <none>        443/TCP   39m
+
+
+# Role infrastructure the Cluster
+# Allows only routes created in the same namespace as this Gateway.
+#
+cat <<EOF | k apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-prgs
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Same
+EOF
+
+k get deployments.apps
+NAME                 READY   UP-TO-DATE   AVAILABLE   AGE
+gateway-prgs-nginx   1/1     1            1           16s
+
+k get gateway
+NAME           CLASS   ADDRESS         PROGRAMMED   AGE
+gateway-prgs   nginx   192.168.0.241   True         27s
+
+# Route Application
+# parentRefs => Associate this route with the gateway created above.
+# endpoint target
+#   hostnames:
+#  - "www.empresa.com.br"
+#
+
+cat <<EOF | k apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httproute-foo-app
+spec:
+  parentRefs:
+    - name: gateway-prgs
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /foo
+      backendRefs:
+        - name: foo-service
+          port: 80
+EOF
+
+k get httproutes
+NAME                HOSTNAMES   AGE
+httproute-foo-app               11s
+
+curl -I http://192.168.0.241/foo
+HTTP/1.1 200 OK
+Server: nginx
+Date: Thu, 03 Sep 2026 14:29:02 GMT
+Content-Type: text/plain; charset=utf-8
+Content-Length: 7
+Connection: keep-alive
+
+curl http://192.168.0.241/foo
+foo-app
+```
+
+| Feature | Ingress Controller | Gateway API |
+| :--- | :--- | :--- |
+| **Scope of Protocols** | Only HTTP e HTTPS (L7). | HTTP, HTTPS, gRPC, TCP, UDP e TLS (L4 e L7). |
+| **Governance Model** | Monolithic (a single Ingress file combines infrastructure and application rules)). | Role-oriented (infrastructure and application routes reside in separate files). |
+| **Portability** | Low (relies on proprietary annotations for features like Canary or CORS). | High (advanced features such as traffic splitting and header rewriting are native). |
+| **Route Flexibility** | Limited (basic host and path rules). | Advanced (combinations by method, headers, cookies, and traffic weights). |
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Service Mesh
+
+```bash
 ```
 
 [Menu](#-menu)
