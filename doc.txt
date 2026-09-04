@@ -1,3 +1,4 @@
+
 #================================================================
 
 A service mesh is an infrastructure layer that uses a network of proxies - typically deployed as sidecars alongside application Pods - to manage how services communicate with each other. These proxies handle both ingress and internal (mesh) traffic based on policies defined by a control plane. The control plane distributes configuration, enforces rules, and manages certificates to secure communication.
@@ -65,6 +66,7 @@ containers:
   - -controller-namespace=linkerd
   - -log-format=plain
   - -log-level=info
+#   - -enforced-host=linkerd.prgs-corp.xyz
 #   - -enforced-host=....        #<-- Comment the line by adding #
   - -enable-pprof=false
   image: cr.l5d.io/linkerd/web:edge-26.5.3
@@ -139,3 +141,5 @@ kubectl -n accounting get deploy nginx-one -o yaml | linkerd inject - | kubectl 
 kubectl -n accounting get svc
 
 kubectl -n accounting scale deploy nginx-one --replicas=5
+
+kubectl get ds myingress-ingress-nginx-controller -o yaml | linkerd inject --ingress - | kubectl apply -f -

@@ -5529,6 +5529,19 @@ Connection: keep-alive
 
 curl http://192.168.0.241/foo
 foo-app
+
+# If your nginx-gateway is running as a NodePort, the service could be consumed like this.
+#
+# Ip Worker
+k get node -o wide
+
+# Port Nginx NodePort
+kubectl get service/nginx-gateway -n nginx-gateway
+
+# Curl
+curl --resolve <DNS>:<NodePort Gateway API>:<IP Worker> http://<DNS>:<NodePort>
+curl --resolve shop.example.com:32108:10.104.222.41 http://shop.example.com:32108
+
 ```
 
 | Feature | Ingress Controller | Gateway API |
