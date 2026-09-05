@@ -5556,6 +5556,256 @@ curl --resolve shop.example.com:32108:10.104.222.41 http://shop.example.com:3210
 # 🚀 Create Object - Service Mesh
 
 ```bash
+# Service Mesh
+#
+# A service mesh is an infrastructure layer that uses a network of proxies.
+# Typically deployed as sidecars alongside application Pods - to manage how services communicate with each other.
+# These proxies handle both ingress and internal (mesh) traffic based on policies defined by a control plane.
+# The control plane distributes configuration, enforces rules, and manages certificates to secure communication.
+
+• Envoy
+# A highly modular and extensible proxy, Envoy is widely favored for its open architecture and commitment to remaining un-monetized.
+# It serves as an effective data plane component in many service meshes
+# and is supported by the community at envoyproxy.io.
+# Its flexibility makes it a popular choice for advanced traffic management.
+
+• Istio
+# A comprehensive toolset that leverages Envoy proxies through a multi-component control plane.
+# Designed for platform independence, Istio offers a flexible and feature-rich service mesh,
+# ideal for complex environments requiring robust traffic control and observability.
+
+• Linkerd
+# A lightweight, ultrafast service mesh designed for simplicity and ease of deployment.
+# It prioritizes performance and a minimal operational footprint while still offering strong observability and reliability.
+
+# Repos
+# https://linkerd.io/releases/
+# https://github.com/linkerd/linkerd2/releases
+
+export LINKERD2_VERSION=$(curl -sSL https://api.github.com/repos/linkerd/linkerd2/releases/latest | jq -r .tag_name)
+curl --proto '=https' --tlsv1.2 -sSfL https://run.linkerd.io/install-edge | sh
+export PATH=$HOME/.linkerd2/bin:$PATH
+linkerd check --pre
+
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+  --namespace nginx-gateway \
+  --create-namespace \
+  --set nginx.service.type=LoadBalancer
+
+# Install the GatewayAPI CRDs
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml
+
+# Validate that Linkerd can be installed
+linkerd check --pre
+
+# Install the Linkerd CRDs
+linkerd install --crds | kubectl apply -f -
+
+# Install the control plane into the 'linkerd' namespace
+linkerd install | kubectl apply -f -
+
+# Validate everything worked!
+linkerd check
+
+# Install the viz extension into the 'linkerd-viz' namespace
+linkerd viz install | kubectl apply -f -
+
+# Validate the extension works!
+linkerd viz check
+
+linkerd-viz
+-----------
+√ linkerd-viz Namespace exists
+√ can initialize the client
+√ linkerd-viz ClusterRoles exist
+√ linkerd-viz ClusterRoleBindings exist
+√ tap API server has valid cert
+√ tap API server cert is valid for at least 60 days
+√ tap API service is running
+√ linkerd-viz pods are injected
+√ viz extension pods are running
+√ viz extension proxies are healthy
+√ viz extension proxies are up-to-date
+√ viz extension proxies and cli versions match
+√ prometheus is installed and configured correctly
+√ viz extension self-check
+
+Status check results are √
+
+#************************* Setup Linkerd ***********************
+#
+# Check
+#
+k get deployments.apps -n linkerd-viz web -o yaml
+
+# Apply patch to define vhost
+#
+cat > patch.yaml <<EOF
+spec:
+  template:
+    spec:
+      containers:
+      - name: web
+        args:
+        - -linkerd-metrics-api-addr=metrics-api.linkerd-viz.svc.cluster.local:8085
+        - -cluster-domain=cluster.local
+        - -controller-namespace=linkerd
+        - -log-level=info
+        - -log-format=plain
+        - -enforced-host=linkerd.prgs-corp.xyz
+        - -enable-pprof=false
+EOF
+
+k patch deploy web -n linkerd-viz --patch-file patch.yaml && rm -f patch.yaml
+
+# Check
+#
+k get deployments.apps -n linkerd-viz web -o yaml
+
+# Build certificate to Gateway Api
+openssl req \
+  -x509 \
+  -nodes \
+  -days 365 \
+  -newkey rsa:2048 \
+  -keyout tls.key \
+  -out tls.crt \
+  -subj "/CN=linkerd.prgs-corp.xyz" \
+  -addext "subjectAltName=DNS:linkerd.prgs-corp.xyz"
+
+# Secret
+k create secret tls linkerd-gateway-api-tls \
+  -n linkerd-viz \
+  --cert=tls.crt \
+  --key=tls.key
+
+# Define Credential
+htpasswd -b -c auth admin admin
+
+k create secret generic linkerd-dashboard-auth \
+  -n linkerd-viz \
+  --from-file=auth \
+  --type=nginx.org/htpasswd
+
+rm -f auth
+
+# Check
+k get secrets -n linkerd-viz
+NAME                              TYPE                 DATA   AGE
+gateway-linkerd-nginx-agent-tls   kubernetes.io/tls    3      24m
+linkerd-dashboard-auth            nginx.org/htpasswd   1      3m48s
+linkerd-gateway-api-tls           kubernetes.io/tls    2      27m
+tap-injector-k8s-tls              kubernetes.io/tls    2      45m
+tap-k8s-tls                       kubernetes.io/tls    2      45m
+
+# Intercepts the request, causing the browser to prompt for authentication
+#
+cat <<EOF | k apply -f -
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: linkerd-auth-config
+  namespace: linkerd-viz
+spec:
+  type: Basic
+  basic:
+    realm: "Linkerd Dashboard"
+    secretRef:
+      name: linkerd-dashboard-auth
+EOF
+
+# Define Gateway API
+#
+cat <<EOF | k apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-linkerd
+  namespace: linkerd-viz
+spec:
+  gatewayClassName: nginx
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: "linkerd.prgs-corp.xyz"
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: linkerd.prgs-corp.xyz
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: linkerd-gateway-api-tls
+EOF
+
+# On which port does the service listen?
+k get svc -n linkerd-viz web
+NAME   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)             AGE
+web    ClusterIP   10.96.193.145   <none>        8084/TCP,9994/TCP   24m
+
+# HttpRoute
+cat <<EOF | k apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http-linkerd
+  namespace: linkerd-viz
+spec:
+  parentRefs:
+    - name: gateway-linkerd
+  hostnames:
+    - linkerd.prgs-corp.xyz
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: linkerd-auth-config
+      backendRefs:
+        - name: web
+          port: 8084
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http-linkerd-redirect
+  namespace: linkerd-viz
+spec:
+  parentRefs:
+    - name: gateway-linkerd
+      sectionName: http
+  hostnames:
+    - linkerd.prgs-corp.xyz
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+EOF
+
+# Check
+k get httproutes -n linkerd-viz
+NAME           HOSTNAMES                   AGE
+http-linkerd   ["linkerd.prgs-corp.xyz"]   14s
+
+# Add entry into etc/hosts
+echo "192.168.0.241   linkerd.prgs-corp.xyz" | tee -a /etc/hosts
+
+#************************ Managment Mesh ***********************
+
+
 ```
 
 [Menu](#-menu)
