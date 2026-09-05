@@ -5804,7 +5804,69 @@ http-linkerd   ["linkerd.prgs-corp.xyz"]   14s
 echo "192.168.0.241   linkerd.prgs-corp.xyz" | tee -a /etc/hosts
 
 #************************ Managment Mesh ***********************
+#
+# Deploy App
 
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  labels:
+    system: nginx-prgs
+spec:
+  selector:
+    matchLabels:
+      system: nginx-prgs
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        system: nginx-prgs
+    spec:
+      containers:
+      - image: nginx:1.20.1
+        imagePullPolicy: Always
+        name: nginx
+        ports:
+        - containerPort: 80
+          protocol: TCP
+EOF
+
+# Expose Service
+k expose deployment nginx --port=80 --type='ClusterIP' --target-port=80
+
+# Diff
+k get deploy nginx -o yaml > nginx.yaml
+k get deploy nginx -o yaml | linkerd inject - > nginx-inject.yaml
+
+# NOTES.:
+# simply injects an annotation
+#
+diff nginx-inject.yaml nginx.yaml
+<       annotations:
+<         linkerd.io/inject: enabled
+
+# Apply
+k get deploy nginx -o yaml | linkerd inject - | kubectl apply -f -
+k get svc
+k scale deploy nginx --replicas=5
+
+# Defines an annotation in the default namespace (argocd) and restarts the pods to aplly roles proxy
+k get ns argocd -o yaml | linkerd inject - | kubectl apply -f -
+k rollout restart deploy -n argocd
+
+# Defines an annotation in the default namespace (default) and restarts the pods to aplly roles proxy
+k get ns default -o yaml | linkerd inject - | kubectl apply -f -
+k rollout restart deploy -n default
+
+# Defines an annotation in the default namespace (metallb-system) and restarts the pods to aplly roles proxy
+k get ns metallb-system -o yaml | linkerd inject - | kubectl apply -f -
+k rollout restart deploy -n metallb-system
+
+# Defines an annotation in the default namespace (nginx-gateway) and restarts the pods to aplly roles proxy
+k get ns nginx-gateway -o yaml | linkerd inject - | kubectl apply -f -
+k rollout restart deploy -n nginx-gateway
 
 ```
 
