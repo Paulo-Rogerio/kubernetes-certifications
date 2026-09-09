@@ -12135,20 +12135,20 @@ EOF
 https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#an-example-of-a-pod-that-uses-pod-affinity
 
 #
-# PodAntiAffinity is a rule used to prevent certain Pods from running close to each other.
+# Pod affinity is a rule used to determine the execution proximity between Pods.
+#
+# Encourages Pods to be scheduled near other Pods with specific labels (e.g., to reduce latency between services).
 #
 # It is widely used to:
-# -high availability
 # -load distribution
-# -avoid single point of failure
 # Get the doc because the syntax is puck and guarantee the labels because it is the key to it working.
 #
-# Let's deploy postgres to the postgres worker and I don't want the frontend pod on the same worker
+# Let's deploy postgres to the postgres worker and I want the frontend pod on the same worker.
 
 # Defining Label
 #
 kubectl label node worker01 prgs/postgres=true
-kubectl label node worker01 app=database
+kubectl label node worker01 app=frontend
 
 # Creating Deployment
 # The label will be used to match the affinity of the backend deployment
@@ -12190,57 +12190,35 @@ postgres-684cb45d6-hbwth   1/1     Running   0          6s    app=database,pod-t
 kubectl get nodes --show-labels | grep -o app=database
 app=database
 
-# Criando Deployment
-#
-# topologyKey: prgs/postgres
-# What does this mean...
-# the Pod must be on the same node where there is a Pod with Label prgs/postgres
-# The topologyKey is NOT any arbitrary value.
-# It needs to reference an existing label on the nodes, and all nodes involved need to have this label.
-#
-# topologyKey uses only the node label KEY.
-# podAffinity does not look for nodes with label app = database.
-#
-# It looks for:
-# Pods with app=database
-#
-# and then use the topologyKey to find out which “domain/topology” this Pod is in.
+# Deployment
 #
 cat <<EOF | kaf -
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: backend
-  name: backend
+    app: frontend
+  name: frontend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: backend
+      app: frontend
   template:
     metadata:
       labels:
-        app: backend
+        app: frontend
     spec:
-      affinity:
-        podAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - database
-            topologyKey: prgs/postgres
+      nodeSelector:
+        app: "frontend"
       containers:
       - image: nginx
-        name: backend
+        name: frontend
 EOF
 
 k get pods
 NAME                       READY   STATUS    RESTARTS   AGE
-backend-58fd97f655-bqfgd   1/1     Running   0          13s
+frontend-58fd97f655-bqfgd  1/1     Running   0          13s
 postgres-684cb45d6-hbwth   1/1     Running   0          53s
 ```
 
@@ -12251,9 +12229,57 @@ postgres-684cb45d6-hbwth   1/1     Running   0          53s
 ```bash
 #****************** Affinity - Frontend Running on Another Node  ***********************
 #
-# As I don't have another node, I will remove the rule that prevents using the node (Control Plane) to schedule Pods.
+# Prevents Pods from being scheduled on the same node as other Pods with
+# specific labels (e.g., to spread replicas for high availability).
 #
+# As I don't have another node, I will remove the rule that prevents
+# using the node (Control Plane) to schedule Pods.
+
 kubectl taint nodes master01 node-role.kubernetes.io/control-plane:NoSchedule-
+
+#
+# What does this mean...
+# the Pod must be on the same node where there is a Pod with Label prgs/postgres
+# The topologyKey is NOT any arbitrary value.
+# It needs to reference an existing label on the nodes, and all nodes involved need to have this label.
+#
+# topologyKey uses only the node label KEY.
+#
+# It looks for:
+# Pods with app=database
+#
+# and then use the topologyKey to find out which “domain/topology” this Pod is in.
+
+# It is widely used to:
+# -high availability
+# -avoid single point of failure
+
+# The kube-scheduler examines the labels of Pods already running on nodes and uses affinity rules
+# to decide where to place new Pods. The rules use operators to match Pod labels:
+
+• In: The label’s value must be in a specified list (e.g., app: frontend).
+
+• NotIn: The label’s value must not be in a specified list.
+
+• Exists: The label key must exist on the Pod.
+
+• DoesNotExist: The label key must not exist on the Pod.
+
+requiredDuringSchedulingIgnoredDuringExecution
+# Using requiredDuringSchedulingIgnoredDuringExecution, the scheduler will only place the Pod on a node if the condition is met.
+# If the condition later becomes false, the Pod continues running. This is considered a strict requirement.
+
+preferredDuringSchedulingIgnoredDuringExecution
+# Using preferredDuringSchedulingIgnoredDuringExecution, the scheduler will try to place the Pod on a node
+# that matches the condition, but if no suitable nodes exist, it will still schedule the Pod elsewhere.
+# This expresses a preference rather than a requirement.
+
+podAffinity
+# Using podAffinity, you can guide the scheduler to place Pods close together (for example, all web app Pods near their caching layer).
+
+podAntiAffinity
+# Using podAntiAffinity, you can enforce separation
+# (for example, spreading database replicas across different nodes to reduce the risk of simultaneous failure).
 
 cat <<EOF | kaf -
 apiVersion: apps/v1

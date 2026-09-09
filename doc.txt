@@ -1,0 +1,70 @@
+Scoring Stage
+
+Once the scheduler has a list of eligible nodes, it ranks them to determine the best node for the Pod. Each node is assigned a score based on the scheduler’s default configuration or custom policies. Factors influencing the score may include:
+
+Resource utilization (e.g., preferring nodes with balanced resource usage)
+
+Affinity or anti-affinity rules (e.g., favoring nodes closer to other Pods)
+
+Other user-defined preferences
+
+Nodes with more available resources or better alignment with scheduling rules typically receive higher scores. The scheduler selects the node with the highest score and assigns the Pod to it. The Pod’s specification is then sent to the kubelet on that node to create and run the Pod.
+
+To implement scheduling logic at these extension points, Kubernetes uses plugins. A plugin provides a particular scheduling behavior (for example, filtering nodes based on resource availability or scoring nodes based on affinity rules). By enabling or disabling plugins at different extension points, you can fine-tune how Pods are placed across nodes. F
+
+
+================
+
+A profile defines how the kube-scheduler should behave by specifying which plugins run at different extension points in the scheduling process. Each profile allows you to tailor the scheduling process for specific workloads by enabling, disabling, or adjusting plugins
+
+queueSort – Orders Pods in the scheduling queue (only one plugin can be active).
+
+• preFilter – Performs initial checks on Pods or the cluster, potentially marking Pods as unschedulable.
+
+• filter – Eliminates nodes that cannot run a Pod.
+
+•
+postFilter – Handles cases where no nodes pass the Filter stage, potentially enabling preemption.
+
+•
+preScore – Prepares data for scoring nodes.
+
+•
+score – Assigns scores to nodes to determine the best fit for a Pod.
+
+•
+reserve – Reserves resources on the selected node before binding.
+
+•
+permit – Approves or denies scheduling decisions based on custom policies.
+
+•
+preBind – Performs tasks before binding a Pod to a node.
+
+•
+bind – Performs the actual binding of the Pod to the node.
+
+•
+postBind – Performs tasks after binding a Pod.
+
+•
+multiPoint – Allows plugins to operate across multiple extension points for advanced customization.
+
+
+apiVersion: kubescheduler.config.k8s.io/v1
+kind: KubeSchedulerConfiguration
+profiles:
+  - schedulerName: default-scheduler
+  - schedulerName: custom-scheduler
+    plugins:
+      preFilter:
+        disabled:
+        - name: '*'
+      filter:
+        disabled:
+        - name: '*'
+      postFilter:
+        disabled:
+        - name: '*'
+
+kube-scheduler --config=/path/to/scheduler-config.yaml
