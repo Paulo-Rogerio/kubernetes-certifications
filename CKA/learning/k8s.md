@@ -12881,6 +12881,48 @@ taint-deployment-64c85c8cb7-5vnks   1/1     Running   0          9s    10.244.1.
 taint-deployment-64c85c8cb7-msd55   1/1     Running   0          9s    10.244.1.27   prgs-worker
 taint-deployment-64c85c8cb7-zwwtx   1/1     Running   0          11s   10.244.1.25   prgs-worker
 
+
+# Questions
+
+
+# Which of the following best describes the filtering stage in the scheduling process?
+R: Eliminating nodes that cannot meet the Pod’s requirements
+
+
+# Which effect of a taint ensures that existing Pods are evicted from a node if they do not tolerate the taint?
+R: NoExecute
+
+
+# A Pod specification includes the following field:
+# nodeSelector:
+#   disktype: ssd
+#
+# What does this configuration do?
+R: Schedules the Pod only on nodes labeled disktype=ssd
+
+# Which operator in affinity rules matches Pods or nodes with a key regardless of value?
+R: Exist
+
+# You are running a database with multiple replicas. To improve reliability,
+# you want Kubernetes to place these replicas on different nodes whenever possible. Which scheduling feature should you use?
+R: Pod Anti-Affinity
+
+# You want to prioritize placing a web application Pod on nodes with fast network interfaces,
+# but allow it to run on other nodes if none are available. Which configuration should you use?
+R: Node affinity with preferredDuringSchedulingIgnoredDuringExecution
+
+# You deploy a Pod with the following toleration:
+#
+# tolerations:
+#   - key: "maintenance"
+#     operator: "Equal"
+#     value: "true"
+#     effect: "NoExecute"
+#     tolerationSeconds: 600
+#
+# What happens if the node is tainted with maintenance=true:NoExecute?
+R: The Pod will remain for 600 seconds, then be evicted
+
 ```
 
 [Menu](#-menu)
