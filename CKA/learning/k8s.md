@@ -112,11 +112,17 @@
 # enhances network efficiency by separating user-initiated traffic from server-initiated traffic.
 #
 # Key responsibilities of the kubelet:
-# • Processes PodSpecs: Accepts and interprets PodSpecs from the kube-apiserver.
-# • Monitor Resource Availability. Ensure that storage, Secrets, and ConfigMaps are correctly provisioned before deployment.
-# • Mounts Volumes: Ensures persistent or ephemeral storage volumes are mounted to the Pod as specified.
-# • Handles Secrets and ConfigMaps: Retrieves and injects configuration data and secrets securely into the Pod environment.
-# • Communicates with the Container Runtime: Passes the necessary instructions to the container runtime engine
+
+• Processes PodSpecs: Accepts and interprets PodSpecs from the kube-apiserver.
+
+• Monitor Resource Availability. Ensure that storage, Secrets, and ConfigMaps are correctly provisioned before deployment.
+
+• Mounts Volumes: Ensures persistent or ephemeral storage volumes are mounted to the Pod as specified.
+
+• Handles Secrets and ConfigMaps: Retrieves and injects configuration data and secrets securely into the Pod environment.
+
+• Communicates with the Container Runtime: Passes the necessary instructions to the container runtime engine
+
 # (e.g., containerd or CRI-O) to start and manage containers.
 
 👉 Pod
@@ -146,6 +152,160 @@
 # The kube-scheduler determines the optimal placement of Pods across worker nodes.
 # It evaluates factors such as resource availability (e.g., CPU, memory, or storage volumes), node labels,
 # taints and tolerations, and quota restrictions to assign Pods to nodes.
+
+• Scoring Stage
+
+# Once the scheduler has a list of eligible nodes, it ranks them to determine the best node for the Pod.
+# Each node is assigned a score based on the scheduler’s default configuration or custom policies.
+
+• Plugins
+
+# To implement scheduling logic at these extension points, Kubernetes uses plugins.
+# A plugin provides a particular scheduling behavior (for example, filtering nodes based on resource availability or
+# scoring nodes based on affinity rules).
+# By enabling or disabling plugins at different extension points, you can fine-tune how Pods are placed across nodes.
+
+• Profile
+
+# A profile defines how the kube-scheduler should behave by specifying which plugins run
+# at different extension points in the scheduling process.
+# Each profile allows you to tailor the scheduling process for specific workloads by enabling, disabling, or adjusting plugins.
+
+The modern scheduler is essentially a pipeline of plugins.
+
+Pod
+ │
+ ▼
+QueueSort
+ │
+ ▼
+PreFilter
+ │
+ ▼
+Filter
+ │
+ ▼
+PostFilter
+ │
+ ▼
+PreScore
+ │
+ ▼
+Score
+ │
+ ▼
+Reserve
+ │
+ ▼
+Permit
+ │
+ ▼
+PreBind
+ │
+ ▼
+Bind
+
+• queueSort – Orders Pods in the scheduling queue (only one plugin can be active).
+
+• preFilter – Performs initial checks on Pods or the cluster, potentially marking Pods as unschedulable.
+
+• filter – Eliminates nodes that cannot run a Pod.
+
+e.g
+
+Pod
+ │
+ ├── NodeResourcesFit
+ │       CPU/memory available?
+ │
+ ├── NodeAffinity
+ │       node meets affinity?
+ │
+ ├── TaintToleration
+ │       Pod tolerates the taints?
+ │
+ └── ...
+       │
+       ▼
+   Node eligible
+
+• postFilter – Handles cases where no nodes pass the Filter stage, potentially enabling preemption.
+
+• preScore – Prepares data for scoring nodes.
+
+• score – Assigns scores to nodes to determine the best fit for a Pod.
+
+• reserve – Reserves resources on the selected node before binding.
+
+• permit – Approves or denies scheduling decisions based on custom policies.
+
+• preBind – Performs tasks before binding a Pod to a node.
+
+• bind – Performs the actual binding of the Pod to the node.
+
+• postBind – Performs tasks after binding a Pod.
+
+• multiPoint – Allows plugins to operate across multiple extension points for advanced customization.
+
+apiVersion: kubescheduler.config.k8s.io/v1
+kind: KubeSchedulerConfiguration
+profiles:
+  - schedulerName: default-scheduler
+  - schedulerName: custom-scheduler
+    plugins:
+      preFilter:
+        disabled:
+        - name: '*'
+      filter:
+        disabled:
+        - name: '*'
+      postFilter:
+        disabled:
+        - name: '*'
+
+profiles:
+  - schedulerName: tenant-scheduler
+    plugins:
+      filter:
+        enabled:
+          - name: MyCustomFilter
+        disabled:
+          - name: '*'
+
+kube-scheduler --config=/path/to/scheduler-config.yaml
+
+# A Pod can select this profile via schedulerName.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: teste
+spec:
+  schedulerName: custom-scheduler
+  containers:
+    - name: nginx
+      image: nginx
+
+# Filter
+
+Pod A ── schedulerName: default-scheduler ──> profile default
+                                                │
+                                                └─ plugins normais
+
+Pod B ── schedulerName: custom-scheduler ──> profile custom
+                                               │
+                                               └─ plugins alterados
+
+plugins Kubernetes Defaut
+       ↓
+     OFF
+
+MyCustomFilter
+       ↓
+      ON
+
+# The profiles share the same process and infrastructure as the scheduler.
+# It is the Pod that indicates which scheduler should process it.
 
 👉 Kube-controller-manager
 # The kube-controller-manager is a core control loop daemon that continuously monitors the cluster’s state via the kube-apiserver.
@@ -198,17 +358,24 @@
 
 👉 Network and policy
 # Kubernetes defines the following key networking requirements for pod-to-pod communication:
-# • All pods must communicate with each other across nodes without restrictions.
-# • All nodes must communicate with all pods in the cluster.
-# • No Network Address Translation (NAT) should be used.
+
+• All pods must communicate with each other across nodes without restrictions.
+
+• All nodes must communicate with all pods in the cluster.
+
+• No Network Address Translation (NAT) should be used.
+
 #
 # Network policies further enhance security and control by defining rules for how Pods communicate with each other,
 # allowing you to restrict traffic based on labels, namespaces, or other criteria.
 
-# • Cilium(opens in a new tab) is an eBPF-based networking and security platform that provides advanced networking, security, and observability features.
-# • Flannel(opens in a new tab) offers a simple overlay network for basic pod-to-pod connectivity.
-# • Calico(opens in a new tab) supports robust network policies and hybrid cloud deployments.
-# • Multus(opens in a new tab) enables multiple network interfaces per pod for complex use cases.
+• Cilium(opens in a new tab) is an eBPF-based networking and security platform that provides advanced networking, security, and observability features.
+
+• Flannel(opens in a new tab) offers a simple overlay network for basic pod-to-pod connectivity.
+
+• Calico(opens in a new tab) supports robust network policies and hybrid cloud deployments.
+
+• Multus(opens in a new tab) enables multiple network interfaces per pod for complex use cases.
 
 | CNI         | Connectivity between Pods | NetworkPolicy    | Obs                                                                                         |
 | ----------- | ------------------------  | ---------------- | ------------------------------------------------------------------------------------------- |
@@ -11971,15 +12138,47 @@ https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
 
 # Node Afinity => is more flexible!!!
 #
-# Used when I want to give preference to running on a certain worker,
-# but if it is deployed to another worker there is no problem.
+# Node affinity rules focus on the labels assigned to nodes.
+# This approach gives you direct control over where Pods are scheduled,
+# based on the characteristics or roles of the nodes themselves.
 #
-# As it is a "required" rule, it will be pending if it does not meet the rule.
+# Used when I want to give preference to running on a certain worker.
 #
-# Selector node behavior
+# Unlike Pod affinity, it does not require the scheduler to check other Pods in the cluster,
+# which makes it more efficient and less likely to cause performance issues, even in very large clusters.
+#
+
+• In: The label’s value must be in a specified list (e.g., region is us-east).
+
+• NotIn: The label’s value must not be in a specified list.
+
+• Exists: The label key must exist on the node.
+
+• DoesNotExist: The label key must not exist on the node.
+
+# Like Pod affinity, node affinity rules can be required or preferred, depending on how strictly you want to enforce them:
+
+• Required rules: requiredDuringSchedulingIgnoredDuringExecution
+
+# The Pod will only be scheduled on a node that meets the rule.
+# If no nodes match, the Pod remains Pending.
+# Once scheduled, the Pod continues running even if the node’s labels change later (e.g., if a required label is removed).
+
+• Required rules: requiredDuringSchedulingRequiredDuringExecution
+# This will enforce the rule during scheduling and evict the Pod if the node’s labels
+# no longer satisfy the condition after scheduling.
+
+• Preferred rules: preferredDuringSchedulingIgnoredDuringExecution
+# The scheduler prioritizes nodes that meet the rule but will schedule the Pod on another node
+# if no match is found. This is a "soft" rule, providing flexibility when ideal nodes are unavailable
 
 #************ Affinity - NodeSelector Similar Behavior ***********************
 #
+# NOTES.
+#
+# The weight value (ranging from 1–100) determines how strongly the scheduler should favor matching
+# nodes compared to other preferences that may be defined.
+# In this example, the weight is set to 1, so the preference is relatively weak.
 
 cat <<EOF | k apply -f -
 apiVersion: apps/v1
@@ -12007,6 +12206,8 @@ spec:
                 operator: In
                 values:
                 - uma-label-inexistente
+                - quick
+                - fast
       containers:
       - image: nginx
         name: postgres
@@ -12273,14 +12474,22 @@ preferredDuringSchedulingIgnoredDuringExecution
 # Using preferredDuringSchedulingIgnoredDuringExecution, the scheduler will try to place the Pod on a node
 # that matches the condition, but if no suitable nodes exist, it will still schedule the Pod elsewhere.
 # This expresses a preference rather than a requirement.
+# If the label is later removed from the matching Pod, the new Pod will continue to run;
+# the rule only applies during scheduling.
 
 podAffinity
 # Using podAffinity, you can guide the scheduler to place Pods close together (for example, all web app Pods near their caching layer).
 
 podAntiAffinity
 # Using podAntiAffinity, you can enforce separation
-# (for example, spreading database replicas across different nodes to reduce the risk of simultaneous failure).
+# Pod anti-affinity rules help spread Pods across nodes by avoiding placement
+# where certain other Pods are already running. This is especially useful for improving fault tolerance;
+# for example, ensuring that multiple replicas of the same application do not all end up on the same node.
+# to reduce the risk of simultaneous failure.
 
+
+# Ex:
+#
 cat <<EOF | kaf -
 apiVersion: apps/v1
 kind: Deployment
@@ -12433,6 +12642,28 @@ NAME                       READY   STATUS    RESTARTS   AGE   IP             NOD
 backend-58fd97f655-bqfgd   1/1     Running   0          19m   10.244.1.163   worker01   <none>           <none>
 frontend-d646846c6-9jczm   1/1     Running   0          8s    10.244.0.51    master01   <none>           <none>
 postgres-684cb45d6-hbwth   1/1     Running   0          20m   10.244.1.162   worker01   <none>           <none>
+
+# Tolerations are defined in the tolerations field of a Pod’s specification and include:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+spec:
+  tolerations:
+  - key: "server"
+    operator: "Equal"
+    value: "ap-east"
+    effect: "NoExecute"
+    tolerationSeconds: 3600
+
+# The Pod can tolerate the taint server=ap-east:NoExecute.
+
+# Because tolerationSeconds is set to 3600, the Pod will remain running for one hour after the node is tainted.
+# Once that time expires, the Pod will be evicted if the taint is still present.
+
+# If the node has other taints, the Pod needs additional tolerations to match those taints to be scheduled.
+
 ```
 
 [Menu](#-menu)
