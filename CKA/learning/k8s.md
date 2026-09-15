@@ -12664,6 +12664,223 @@ spec:
 
 # If the node has other taints, the Pod needs additional tolerations to match those taints to be scheduled.
 
+# Ex:
+
+k get nodes
+NAME                 STATUS   ROLES           AGE   VERSION
+prgs-control-plane   Ready    control-plane   10m   v1.34.0
+prgs-worker          Ready    worker-apps     10m   v1.34.0
+
+# Remove
+k taint nodes prgs-control-plane node-role.kubernetes.io/control-plane:NoSchedule-
+k describe node prgs-control-plane | grep Taint
+
+# Add
+k taint nodes prgs-control-plane node-role.kubernetes.io/control-plane=:NoSchedule
+k describe node prgs-control-plane | grep Taint
+
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taint-deployment
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.20.1
+        ports:
+        - containerPort: 80
+EOF
+
+# Check
+k get po -o wide
+NAME                                READY   STATUS    RESTARTS   AGE   IP            NODE
+taint-deployment-5f47cf5b7c-2m6h9   1/1     Running   0          41s   10.244.1.9    prgs-worker
+taint-deployment-5f47cf5b7c-46bqc   1/1     Running   0          41s   10.244.1.11   prgs-worker
+taint-deployment-5f47cf5b7c-55vwk   1/1     Running   0          41s   10.244.1.12   prgs-worker
+taint-deployment-5f47cf5b7c-p4878   1/1     Running   0          41s   10.244.1.10   prgs-worker
+
+k delete deployment taint-deployment
+
+# Apply taint in Worker
+k taint nodes prgs-worker bubba=value:PreferNoSchedule
+
+k describe node prgs-worker | grep Taint
+
+| Effect             | Action                                                 |
+| ------------------ | -------------------------------------------------------|
+| NoSchedule         | Does not schedule new Pods without a toleration        |
+| PreferNoSchedule   | Tries to avoid the node but may use it if necessary    |
+| NoExecute          | Does not schedule new Pods and may evict existing Pods |
+
+
+#***************************** PreferNoSchedule *******************************
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taint-deployment
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.20.1
+        ports:
+        - containerPort: 80
+EOF
+
+# Check
+k get po -o wide
+NAME                                READY   STATUS    RESTARTS   AGE   IP            NODE
+taint-deployment-5f47cf5b7c-mwpwg   1/1     Running   0          7s    10.244.1.20   prgs-worker
+taint-deployment-5f47cf5b7c-sq26h   1/1     Running   0          7s    10.244.1.19   prgs-worker
+taint-deployment-5f47cf5b7c-sxkv2   1/1     Running   0          7s    10.244.1.17   prgs-worker
+taint-deployment-5f47cf5b7c-t7wvk   1/1     Running   0          7s    10.244.1.18   prgs-worker
+
+k taint nodes prgs-worker bubba=value:PreferNoSchedule-
+k delete deployment taint-deployment
+
+#********************************** NoSchedule *******************************
+
+# Remove Taint Control-Plane
+k taint nodes prgs-control-plane node-role.kubernetes.io/control-plane:NoSchedule-
+
+# Apply taint in Worker
+k taint nodes prgs-worker bubba=value:NoSchedule
+
+k describe node prgs-worker | grep Taint
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taint-deployment
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.20.1
+        ports:
+        - containerPort: 80
+EOF
+
+
+# Allows pods to be scheduled on the control plane.
+#
+# Check
+k get po -o wide
+NAME                                READY   STATUS    RESTARTS   AGE   IP       NODE
+taint-deployment-5f47cf5b7c-hhzbg   1/1     Running   0          55s   10.244.0.7   prgs-control-plane
+taint-deployment-5f47cf5b7c-rw7gd   1/1     Running   0          55s   10.244.0.5   prgs-control-plane
+taint-deployment-5f47cf5b7c-s5678   1/1     Running   0          55s   10.244.0.6   prgs-control-plane
+taint-deployment-5f47cf5b7c-smn7n   1/1     Running   0          55s   10.244.0.8   prgs-control-plane
+
+k taint nodes prgs-worker bubba=value:NoSchedule-
+k delete deployment taint-deployment
+
+#************************** NoSchedule Com toleration ************************
+
+# Taint Control-Plane
+k taint nodes prgs-control-plane node-role.kubernetes.io/control-plane:NoSchedule
+k taint nodes prgs-worker bubba=value:NoExecute
+
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taint-deployment
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.20.1
+        ports:
+        - containerPort: 80
+EOF
+
+# The control plane does not receive pod scheduling requests.
+#
+# The worker node will only schedule pods that have a toleration defined in the manifest.
+#
+# Check
+k get po
+NAME                                READY   STATUS    RESTARTS   AGE
+taint-deployment-5f47cf5b7c-gkls8   0/1     Pending   0          30s
+taint-deployment-5f47cf5b7c-m4sgj   0/1     Pending   0          30s
+taint-deployment-5f47cf5b7c-mpd96   0/1     Pending   0          30s
+taint-deployment-5f47cf5b7c-vm42h   0/1     Pending   0          30s
+
+# Re-Apply Deployment
+#
+cat <<EOF | k apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taint-deployment
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      tolerations:
+      - key: "bubba"
+        operator: "Equal"
+        value: "value"
+        effect: "NoExecute"
+      containers:
+      - name: nginx
+        image: nginx:1.20.1
+        ports:
+        - containerPort: 80
+EOF
+
+k get po -o wide
+NAME                                READY   STATUS    RESTARTS   AGE   IP            NODE
+taint-deployment-64c85c8cb7-27p2n   1/1     Running   0          10s   10.244.1.26   prgs-worker
+taint-deployment-64c85c8cb7-5vnks   1/1     Running   0          9s    10.244.1.28   prgs-worker
+taint-deployment-64c85c8cb7-msd55   1/1     Running   0          9s    10.244.1.27   prgs-worker
+taint-deployment-64c85c8cb7-zwwtx   1/1     Running   0          11s   10.244.1.25   prgs-worker
+
 ```
 
 [Menu](#-menu)
