@@ -9,14 +9,14 @@
 - [Command Line - Labels vs Annotations](#-command-line---labels-vs-annotations)
 - [Command Line - Helm Charts](#-command-line---helm-charts)
 - [Command Line - Kustomize](#-command-line---kustomize)
-- [Create Object - Pod](#-create-object---pod)
-- [Create Object - StaticPod](#-create-object---staticpod)
-- [Create Object - Init Containers](#-create-object---init-containers)
-- [Create Object - Pod Priority & Preemption](#-create-object---pod-priority--preemption)
-- [Create Object - Replace Entrypoint](#-create-object---replace-entrypoint)
-- [Create Object - Multi Containers](#-create-object---multi-containers)
-- [Create Object - Accessing Pod Without Kubectl Via Nsenter](#-create-object---accessing-pod-without-kubectl-via-nsenter)
-- [Create Object - Pod Lifecycle](#-create-object---pod-lifecycle)
+- [Create Object - Pod / StaticPod](#-create-object---pod--staticpod)
+- [Create Object - Pod / Init Containers](#-create-object---pod--init-containers)
+- [Create Object - Pod / Priority & Preemption](#-create-object---pod--priority--preemption)
+- [Create Object - Pod / Replace Entrypoint](#-create-object---pod--replace-entrypoint)
+- [Create Object - Pod / Multi Containers](#-create-object---pod--multi-containers)
+- [Create Object - Pod / Accessing Pod Without Kubectl Via Nsenter](#-create-object---pod--accessing-pod-without-kubectl-via-nsenter)
+- [Create Object - Pod / Lifecycle](#-create-object---pod--lifecycle)
+- [Create Object - Pod / Ephemeral containers Debug](#-create-object---pod--ephemeral-containers-debug)
 - [Create Object - Namespace](#-create-object---namespace)
 - [Create Object - Deployment](#-create-object---deployment)
 - [Create Object - Scale Deployment](#-create-object---scale-deployment)
@@ -1361,7 +1361,7 @@ k delete -k myapp/overlays/dev/
 
 [Menu](#-menu)
 
-# 🚀 Create Object - Pod
+# 🚀 Create Object - Pod / StaticPod
 
 ```bash
 # Create Resources
@@ -1434,10 +1434,27 @@ systemctl status kubelet
 # If you try to kill him he is recreated
 
 # Using specifically by the controlplane. Because it is static within the worker , IT IS NOT SCALABLE.
+
+# At startup, the kubelet reads YAML files in the staticPodPath directory and creates Pods defined
+# in them without involving the scheduler. These are called static Pods and are used to bootstrap the control plane.
+# The following four YAML files in /etc/kubernetes/manifests/ start the core control plane components:
+
+• kube-apiserver.yaml
+# Starts the API server Pod, which handles all API requests.
+
+• etcd.yaml
+# Starts the etcd Pod, the distributed key-value store for cluster data.
+
+• kube-controller-manager.yaml
+# Starts the controller manager Pod, which runs controllers like the ReplicaSet controller.
+
+• kube-scheduler.yaml
+# Starts the scheduler Pod, which assigns Pods to nodes.
+
 ```
 [Menu](#-menu)
 
-# 🚀 Create Object - Init Containers
+# 🚀 Create Object - Pod / Init Containers
 
 ```bash
 
@@ -1514,7 +1531,7 @@ Clone repo....
 
 [Menu](#-menu)
 
-# 🚀 Create Object - Pod Priority & Preemption
+# 🚀 Create Object - Pod / Priority & Preemption
 
 ```bash
 #
@@ -1987,7 +2004,7 @@ dev/test                → Never
 
 [Menu](#-menu)
 
-# 🚀 Create Object - Replace Entrypoint
+# 🚀 Create Object - Pod / Replace Entrypoint
 
 ```bash
 # Pod will rise and then die, as entrypoint waits for a command
@@ -2030,7 +2047,7 @@ EOF
 ```
 [Menu](#-menu)
 
-# 🚀 Create Object - Multi Containers
+# 🚀 Create Object - Pod / Multi Containers
 
 ```bash
 
@@ -2066,7 +2083,7 @@ ps fax
 ```
 [Menu](#-menu)
 
-# 🚀 Create Object - Accessing Pod Without Kubectl Via Nsenter
+# 🚀 Create Object - Pod / Accessing Pod Without Kubectl Via Nsenter
 
 ```bash
 # Where is the deployment running?
@@ -2106,7 +2123,7 @@ nsenter -t 148192 -n curl localhost
 
 [Menu](#-menu)
 
-# 🚀 Create Object - Pod Lifecycle
+# 🚀 Create Object - Pod / Lifecycle
 
 ```bash
 
@@ -2164,6 +2181,198 @@ k delete pod pod-lifecycle -n default
 - terminationGracePeriodSeconds: 60
 
 ```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Pod / Ephemeral containers Debug
+
+```bash
+# Ephemeral containers
+#
+# Ephemeral containers are a powerful, stable feature designed to aid in troubleshooting
+# by allowing you to add a temporary container to a running Pod without restarting or recreating it.
+# This is particularly useful for debugging intermittent or hard-to-reproduce issues.
+#
+# Ephemeral containers are temporary containers you can attach to an existing Pod to perform diagnostic tasks,
+# such as inspecting the Pod’s environment or running debugging tools.
+#
+# Unlike regular containers defined in the Pod’s specification (podSpec),
+# ephemeral containers are added dynamically via the ephemeralcontainers sub-resource of the Kubernetes API
+#
+# Below are some important key characteristics of ephemeral containers:
+
+• Ephemeral containers are not restarted automatically if they exit.
+
+• They cannot use certain Pod resources, such as ports, volume mounts, or resource requests/limits,
+to avoid interfering with the Pod’s primary workload.
+
+• Unlike regular containers, ephemeral containers are added through the Kubernetes API using the ephemeralcontainers endpoint,
+not defined in the PodSpec. As a result, you cannot create them using kubectl edit.
+
+• They share namespaces, such as network and PID, with the target container,
+allowing you to inspect running processes and connectivity issues directly.
+
+#
+# Ex:
+# Generate model
+#
+k neat <<< $(k create ns production --dry-run=client -o yaml)
+
+k neat <<< $(k create deployment --image nginx --namespace production --replicas 1 nginx --dry-run=client -o yaml)
+
+cat <<EOF | k apply -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: virtualhost
+  namespace: production
+data:
+  vhost: "prgs.corp"
+  api_url: "https://api.prgs.corp"
+  index.html: |
+    <html>
+      <h1>
+        Index.html Prgs Corp
+      </h1>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        env:
+           - name: VHOSTS_PAULO
+             valueFrom:
+               configMapKeyRef:
+                  name: virtualhost
+                  key: vhost
+           - name: API_URL
+             valueFrom:
+                configMapKeyRef:
+                   name: virtualhost
+                   key: api_url
+        volumeMounts:
+        - name: index-html
+          mountPath: "/usr/share/nginx/html"
+          readOnly: true
+      volumes:
+      - name: index-html
+        configMap:
+          name: virtualhost
+          items:
+          - key: "index.html"
+            path: "index.html"
+EOF
+namespace/production created
+configmap/virtualhost created
+deployment.apps/nginx created
+
+# Service
+k expose deployment nginx --namespace=production --type=ClusterIP --port=80 --target-port=80
+
+k get svc -n production
+NAME    TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+nginx   ClusterIP   10.110.60.65   <none>        80/TCP    28s
+
+k get po -n production
+NAME                     READY   STATUS    RESTARTS   AGE
+nginx-847974dbd8-jk9cs   1/1     Running   0          27s
+
+
+# Now go running Pod Debug
+kubectl debug -it nginx-847974dbd8-jk9cs \
+  -n production \
+  --image=ubuntu:24.04 \
+  --target=nginx \
+  --profile=general
+
+• nginx-847974dbd8-jk9cs:
+# Pod name target.
+
+• -n production:
+# The command needs running in same namespace that Pod target.
+
+• --target=nginx:
+# The --target parameter expects the name of the container that is running inside the pod.
+
+root@nginx-847974dbd8-jk9cs:/#
+root@nginx-847974dbd8-jk9cs:/# apt update && apt install iputils-ping curl -y
+root@nginx-847974dbd8-jk9cs:/# ping nginx
+PING nginx.production.svc.cluster.local (10.110.60.65) 56(84) bytes of data.
+root@nginx-847974dbd8-jk9cs:/#
+root@nginx-847974dbd8-jk9cs:/# curl nginx
+root@nginx-847974dbd8-jk9cs:/# curl nginx
+<html>
+  <h1>
+    Index.html Prgs Corp
+  </h1>
+</html>
+
+# In another TTY check Ephemeral containers
+k describe pod nginx-847974dbd8-jk9cs -n production
+k get pod nginx-847974dbd8-jk9cs -n production -o json | jq '.spec.ephemeralContainers'
+
+# NOTES.
+# :.
+# Each execution of `kubectl debug` with `--target=nginx` adds a new ephemeral container. It does not reuse the previous one.
+k get pod nginx-847974dbd8-jk9cs -n production \
+  -o jsonpath='{.spec.ephemeralContainers[*].name}{"\n"}'
+debugger-x4gv7 debugger-tsgkj
+
+nginx-847974dbd8-jk9cs
+│
+├── nginx
+│
+├── debugger-x4gv7
+│   └── ubuntu:24.04
+│
+└── debugger-tsgkj
+    └── ubuntu:24.04
+
+k get pod nginx-847974dbd8-jk9cs -n production \
+  -o jsonpath='{range .spec.ephemeralContainers[*]}{.name}{" -> "}{.image}{"\n"}{end}'
+debugger-x4gv7 -> ubuntu:24.04
+debugger-tsgkj -> ubuntu:24.04
+
+# Ephemeral containers are not removed when you exit the shell.
+# The container terminates, but the ephemeral container definition remains in the Pod.
+
+k get pod nginx-847974dbd8-jk9cs -n production \
+  -o jsonpath='{range .status.ephemeralContainerStatuses[*]}{.name}{" -> "}{.state}{"\n"}{end}'
+
+debugger-tsgkj -> {"running":{"startedAt":"2026-09-18T08:25:06Z"}}
+debugger-x4gv7 -> {"terminated":{"containerID":"containerd://b8eafb452cf30aaf1403eeb3af3e6b2423abdfb23152ce74eda7f8414210ccd0","exitCode":0,"finishedAt":"2026-09-18T08:24:33Z","reason":"Completed","startedAt":"2026-09-18T08:22:23Z"}}
+
+# NOTES
+# .:
+
+# There is no `kubectl delete ephemeral-container` command to simply remove one of them.
+# By design, they are temporary—intended for debugging—but the API does not allow them to be removed individually from the Pod;
+# to get rid of them, you typically recreate the Pod.
+
+```
+
 [Menu](#-menu)
 
 # 🚀 Create Object - Namespace
@@ -3185,6 +3394,32 @@ k explain deployment.spec.template.spec.containers
 k explain deployment.spec.template.spec.containers.env
 
 https://12factor.net/
+
+
+# Another Example
+spec:
+  containers:
+  - name: meu-container-php
+    image: sua-imagem:tag
+    ports:
+    - containerPort: 8080
+
+    startupProbe:
+      httpGet:
+        path: /
+        port: 8080
+      initialDelaySeconds: 5  # Wait 5 seconds before the first test.
+      periodSeconds: 5        # Tests every 5 seconds
+      failureThreshold: 6     # Try 6 times (30 seconds in total) before giving up.
+
+    # Liveness Probe: Only starts running AFTER the Startup Probe succeeds.
+    livenessProbe:
+      httpGet:
+        path: /
+        port: 8080
+      periodSeconds: 10
+      timeoutSeconds: 3
+
 ```
 [Menu](#-menu)
 
@@ -12035,6 +12270,16 @@ EOF
 I have no name! [ / ]$ kubectl get jobs -n kube-system
 No resources found in kube-system namespace.
 
+#*********************************** By Command Line ************************************
+#
+
+k create sa headlamp-admin
+
+k create clusterrolebinding headlamp-admin \
+--serviceaccount=default:headlamp-admin --clusterrole=cluster-admin
+
+k create token headlamp-admin
+
 ```
 
 [Menu](#-menu)
@@ -14019,5 +14264,18 @@ k krew list
 
 k neat <<< $(k get pods -n kube-system metrics-server-755bdffd6c-trrcm -o yaml)
 k neat <<< $(k get pods -n kube-system metrics-server-755bdffd6c-trrcm -o yaml) > /tmp/metric-server.yaml
+
+# Tail
+
+# To install a plugin, use the install command followed by the plugin name.
+# For example, to install the tail plugin, which allows you to view logs from multiple pods, run:
+
+kubectl tail --ns frontend
+
+# ksniff
+
+# To capture traffic from the webcont container in a pod named nginx-123456-abcd, you can run the following command:
+k krew install sniff
+k sniff nginx-123456-abcd -c webcont
 
 ```
