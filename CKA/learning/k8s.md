@@ -76,6 +76,7 @@
 - [Create Object - Affinity / Tolerations](#-create-object---affinity--tolerations)
 - [Create Object - Affinity / Pod Topology Spread Constraints](#-create-object---affinity--pod-topology-spread-constraints)
 - [Create Object - CRD](#-create-object---crd)
+- [Create Object - Aggregated API](#-create-object---aggregated-api)
 - [Create Object - Operator](#-create-object---operator)
 - [Cluster Upgrade - Ferramentas e Boas Práticas](#-cluster-upgrade---ferramentas-e-boas-práticas)
 - [Cluster Upgrade - Control Plane / Masters](#-cluster-upgrade---control-plane--masters)
@@ -13352,9 +13353,9 @@ Resources padrão + seus recursos personalizados
 
 | Conceito             | Função                      |
 | -------------------- | --------------------------- |
-| CRD                  | Define novo tipo de recurso |
-| Custom Resource (CR) | Instância desse tipo        |
-| Operator             | Automatiza comportamento    |
+| CRD                  | Defines a new resource type |
+| Custom Resource (CR) | Instance of that type       |
+| Operator             | Automates behavior          |
 
 
 # Create My CDR
@@ -13421,6 +13422,61 @@ k describe crd <crd-name>
 
 # Delete a CRD instance
 k delete <resource-name> <name>
+
+# Custom Resources in Kubernetes can be enhanced with optional hooks, such as Finalizers,
+# to manage their lifecycle, and validation schemas to enforce configuration rules.
+#
+# A Finalizer is an asynchronous hook that allows you to perform cleanup tasks before a Custom Resource is deleted.
+# When a deletion request is issued for an object (e.g., kubectl delete backup a-backup-object),
+# Kubernetes does not immediately remove it.
+# Instead, it sets a timestamp in the object’s metadata (metadata.deletionTimestamp).
+# The controller then looks for any configured finalizers and executes their cleanup logic.
+# The resource is only deleted after all Finalizers complete their tasks and are removed.
+#
+# Finalizers and validation together provide guardrails:
+# finalizers ensure objects are properly cleaned up, and validation ensures objects are created with valid configurations.
+# Both features help maintain consistency, reliability, and safety in your Kubernetes cluster.
+
+kubectl get crd --all-namespaces
+
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Aggregated API
+
+```bash
+#
+# In this model, you actually implement a Kubernetes API server.
+#
+# Conceptually:
+
+                 kube-apiserver
+                       │
+                 API Aggregation
+                       │
+             ┌─────────┴─────────┐
+             │                   │
+       API nativa           sua API
+       /api/v1              /apis/mycompany.com
+                                 │
+                                 ▼
+                           API Server
+                           que você escreveu
+
+GET    /apis/mycompany.com/v1/databases
+POST   /apis/mycompany.com/v1/databases
+DELETE /apis/mycompany.com/v1/databases/foo
+
+|                             | CRD + Controller | Aggregated API             |
+| --------------------------- | ---------------- | -------------------------- |
+| Who provides the API?       | `kube-apiserver` | Your API Server            |
+| Do you write an API server? | ❌               | ✅                         |
+| Do you write a controller?  | ✅               | ✅                         |
+| Storage                     | usually etcd     | anyone, you decide         |
+| Complexity                  | younger          | bigger                     |
+| Common use case             | Operators        | extensions advanced API    |
+
 ```
 
 [Menu](#-menu)
