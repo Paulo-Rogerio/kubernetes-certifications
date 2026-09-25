@@ -59,7 +59,11 @@
 - [Create Object - Storage StorageClass](#-create-object---storage-storageclass)
 - [Create Object - Storage AccessMode](#-create-object---storage-accessmode)
 - [Create Object - Storage CSDriver](#-create-object---storage-csdriver)
-- [Create Object - Storage Reclaim Policy PVC / StorageClass](#-create-object---storage-reclaim-policy-pvc--storageclass)
+- [Create Object - Storage / Policy Delete Vs Policy Retain](#-create-object---storage--policy-delete-vs-policy-retain)
+- [Create Object - Storage / Policy Retain using PV and PVC Manually](#-create-object---storage--policy-retain-using-pv-and-pvc-manually)
+- [Create Object - Storage / Policy Retain using StorageClass](#-create-object---storage--policy-retain-using-storageclass)
+- [Create Object - Storage / Recover PVC / Attach PVC into PV Existent](#-create-object---storage--recover-pvc--attach-pvc-into-pv-existent)
+- [Create Object - Storage / Re-Create PV and Attach PVC into Block Existent](#-create-object---storage--re-create-pv-and-attach-pvc-into-block-existent)
 - [Create Object - HPA / VPA](#-create-object---hpa--vpa)
 - [Create Object - CNI](#-create-object---cni)
 - [Create Object - DNS](#-create-object---dns)
@@ -8264,7 +8268,15 @@ k exec -it $pod -- bash -c "cd /data && for i in {1..20}; do dd if=/dev/zero of=
 
 k exec -it $pod -- bash -c "du -hs /data"
 
-# A 1GB PV was not created but a 10MB PV, how did it allow 20MB to be stored?
+
+# Let's think...
+#
+# I created a 1GB PV...
+#
+# I also created a 10MB PVC, yet I generated 20MB of files.
+#
+# How is that possible?
+
 ✅  PVC does not limit space by itself.
 ✅  Local PV has no quota (You must use LVM with PV limiting block capacity, or even StorageClass like Ceph (RBD) /Longhorn).
 ✅  Here the entire block where the PV is defined is used. Actual limit depends on the storage backend.
@@ -9127,7 +9139,7 @@ kubectl get events
 
 [Menu](#-menu)
 
-# 🚀 Create Object - Storage Reclaim Policy PVC / StorageClass
+# 🚀 Create Object - Storage / Policy Delete Vs Policy Retain
 
 ```bash
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reclaim-policy
@@ -9155,16 +9167,52 @@ reclaimPolicy: Retain
             claimName: volume-persistente
 
 # This means that Deployments that use this PVC (persistent-volume) will not have their data deleted
+#
+Deployment
+    │
+    └── Pod
+          │
+          └── PVC ──> PV ──> Longhorn Volume
 
+# When executed...
+k delete deployment minha-app
+
+Deployment  ❌
+Pod         ❌
+PVC         ✅
+PV          ✅
+Volume      ✅
+
+# The PVC persists because the Deployment does not own the PVC.
+#
+# Where does (reclaimPolicy: Delete) come into play?
+#
+# The (Delete) policy is applied when the PVC is deleted.
+#
+# Ex:
+k delete pvc minha-pvc
+
+PVC             ❌
+PV              ❌
+Longhorn Volume ❌
+
+
+# Deleting the Deployment does not automatically delete the PVC,
+# even if the PVC uses Longhorn and the StorageClass has ( reclaimPolicy: Delete).
+
+# Using Policy Retain
+#
 # If I delete Deployment + PVC, my data is still intact,
 # because the StorageClass of type Retain is guaranteeing this.
 
 # The PV will still be there but with status ( Release )
 # Notes:
-# Notes:
 # ******************************************************************
 # Once in this state (Release), it can be attached again.
 # ******************************************************************
+
+# This will be shown in the next topics.
+# Notes.:
 
 k get pv
 
@@ -9184,6 +9232,13 @@ spec:
       storage: 10Mi
   storageClassName: ""
   volumeName: pv-55be07b6-f39c-41e5-90bc-59885eecdc2d
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Storage / Policy Retain using PV and PVC Manually
+
+```bash
 
 #================================== PVC Policy Retain ===============================
 #
@@ -9399,6 +9454,13 @@ nginx-7b98f58f85-4trx6-1.txt
 ...
 nginx-7b98f58f85-4trx6-10.txt
 -------------------
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Storage / Policy Retain using StorageClass
+
+```bash
 
 #============================= StoraClass Policy Retain =============================
 #
@@ -9503,6 +9565,10 @@ k get pvc
 NAME                     STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS         VOLUMEATTRIBUTESCLASS   AGE
 prgs-control-plane-pvc   Bound    pvc-25c56de4-a766-4d72-9ecf-566c0074cbfd   10Mi       RWO            volume-persistente   <unset>                 9m8s
 
+NAME                     READY   STATUS    RESTARTS   AGE
+nginx-6767449f59-6duhg   1/1     Running   0          2s
+nginx-6767449f59-7dujg   1/1     Running   0          2s
+nginx-6767449f59-u7d6y   1/1     Running   0          2s
 
 # Injecting Data
 pods=$(k get pods -o=jsonpath='{range .items..metadata}{.name}{"\n"}{end}')
@@ -9544,6 +9610,13 @@ nginx-7b98f58f85-ph4cz-6.txt
 nginx-7b98f58f85-ph4cz-7.txt
 nginx-7b98f58f85-ph4cz-8.txt
 nginx-7b98f58f85-ph4cz-9.txt
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Storage / Recover PVC / Attach PVC into PV Existent
+
+```bash
 
 # What if I delete everything?
 #
@@ -9722,6 +9795,13 @@ nginx-7b98f58f85-4trx6-1.txt
 ...
 nginx-7b98f58f85-4trx6-10.txt
 -------------------
+```
+
+[Menu](#-menu)
+
+# 🚀 Create Object - Storage / Re-Create PV and Attach PVC into Block Existent
+
+```bash
 
 #================================= PV Policy Retain =================================
 #

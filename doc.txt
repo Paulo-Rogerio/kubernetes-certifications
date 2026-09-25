@@ -1,0 +1,84 @@
+Esse procedimento não cria o usuário estagiario no Kubernetes, e não existe uma tabela de usuários no etcd para ele.
+
+O ponto importante é separar identidade de autorização.
+
+Subject:
+  CN = estagiario
+  O  = prgs
+  O  = corp
+
+O CN=estagiario passa a ser a identidade apresentada ao Kubernetes durante a autenticação TLS.
+
+estagiario
+   │
+   │ certificado TLS
+   │ CN=estagiario
+   │ O=prgs
+   │ O=corp
+   ▼
+kube-apiserver
+   │
+   ├── autentica:
+   │      "Esse certificado é válido?"
+   │
+   └── extrai identidade:
+          username = estagiario
+          groups   = [prgs, corp]
+             │
+             ▼
+          Authorization
+             │
+             └── RBAC
+
+O kube-apiserver não precisa consultar o etcd para descobrir quem é estagiario.
+
+Ele consegue determinar a identidade a partir do certificado:
+
+Então onde o usuário existe?
+
+Fora do Kubernetes.
+
+Nesse modelo, a "existência" do usuário é determinada pelo sistema que emitiu o certificado.
+
+CA
+│
+├── certificado de estagiario
+├── certificado de joao
+├── certificado de maria
+└── certificado de pedro
+
+a CA for confiável pelo API Server.
+
+E onde entra o RBAC?
+
+É aí que o Kubernetes começa a "conhecer" essa identidade.
+
+kind: RoleBinding
+metadata:
+  name: estagiario-pods
+  namespace: development
+
+subjects:
+- kind: User
+  name: estagiario
+
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+
+É apenas uma regra dizendo:
+
+Se chegar uma requisição autenticada cuja identidade seja estagiario, aplique estas permissões.
+
+O Kubernetes não necessariamente possui um cadastro de usuarios. Ele confia na autoridade que emitiu o certificado e mantém apenas as regras de acesso.
+
+Certificado
+    ↓
+Authentication
+    ↓
+User/Groups
+    ↓
+Authorization (RBAC)
+    ↓
+Allow / Deny
