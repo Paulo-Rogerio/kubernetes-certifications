@@ -67,7 +67,6 @@
 - [Create Object - HPA / VPA](#-create-object---hpa--vpa)
 - [Create Object - CNI](#-create-object---cni)
 - [Create Object - DNS](#-create-object---dns)
-- [Create Object - Network Policies](#-create-object---network-policies)
 - [Create Object - RBAC / CRB / RB](#-create-object---rbac--crb--rb)
 - [Create Object - RBAC / Create User](#-create-object---rbac--create-user)
 - [Create Object - RBAC / Create Context](#-create-object---rbac--create-context)
@@ -82,6 +81,12 @@
 - [Create Object - CRD](#-create-object---crd)
 - [Create Object - Aggregated API](#-create-object---aggregated-api)
 - [Create Object - Operator](#-create-object---operator)
+- [Kubernetes Secure - Autentication Methods](#-kubernetes-secure---autentication-methods)
+- [Kubernetes Secure - Authorization](#-kubernetes-secure---authorization)
+- [Kubernetes Secure - RBAC](#-kubernetes-secure---rbac)
+- [Kubernetes Secure - Admission Controllers](#-kubernetes-secure---admission-controllers)
+- [Kubernetes Secure - Security Contexts](#-kubernetes-secure---security-contexts)
+- [Kubernetes Secure - Network Policies](#-kubernetes-secure---network-policies)
 - [Cluster Upgrade - Ferramentas e Boas Práticas](#-cluster-upgrade---ferramentas-e-boas-práticas)
 - [Cluster Upgrade - Control Plane / Masters](#-cluster-upgrade---control-plane--masters)
 - [Cluster Upgrade - Control Data / Workers](#-cluster-upgrade---control-data--workers)
@@ -11517,9 +11522,667 @@ security features and capabilities please refer to
 
 [Menu](#-menu)
 
-# 🚀 Create Object - Network Policies
+# 🚀 Kubernetes Secure - Autentication Methods
 
 ```bash
+#
+# In its simplest form, Kubernetes supports authentication through certificates, tokens, or basic authentication (username and password).
+# More advanced options include webhooks to verify bearer tokens and integration with external identity providers using OpenID Connect (OIDC).
+
+# User Mangment
+# The Kubernetes API does not create or store user accounts.
+# Instead, user identities should be managed externally, such as through your organization’s identity provider or authentication system.
+
+# S.a
+# Processes and Pods often use service accounts to authenticate when accessing the API.
+# These accounts are created and managed within Kubernetes itself and are the recommended
+# way for workloads to communicate with the control plane.
+# In other words, the pod is born authenticated.
+
+• --basic-auth-file
+# Enables authentication with a username and password file.
+
+• --token-auth-file
+# Uses static tokens for authentication.
+
+• --oidc-issuer-url
+# Connects to an external OpenID provider.
+
+• --authorization-webhook-config-file
+# Uses a webhook service for authentication decisions.
+
+
+# Kubernetes does not maintain a registry of human users within etcd.
+# The kube-apiserver authenticates a request through one or more configured mechanisms and transforms
+# the presented credentials into an identity (username/groups), which is then subjected to authorization, normally RBAC."
+#
+#
+# Authentication does not necessarily mean certified. The result of authentication is an identity
+#
+# After authenticating comes the RBAC.
+
+                HTTP Request
+                     │
+                     ▼
+              kube-apiserver
+                     │
+              ┌──────┴──────┐
+              │             │
+        Authentication    Authorization
+              │             │
+              ▼             ▼
+        "Who are you?"  "Can you do this?"
+              │             │
+              ▼             ▼
+         username       RBAC
+         groups
+
+# Kubernetes supports HTTP Basic Authentication. In this model, the client sends an HTTP request like this:
+
+GET /api/v1/namespaces/default/pods HTTP/1.1
+Host: kubernetes.example.com
+Authorization: Basic YWRtaW46c2VjcmV0
+
+# This Basic means this...
+YWRtaW46c2VjcmV0 => admin:secret
+
+# How would kube-apiserver know who is admin?
+
+# You configure the API server to use a user/password file.
+
+Historicamente, seria algo semelhante a:
+/etc/kubernetes/basic-auth.csv
+admin,senha-super-secreta,1000
+paulo,outra-senha,1001
+
+# The API server uses this mechanism to authenticate:
+#
+#======================= Certificate =======================
+#
+certificado X.509
+        │
+        │ CN=paulo
+        ▼
+kube-apiserver
+        │
+        ▼
+username = paulo
+
+#======================= Basic Auth ========================
+#
+username + password
+        │
+        ▼
+kube-apiserver
+        │
+        ▼
+username = paulo
+
+#========================== OICD ==========================
+#
+JWT
+ │
+ ├── iss
+ ├── sub
+ ├── email
+ └── groups
+       │
+       ▼
+kube-apiserver
+       │
+       ▼
+username = paulo@empresa.com
+groups = devops
+
+# In other words, the authentication mechanism may change, but the result for RBAC is conceptually similar:
+                    Authentication
+                          │
+         ┌────────────────┼─────────────────┐
+         │                │                 │
+      X.509             Token             OIDC
+         │                │                 │
+         └────────────────┼─────────────────┘
+                          │
+                          ▼
+                   User / Groups
+                          │
+                          ▼
+                       RBAC
+
+
+                    Basic Auth
+                        │
+                        │ usuário = paulo
+                        ▼
+                    Authentication
+                        │
+                        │ "paulo is authenticated"
+                        ▼
+                    Authorization / RBAC
+                        │
+                        │ RoleBinding → paulo → pod-reader
+                        ▼
+                    GET pods
+                        │
+                        ▼
+                    ALLOW
+
+# The important point is to separate identity from authorization.
+#
+# The CN=intern becomes the identity presented to Kubernetes during TLS authentication.
+#
+# The kube-api server does not need to query etcd to find out who is an intern.
+#
+# It can determine identity from the certificate:
+#
+# So where does the user exist?
+#
+# Outside of Kubernetes.
+#
+# In this model, the "existence" of the user is determined by the system that issued the certificate.
+CA
+│
+├── certificate of estagiario
+├── certificate of joao
+├── certificate of maria
+└── certificate of pedro
+
+```
+
+
+[Menu](#-menu)
+
+# 🚀 Kubernetes Secure - Authorization
+
+```bash
+#
+# After a request has been authenticated, Kubernetes must determine whether the authenticated identity has permission
+# to perform the requested action. This process is called authorization.
+# Without authorization, even a valid, authenticated request cannot proceed.
+
+# Uses Role-Based Access Control (RBAC), the default and most common mode.
+# RBAC defines permissions through roles and bindings based on users, groups, and service accounts,
+# specifying which actions (verbs) can be performed on which resources.
+• --authorization-mode=RBAC
+
+# Delegates authorization decisions to an external service through a webhook API,
+# allowing integration with custom or enterprise security systems.
+• --authorization-mode=Webhook
+
+# Rejects all requests (useful for testing or locking down a cluster during troubleshooting).
+• --authorization-mode=AlwaysDeny
+
+
+# Allows all requests without checking permissions (not recommended for production, but sometimes used for testing).
+• --authorization-mode=AlwaysAllow
+
+sudo cat /etc/kubernetes/manifests/kube-apiserver.yaml
+
+```
+
+
+[Menu](#-menu)
+
+# 🚀 Kubernetes Secure - RBAC
+
+```bash
+#
+# RBAC defines permissions through roles and bindings based on users, groups, and service accounts,
+# specifying which actions (verbs) can be performed on which resources.
+#
+
+# Define which verbs can be performed on which resources within an API group.
+# A collection of rules applied within a single namespace.
+• Rules
+
+# Similar to Roles, but with cluster-wide scope.
+• ClusterRoles
+
+# The entities (users, groups, or service accounts) that can be bound to Roles or ClusterRoles.
+• Subjects
+
+# Define how subjects are connected to specific Roles or ClusterRoles.
+• RoleBindings / ClusterRoleBindings
+
+# It is now that Kubernetes begins to "know" this identity.
+
+kind: RoleBinding
+metadata:
+  name: estagiario-pods
+  namespace: development
+
+subjects:
+- kind: User
+  name: estagiario
+
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+
+# It's just a rule saying:
+# If an authenticated request arrives whose identity is an intern, apply these permissions.
+#
+# Kubernetes does not necessarily have a user registry.
+# It trusts the authority that issued the certificate and maintains only the access rules.
+
+Certificado
+    ↓
+Authentication
+    ↓
+User/Groups
+    ↓
+Authorization (RBAC)
+    ↓
+Allow / Deny
+
+# Ex:
+#---------------------------------------------------------------------------------------
+
+kubectl create ns development
+kubectl create ns production
+kubectl config get-contexts
+CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
+*         kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
+
+sudo useradd -s /bin/bash DevDan
+sudo passwd DevDan
+
+openssl genrsa -out DevDan.key 2048
+
+openssl req -new -key DevDan.key \
+    -out DevDan.csr -subj "/CN=DevDan/O=development"
+
+sudo openssl x509 -req -in DevDan.csr \
+    -CA /etc/kubernetes/pki/ca.crt \
+    -CAkey /etc/kubernetes/pki/ca.key \
+    -CAcreateserial \
+    -out DevDan.crt -days 45
+
+kubectl config set-credentials DevDan \
+    --client-certificate=/home/student/DevDan.crt \
+    --client-key=/home/student/DevDan.key
+
+diff cluster-api-config .kube/config
+kubectl config set-context DevDan-context \
+    --cluster=kubernetes \
+    --namespace=development \
+    --user=DevDan
+
+kubectl --context=DevDan-context get pods
+Error from server (Forbidden): pods is forbidden: User "DevDan" cannot list resource "pods" in API group "" in the namespace "development"
+
+kubectl config get-contexts
+CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
+          DevDan-context                kubernetes   DevDan             development
+*         kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
+
+cat <<EOF | kubectl apply -f -
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: development
+  name: developer
+rules:
+- apiGroups: ["", "extensions", "apps"]
+  resources: ["deployments", "replicasets", "pods"]
+  verbs: ["list", "get", "watch", "create", "update", "patch", "delete"]
+EOF
+
+cat <<EOF | kubectl apply -f -
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: developer-role-binding
+  namespace: development
+subjects:
+- kind: User
+  name: DevDan
+  apiGroup: ""
+roleRef:
+  kind: Role
+  name: developer
+  apiGroup: ""
+EOF
+
+kubectl --context=DevDan-context get pods
+
+kubectl --context=DevDan-context create deployment nginx --image=nginx
+
+kubectl --context=DevDan-context get pods
+
+kubectl --context=DevDan-context delete deploy nginx
+
+# Production
+#---------------------------------------------------------------------------------------
+
+cat <<EOF | kubectl apply -f -
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: production
+  name: dev-prod
+rules:
+- apiGroups: ["", "extensions", "apps"]
+  resources: ["deployments", "replicasets", "pods"]
+  verbs: ["get", "list", "watch"]
+EOF
+
+
+cat <<EOF | kubectl apply -f -
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: production-role-binding
+  namespace: production
+subjects:
+- kind: User
+  name: DevDan
+  apiGroup: ""
+roleRef:
+  kind: Role
+  name: dev-prod
+  apiGroup: ""
+EOF
+
+kubectl config set-context ProdDan-context \
+    --cluster=kubernetes \
+    --namespace=production \
+    --user=DevDan
+
+kubectl --context=ProdDan-context get pods
+No resources found in production namespace.
+
+kubectl --context=ProdDan-context create deployment nginx --image=nginx
+error: failed to create deployment: deployments.apps is forbidden: User "DevDan" cannot create resource "deployments" in API group "apps" in the namespace "production"
+
+kubectl -n production describe role dev-prod
+Name:         dev-prod
+Labels:       <none>
+Annotations:  <none>
+PolicyRule:
+  Resources               Non-Resource URLs  Resource Names  Verbs
+  ---------               -----------------  --------------  -----
+  deployments             []                 []              [get list watch]
+  pods                    []                 []              [get list watch]
+  replicasets             []                 []              [get list watch]
+  deployments.apps        []                 []              [get list watch]
+  pods.apps               []                 []              [get list watch]
+  replicasets.apps        []                 []              [get list watch]
+  deployments.extensions  []                 []              [get list watch]
+  pods.extensions         []                 []              [get list watch]
+  replicasets.extensions  []                 []              [get list watch]
+
+kubectl config get-contexts
+CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE
+          DevDan-context                kubernetes   DevDan             development
+          ProdDan-context               kubernetes   DevDan             production
+*         kubernetes-admin@kubernetes   kubernetes   kubernetes-admin
+```
+
+
+[Menu](#-menu)
+
+# 🚀 Kubernetes Secure - Admission Controllers
+
+```bash
+#
+# Admission controllers are the final gatekeepers in the Kubernetes API request process.
+# Admission controllers are software components within the API server that can validate
+
+• NamespaceLifecycle
+# Prevents object creation in non-existent namespaces and ensures cleanup when namespaces are deleted.
+
+• LimitRanger
+# Enforces resource limits (e.g., CPU, memory) on pods to prevent overuse.
+
+• ResourceQuota
+# Ensures objects adhere to namespace resource quotas, preventing excessive resource consumption.
+
+• PodSecurity
+# Enforces Pod Security Standards (e.g., preventing privileged containers).
+
+# Admission controllers can also mutate requests dynamically.
+# Mutating admission controllers intercept API requests before they are persisted
+# and can modify the content of objects, such as adding default values,
+# injecting sidecar containers, or updating resource specifications.
+
+
+# What is the role of an admission controller in Kubernetes?
+R.: To verify or modify requests after authentication and authorization but before they are persisted
+```
+
+
+[Menu](#-menu)
+
+# 🚀 Kubernetes Secure - Security Contexts
+
+```bash
+#
+# Kubernetes allows you to apply security contexts to Pods and containers,
+# which define specific constraints on the processes inside a container,
+# limiting what processes can do to enhance cluster security.
+# These constraints help enforce the principle of least privilege and protect
+# the cluster from potentially unsafe workloads.
+
+• User and group IDs (UID/GID)
+# Specify which Linux user the process should run as.
+
+• Filesystem group (fsGroup)
+# Control access to mounted volumes.
+
+
+# Fine-tune kernel-level privileges available to processes.
+# Note: Linux capabilities can only be set at the container level, not at the Pod level.
+• Linux capabilities
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  securityContext:
+    runAsNonRoot: true
+  containers:
+  - image: nginx
+    name: nginx
+
+securityContext:
+  runAsUser: 101
+  runAsNonRoot: true
+
+
+# In this example, runAsNonRoot: true ensures the container runs as a non-root
+# (removing full root privileges) and capabilities.add adds specific Linux capabilities
+# (e.g., NET_ADMIN, SYS_TIME) to assign granular root privileges to the container
+#
+# But modern Linux divides various root privileges into capabilities.
+
+NET_ADMIN
+SYS_TIME
+NET_RAW
+CHOWN
+DAC_OVERRIDE
+SETUID
+SETGID
+...
+
+# It allows administrative operations related to the network.
+# It is not root, but it is granted certain privileges normally associated with administrative operations.
+#
+# Ex:
+ip route add ...
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secure-pod
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    securityContext:
+      runAsNonRoot: true
+      capabilities:
+        add:
+        - NET_ADMIN
+        - SYS_TIME
+
+```
+
+
+[Menu](#-menu)
+
+# 🚀 Kubernetes Secure - Network Policies
+
+```bash
+#
+# By default, Kubernetes uses a very permissive networking model:
+# all Pods can communicate with each other, and all ingress (incoming) and egress (outgoing) traffic is allowed.
+# While this simplifies application connectivity, it does not provide any isolation between workloads.
+
+• Namespace scope
+# Policies apply only within the namespace where they are created, allowing you to isolate traffic at the namespace level.
+# Cross-namespace traffic can be controlled using a namespaceSelector.
+
+• Pod selectors
+# Use labels to target specific Pods within a namespace.
+# Once a NetworkPolicy selects a Pod, that Pod becomes restricted by default, creating a "default-deny"
+# behavior where only explicitly allowed traffic is permitted.
+
+• Ingress/Egress rules
+# Define what traffic is allowed to (ingress) or from (egress) Pods, based on IP blocks, ports, and protocols.
+
+
+# The following example demonstrates how a NetworkPolicy can be used to restrict traffic for Pods in the default namespace.
+# This policy applies only to Pods with the label role: db.
+# It defines both Ingress (incoming traffic) and Egress (outgoing traffic) rules.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingress-egress-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      role: db
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: 172.17.0.0/16
+        except:
+        - 172.17.1.0/24
+    - namespaceSelector:
+        matchLabels:
+          project: myproject
+    - podSelector:
+        matchLabels:
+          role: frontend
+    ports:
+    - protocol: TCP
+      port: 6379
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/24
+    ports:
+    - protocol: TCP
+      port: 5978
+
+
+• Ingress Rules
+# Allow traffic from the 172.17.0.0/16 IP range, except for the smaller subnet 172.17.1.0/24.
+# When a namespaceSelector and podSelector are defined together in a single rule (as shown above), they are ANDed.
+# This means traffic is allowed only from Pods that have the label role: frontend and are located within a namespace labeled project: myproject.
+# In all of these cases, the traffic must be TCP traffic on port 6379.
+
+• Egress Rules
+# Allow outbound TCP traffic on port 5978 to IP addresses in the 10.0.0.0/24 range.
+
+
+• Allow-Based Logic
+# Network policies are allow-based, not deny-based. You specify what is permitted; everything else is rejected.
+# Default Deny Behavior: Once a Pod is selected by a NetworkPolicy, it becomes "isolated."
+# Any traffic not explicitly allowed by a rule is denied by default.
+
+•  Best Practice
+# Create a dedicated "default deny" policy for your namespace first, then add separate "allow" policies for required traffic.
+# This approach improves clarity and aligns with production-grade security practices.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: default
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+# Using matchExpressions, you can define conditions with operators like In, NotIn, Exists, or DoesNotExist
+# to select Pods based on label keys and values.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: advanced-pod-selection
+  namespace: default
+spec:
+  podSelector:
+    matchExpressions:
+    - key: env
+      operator: In
+      values:
+        - prod
+        - staging
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+    ports:
+    - protocol: TCP
+      port: 80
+
+# This policy ensures only specific Pods (e.g., frontends) can communicate with production or staging Pods,
+# leveraging the flexibility of matchExpressions.
+#
+# As the NetworkPolicy API continues to evolve, support for more complex selectors and traffic rules may expand.
+#
+#
+# OBS.:
+# A default deny policy blocks all ingress (incoming) traffic to Pods not targeted by other Network Policies,
+# leaving egress (outgoing) traffic unaffected.
+# This is achieved using an empty podSelector ({}) to match all Pods in a namespace.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: default
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+• The empty podSelector: {} means the policy applies to all Pods in the namespace.
+
+• The Ingress policy type blocks all inbound connections by default.
+
+• Outbound (egress) traffic is not affected by this policy, unless you also add Egress rules.
+
+What happens when you create a NetworkPolicy with an empty podSelector: {} and policyTypes: [Ingress]?
+
+R.: All Pods in the namespace are denied ingress traffic by default
+
+#===================================================================
 
 # To reproduce this laboratory it is necessary to have a CNI that supports Policies. In the scenarios below, Kind was implemented with Cilium support.
 #
