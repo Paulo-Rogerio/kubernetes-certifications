@@ -87,6 +87,7 @@
 - [Kubernetes Secure - Admission Controllers](#-kubernetes-secure---admission-controllers)
 - [Kubernetes Secure - Security Contexts](#-kubernetes-secure---security-contexts)
 - [Kubernetes Secure - Network Policies](#-kubernetes-secure---network-policies)
+- [Kubernetes Secure - High Availability](#-kubernetes-secure---high-availability)
 - [Cluster Upgrade - Ferramentas e Boas Práticas](#-cluster-upgrade---ferramentas-e-boas-práticas)
 - [Cluster Upgrade - Control Plane / Masters](#-cluster-upgrade---control-plane--masters)
 - [Cluster Upgrade - Control Data / Workers](#-cluster-upgrade---control-data--workers)
@@ -12308,6 +12309,165 @@ OK: 12 MiB in 24 packages
 
 kubectl get networkpolicy
 kubectl describe networkpolicy allow-dns
+
+```
+
+[Menu](#-menu)
+
+# 🚀 Kubernetes Secure - High Availability
+
+```bash
+#
+# My Setup
+# Role	 | Private IP Address
+haproxy  | 10.10.72.153
+cp       | 10.10.87.14
+secondcp | 10.10.77.105
+thirdcp  | 10.10.84.106
+worker   | 10.10.91.64
+
+
+sudo apt update ; sudo apt install -y haproxy vim
+sudo mv /etc/haproxy/haproxy.cfg{,-backup}
+
+cat <<EOF | sudo tee /etc/haproxy/haproxy.cfg
+global
+        log /dev/log    local0
+        log /dev/log    local1 notice
+        chroot /var/lib/haproxy
+        stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+        stats timeout 30s
+        user haproxy
+        group haproxy
+        daemon
+
+        # Default SSL material locations
+        ca-base /etc/ssl/certs
+        crt-base /etc/ssl/private
+
+        # See: https://ssl-config.mozilla.org/#server=haproxy&server-version=2.0.3&config=intermediate
+        ssl-default-bind-ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384
+        ssl-default-bind-ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256
+        ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+
+defaults
+        log     global
+        mode    tcp
+        option  tcplog
+        option  dontlognull# **********************************************************
+# Execute command in control-plane ( cp )
+# **********************************************************
+        timeout connect 5000
+        timeout client  50000
+        timeout server  50000
+        errorfile 400 /etc/haproxy/errors/400.http
+        errorfile 403 /etc/haproxy/errors/403.http
+        errorfile 408 /etc/haproxy/errors/408.http
+        errorfile 500 /etc/haproxy/errors/500.http
+        errorfile 502 /etc/haproxy/errors/502.http
+        errorfile 503 /etc/haproxy/errors/503.http
+        errorfile 504 /etc/haproxy/errors/504.http
+
+frontend proxynode
+   bind *:80
+   bind *:6443
+   stats uri /proxystats
+   default_backend k8sServers
+
+backend k8sServers
+   balance roundrobin
+   server cp  10.10.87.14:6443 check
+   server secondcp  10.10.77.105:6443 check
+   server thirdcp  10.10.84.106:6443 check
+
+listen stats
+     bind :9999
+     mode http
+     stats enable
+     stats hide-version
+     stats uri /stats
+EOF
+
+
+sudo systemctl restart haproxy.service
+sudo systemctl status haproxy.service
+
+# On the VMs, add an entry to `/etc/hosts` so that they can access the HAProxy.
+# Ip haproxy
+#
+# k8s-hosts
+10.10.72.153 k8scp
+
+# Check
+http://10.10.72.153:9999/stats
+
+
+# **********************************************************
+# Execute command in control-plane ( cp )
+# **********************************************************
+sudo kubeadm token create --print-join-command
+sudo kubeadm join k8scp:6443 --token ayjfky.tcc4fquyqvyu820y --discovery-token-ca-cert-hash sha256:145ec0a13df32f013089b455a14bd1f2355d4871cebacc497bfbf9505e2f351f
+
+# Create a new control plane certificate to join as a control plane node instead of a worker node.
+# Ignore remote version mismatch message.
+sudo kubeadm init phase upload-certs --upload-certs
+I1013 12:55:14.497959    3673 version.go:260] remote version is much newer: v1.37.1; falling back to: stable-1.35
+[upload-certs] Storing the certificates in Secret "kubeadm-certs" in the "kube-system" Namespace
+[upload-certs] Using certificate key:
+f56bd57296bc5d31d01dff70b9ce02db2a0ab969021046ec43d68cbafdfcc178
+
+# **********************************************************
+# Execute command in secondcp
+# **********************************************************
+#
+#OBS.: Add an entry to `/etc/hosts` so that they can access the HAProxy.
+# Ip haproxy
+#
+# k8s-hosts
+10.10.72.153 k8scp
+
+sudo kubeadm join k8scp:6443 \
+    --token ayjfky.tcc4fquyqvyu820y \
+    --discovery-token-ca-cert-hash \
+    sha256:145ec0a13df32f013089b455a14bd1f2355d4871cebacc497bfbf9505e2f351f \
+    --control-plane --node-name=secondcp --certificate-key \
+    f56bd57296bc5d31d01dff70b9ce02db2a0ab969021046ec43d68cbafdfcc178
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# **********************************************************
+# Execute command in thirdcp
+# **********************************************************
+#
+#OBS.: Add an entry to `/etc/hosts` so that they can access the HAProxy.
+# Ip haproxy
+#
+# k8s-hosts
+10.10.72.153 k8scp
+
+sudo kubeadm join k8scp:6443 \
+    --token ayjfky.tcc4fquyqvyu820y \
+    --discovery-token-ca-cert-hash \
+    sha256:145ec0a13df32f013089b455a14bd1f2355d4871cebacc497bfbf9505e2f351f \
+    --control-plane --node-name=thirdcp --certificate-key \
+    f56bd57296bc5d31d01dff70b9ce02db2a0ab969021046ec43d68cbafdfcc178
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+kubectl get nodes
+
+
+kubectl -n kube-system exec etcd-cp -- \
+  etcdctl \
+  --endpoints=https://10.10.87.14:2379,https://10.10.77.105:2379,https://10.10.84.106:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  endpoint status -w table
 
 ```
 
