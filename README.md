@@ -28,6 +28,11 @@
 
 ## 🚀 Cheatsheet
 
+- [Cheatsheet - Exam Resources](https://www.cncf.io/training/certification/cka/)
 - [Cheatsheet - Exam Day](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/cheatsheet/exam-guide.md)
+
+## 🚀 Questions
+
+- [Questions CKA - To Reinforce Content](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/questions-cka-reforce-content.md)
 
 ## 🚀 Simulated
