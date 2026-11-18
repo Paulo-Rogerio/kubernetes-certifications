@@ -83,6 +83,7 @@ volumeBindingMode: WaitForFirstConsumer
 ```
 
 https://kubernetes.io/docs/concepts/storage/storage-classes/#storageclass-objects
+
 https://kubernetes.io/docs/tasks/administer-cluster/change-default-storage-class/
 
 
@@ -159,7 +160,9 @@ spec:
 ```
 
 https://kubernetes.io/docs/concepts/storage/volumes/#local
+
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reserving-a-persistentvolume
+
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#claims-as-volumes
 
 
