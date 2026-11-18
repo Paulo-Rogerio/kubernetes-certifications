@@ -621,23 +621,19 @@ spec:
       sleep 3600
 ```
 
-To verify the setup:
-
-#### Check if service is resolvable
-
 ```bash
+# Check if service is resolvable
 kubectl exec -n dns-config dns-tester -- cat /tmp/dns-test.txt
 ```
 
-#### Verify deployment is running
 
 ```bash
+# Verify deployment is running
 kubectl get deployment -n dns-config dns-app
 ```
 
-#### Check service endpoints
-
 ```bash
+# Check service endpoints
 kubectl get endpoints -n dns-config dns-svc
 ```
 
