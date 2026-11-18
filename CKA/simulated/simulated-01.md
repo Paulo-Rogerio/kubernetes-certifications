@@ -105,6 +105,7 @@ Then create a PersistentVolumeClaim named manual-pvc that binds to this PV.
 Finally, create a Pod named manual-pod using the busybox image that mounts this PVC at /data and runs the command sleep 3600.
 ```
 
+```yml
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -155,13 +156,15 @@ spec:
   - name: data
     persistentVolumeClaim:
       claimName: manual-pvc
+```
 
 https://kubernetes.io/docs/concepts/storage/volumes/#local
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reserving-a-persistentvolume
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#claims-as-volumes
 
-========================================================================================
 
+```
+04)
 Solve this question on instance: ssh ckad9999
 Namespace: scaling
 Concepts: autoscaling, deployments, resource-management
@@ -177,9 +180,13 @@ Then create a HorizontalPodAutoscaler for this deployment:
 - Min replicas: 2
 - Max replicas: 5
 - Target CPU utilization: 70%
+```
 
-k create deployment --image=ngnix -name xx --dry-run=client -o yaml
+```bash
+kubectl create deployment --image=ngnix -name xx --dry-run=client -o yaml
+```
 
+```yml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -205,16 +212,19 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
+```
 
+```bash
+kubectl autoscale deployment -n scaling scaling-app --cpu=70% --min=2 --max=5
+```
 
 https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#creating-a-deployment
 https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#scaling-a-deployment
 https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 
-kubectl autoscale deployment -n scaling scaling-app --cpu=70% --min=2 --max=5
 
-========================================================================================
-
+```text
+05)
 Solve this question on instance: ssh ckad9999
 Namespace: scheduling
 Concepts: scheduling, node-affinity, deployments
@@ -224,11 +234,15 @@ Requirements:
 - Use requiredDuringSchedulingIgnoredDuringExecution
 - Match the node by its hostname
 - Label the target node with disk=ssd before creating the deployment
+```
 
+```bash
 kubectl label node k3d-cluster-agent-1 disk=ssd
 
 kubectl get nodes --show-labels | grep k3d-cluster-agent-1
+```
 
+```yml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -256,14 +270,14 @@ spec:
       containers:
       - name: nginx
         image: nginx
+```
 
 https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
 https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#built-in-node-labels
 https://kubernetes.io/docs/tasks/configure-pod-container/assign-pods-nodes/#add-a-label-to-a-node
 
-
-========================================================================================
-
+```text
+06)
 Solve this question on instance: ssh ckad9999
 Namespace: security
 Concepts: security, pod-security-policy
@@ -288,10 +302,13 @@ Drop ALL Linux capabilities
 Create an emptyDir volume named 'html'
 * Mount the volume at '/usr/share/nginx/html'
 use default seccomp profile
+```
 
-
+```bash
 kubectl label namespace security pod-security.kubernetes.io/enforce=restricted  pod-security.kubernetes.io/enforce-version=latest
+```
 
+```yml
 apiVersion: v1
 kind: Pod
 metadata:
@@ -316,10 +333,11 @@ spec:
   volumes:
   - name: html
     emptyDir: {}
-
+```
 
 https://kubernetes.io/docs/concepts/security/pod-security-admission/
 Link ( Pod Security levels => Security Context )
+
 https://kubernetes.io/docs/concepts/security/pod-security-standards/
 https://kubernetes.io/docs/concepts/workloads/pods/#pod-security
 https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-namespace-labels/
@@ -327,8 +345,8 @@ https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
 https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
 
 
-========================================================================================
-
+```text
+07)
 Solve this question on instance: ssh ckad9999
 Namespace: scheduling
 Concepts: scheduling, taints, tolerations
@@ -337,9 +355,13 @@ Configure node k3d-cluster-agent-1 with a taint key=special-workload, value=true
 Then create a deployment named toleration-deploy with 2 replicas using the nginx image that can tolerate this taint.
 
 Finally, create another deployment named normal-deploy with 2 replicas that should not run on the tainted node.
+```
 
-Solution
+```bash
 kubectl taint node k3d-cluster-agent-1 special-workload=true:NoSchedule
+```
+
+```yml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -382,18 +404,10 @@ spec:
       containers:
       - name: nginx
         image: nginx
+```
 
-
-
-
-
-
-
-
-
-
-========================================================================================
-
+```text
+08)
 Solve this question on instance: ssh ckad9999
 Namespace: stateful
 Concepts: statefulsets, headless-services, storage
@@ -405,9 +419,13 @@ Create a StatefulSet named web with 3 replicas using the nginx image. Requiremen
 - Volume claim template should request 1Gi storage
 
 Ensure pods are created in sequence and can be accessed using their stable network identity.
+```
 
-bash kubectl create namespace stateful
+```bash
+kubectl create namespace stateful
+```
 
+```yml
 apiVersion: v1
 kind: Service
 metadata:
@@ -451,9 +469,10 @@ spec:
       resources:
         requests:
           storage: 1Gi
+```
 
-========================================================================================
-
+```text
+09)
 Solve this question on instance: ssh ckad9999
 Namespace: dns-debug
 Concepts: dns, service-discovery, networking
@@ -468,8 +487,9 @@ Set up DNS service discovery testing environment:
 - Verify it can resolve both the service DNS (web-svc.dns-debug.svc.cluster.local)
 - Verify it can resolve pod DNS entries
 4. Create a ConfigMap named dns-config with custom search domains for the test pod
+```
 
-Solution
+```yml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -527,9 +547,10 @@ metadata:
 data:
   search-domains: |
     search dns-debug.svc.cluster.local svc.cluster.local cluster.local
+```
 
-========================================================================================
-
+```text
+10)
 Solve this question on instance: ssh ckad9999
 Namespace: dns-config
 Concepts: dns, service-discovery, networking
@@ -543,9 +564,10 @@ Set up basic DNS service discovery:
 - Stores the test results in /tmp/dns-test.txt inside the pod
 
 Note: The test results should include both the service DNS resolution and FQDN resolution.
+```
 
-Solution
-# Create the deployment
+```yml
+# Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -597,20 +619,30 @@ spec:
       nslookup dns-svc > /tmp/dns-test.txt
       nslookup dns-svc.dns-config.svc.cluster.local >> /tmp/dns-test.txt
       sleep 3600
+```
 
 To verify the setup:
 
-# Check if service is resolvable
+#### Check if service is resolvable
+
+```bash
 kubectl exec -n dns-config dns-tester -- cat /tmp/dns-test.txt
+```
 
-# Verify deployment is running
+#### Verify deployment is running
+
+```bash
 kubectl get deployment -n dns-config dns-app
+```
 
-# Check service endpoints
+#### Check service endpoints
+
+```bash
 kubectl get endpoints -n dns-config dns-svc
+```
 
-========================================================================================
-
+```text
+11)
 Solve this question on instance: ssh ckad9999
 Namespace: helm-test
 Concepts: helm, package-management
@@ -621,18 +653,24 @@ Using Helm:
 3. Configure the service type as NodePort and set the replica count to 2
 4. Verify the deployment is successful and pods are running
 
-Solution
+```
+
+```bash
 # Add bitnami repo
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update
+```
 
+```bash
 # Install nginx chart
 helm install web-release bitnami/nginx \
   --namespace helm-test \
   --set service.type=NodePort \
   --set replicaCount=2
+```
 
-========================================================================================
+```text
+12)
 
 Solve this question on instance: ssh ckad9999
 Namespace: kustomize
@@ -646,13 +684,16 @@ Using Kustomize: in the directory /tmp/exam/kustomize/
 - Adds a ConfigMap named nginx-config with key index.html and value Welcome to Production, mount config map as volume named nginx-index
 3. Apply the overlay to create resources in the kustomize namespace
 
-Solution
-First, create the directory structure:
+```
+
+```bash
+# First, create the directory structure:
 
 mkdir -p /tmp/exam/kustomize/base
 mkdir -p /tmp/exam/kustomize/overlays/production
-Create base files:
+```
 
+```yml
 # /tmp/exam/kustomize/base/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -678,13 +719,17 @@ spec:
       - name: nginx-index
         configMap:
           name: nginx-config
+```
 
+```yml
 # /tmp/exam/kustomize/base/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - deployment.yaml
+```
 
+```yml
 # /tmp/exam/kustomize/overlays/production/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -705,18 +750,27 @@ configMapGenerator:
 - name: nginx-config
   literals:
   - index.html=Welcome to Production
-Apply the configuration:
+```
+
+```bash
+# Apply the configuration:
 
 kubectl create namespace kustomize
 kubectl apply -k /tmp/exam/kustomize/overlays/production/
+```
+
+```bash
 Verify the deployment:
 
 kubectl get deployments -n kustomize
 kubectl get configmaps -n kustomize
 kubectl get pods -n kustomize
+```
 
 ========================================================================================
 
+```text
+13)
 Solve this question on instance: ssh ckad9999
 Namespace: gateway
 Concepts: gateway-api, networking
@@ -727,8 +781,9 @@ Configure Gateway API resources:
 - Path: /app1 should route to service app1-svc port 8080
 - Path: /app2 should route to service app2-svc port 8080
 3. Create two deployments (app1 and app2) with corresponding services to test the routing
+```
 
-Solution
+```yml
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: Gateway
 metadata:
@@ -824,9 +879,12 @@ spec:
   ports:
   - port: 8080
     targetPort: 80
+```
 
 ========================================================================================
 
+```text
+14)
 Solve this question on instance: ssh ckad9999
 Namespace: limits
 Concepts: resource-management, limitrange, resourcequota
@@ -843,8 +901,9 @@ Configure resource management:
 - Max number of pods: 5
 
 3. Create a deployment named test-limits with 2 replicas to verify the limits are applied
+```
 
-Solution
+```yml
 apiVersion: v1
 kind: LimitRange
 metadata:
@@ -892,9 +951,12 @@ spec:
       containers:
       - name: nginx
         image: nginx
+```
 
 ========================================================================================
 
+```text
+15)
 Solve this question on instance: ssh ckad9999
 Namespace: monitoring
 Concepts: monitoring, resource-management, autoscaling
@@ -913,8 +975,9 @@ Create a deployment named resource-consumer with 3 replicas that:
 - Target CPU utilization: 50%
 
 Note: metrics-server is already installed in the cluster.
+```
 
-Solution
+```yml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -954,9 +1017,12 @@ spec:
   minReplicas: 3
   maxReplicas: 6
   targetCPUUtilizationPercentage: 50
+```
 
 ========================================================================================
 
+```text
+16)
 Solve this question on instance: ssh ckad9999
 Namespace: cluster-admin
 Concepts: rbac, service-accounts, security
@@ -974,8 +1040,9 @@ Perform the following cluster administration tasks:
 - Mount the ServiceAccount token as a volume
 
 Verify the pod can perform the allowed operations but cannot perform other operations (like creating pods).
+```
 
-Solution
+```yml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -1033,9 +1100,12 @@ spec:
       - serviceAccountToken:
           expirationSeconds: 3600
           audience: kubernetes.default.svc
+```
 
 ========================================================================================
 
+```text
+17)
 Solve this question on instance: ssh ckad9999
 Namespace: network
 Concepts: networking, network-policies, security
@@ -1048,8 +1118,9 @@ Configure network policies:
 - Allow web to communicate only with api
 - Allow api to communicate only with db
 - Deny all other traffic between pods
+```
 
-Solution
+```yml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1166,10 +1237,12 @@ spec:
     - podSelector:
         matchLabels:
           app: api
-
+```
 
 ========================================================================================
 
+```text
+18)
 Solve this question on instance: ssh ckad9999
 Namespace: upgrade
 Concepts: deployments, rolling-updates, rollback
@@ -1182,8 +1255,9 @@ Perform a rolling update:
 3. Record the update
 4. Save the output of kubectl rollout history deployment app-v1 -n upgrade to /tmp/exam/rollout-history.txt
 5. Roll back to the previous version
+```
 
-Solution
+```yml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1207,17 +1281,27 @@ spec:
       containers:
       - name: nginx
         image: nginx:1.19
+```
+
+```bash
 # Perform update
 kubectl set image deployment/app-v1 nginx=nginx:1.20 -n upgrade --record
+```
 
+```bash
 # Save rollout history
 kubectl rollout history deployment app-v1 -n upgrade > /tmp/exam/rollout-history.txt
+```
 
+```bash
 # Rollback
 kubectl rollout undo deployment/app-v1 -n upgrade
+```
 
 ========================================================================================
 
+```text
+20)
 Solve this question on instance: ssh ckad9999
 Namespace: scheduling
 Concepts: scheduling, priority, anti-affinity
@@ -1232,8 +1316,9 @@ Note for Testing Resource Pressure:
 - Use a resource-intensive image like polinux/stress to generate load
 - Example: Create a pod with command: stress -c 4 -m 2 --vm-bytes 1G to consume CPU and memory
 - Deploy multiple instances of resource-heavy pods to simulate node resource exhaustion
+```
 
-Solution
+```yml
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
@@ -1293,9 +1378,12 @@ spec:
             - high
             - low
         topologyKey: kubernetes.io/hostname
+```
 
 ========================================================================================
 
+```text
+21)
 Solve this question on instance: ssh ckad9999
 Namespace: troubleshoot
 Concepts: troubleshooting, debugging, deployment-configuration
@@ -1308,8 +1396,9 @@ Fix the following issues:
 3. There's a misconfigured liveness probe checking port 8080 instead of 80
 
 Ensure all pods are running successfully after applying the fixes.
+```
 
-Solution
+```yml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1339,166 +1428,4 @@ spec:
             port: 80        # Fixed from 8080
           initialDelaySeconds: 15
           periodSeconds: 10
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-2=================
-
-Helm Docs Custom Resources
-
-Solve this question on: ssh cka7968
-
-Install cert-manager using Helm in Namespace cert-manager. Then configure and create a ClusterIssuer resource:
-
-    Create Namespace cert-manager
-
-    Install Helm chart jetstack/cert-manager (with crds.enabled=true) into the new Namespace. The Helm Release should be called cert-manager
-
-    Update the ClusterIssuer resource in /course/2/cluster-issuer.yaml to include crlDistributionPoints: ["http://example.com/crl"] under spec.selfSigned
-
-    Create the ClusterIssuer resource from /course/2/cluster-issuer.yaml
-
-    ℹ️ It is not required for cert-manager to issue real certificates. Installing the Helm Chart and the ClusterIssuer resource as requested is enough
-===============
-4
-Pod Quality of Service Classes Node-pressure Eviction
-
-Solve this question on: ssh cka2556
-
-Check all available Pods in the Namespace project-c13 and find the names of those that would probably be terminated first if the nodes run out of resources (cpu or memory).
-
-Write the Pod names into /course/4/pods-terminated-first.txt.
-===========================
-5
-Horizontal Pod Autoscaling Kustomize
-
-Solve this question on: ssh cka5774
-
-Previously the application api-gateway used some external autoscaler which should now be replaced with a HorizontalPodAutoscaler (HPA).
-The application has been deployed to Namespaces api-gateway-staging and api-gateway-prod like this:
-
-kubectl kustomize /course/5/api-gateway/staging | kubectl apply -f -
-kubectl kustomize /course/5/api-gateway/prod | kubectl apply -f -
-
-Using the Kustomize config at /course/5/api-gateway do the following:
-
-    Remove the ConfigMap horizontal-scaling-config completely
-    Add HPA named api-gateway for the Deployment api-gateway with min 2 and max 4 replicas. It should scale at 50% average CPU utilisation
-    In prod the HPA should have max 6 replicas
-    Apply your changes for staging and prod so they're reflected in the cluster
-
-===========================
-7
-Tools for Monitoring Resources kubectl Quick Reference
-
-Solve this question on: ssh cka5774
-
-The metrics-server has been installed in the cluster. Write two bash scripts which use kubectl:
-
-    Script /course/7/node.sh should show resource usage of nodes
-    Script /course/7/pod.sh should show resource usage of Pods and their containers
-
-=========================
-9
-Accessing the Kubernetes API from a Pod Configure Service Accounts for Pods
-
-Solve this question on: ssh cka9412
-
-There is ServiceAccount secret-reader in Namespace project-swan. Create a Pod of image nginx:1-alpine named api-contact which uses this ServiceAccount.
-
-Exec into the Pod and use curl to manually query all Secrets from the Kubernetes API.
-
-Write the result into file /course/9/result.json.
-==========================
-13
-Gateway API Gateway API Documentation
-
-Solve this question on: ssh cka7968
-
-The team from Project r500 wants to replace their Ingress (networking.k8s.io) with a Gateway API (gateway.networking.k8s.io) solution. The old Ingress is available at /course/13/ingress.yaml.
-
-Perform the following in Namespace project-r500 and for the already existing Gateway:
-
-    Create a new HTTPRoute named traffic-director which replicates the routes from the old Ingress
-    Extend the new HTTPRoute with path /auto which forwards to mobile backend if the User-Agent is exactly mobile and to desktop backend otherwise
-
-The existing Gateway is reachable at http://r500.gateway:30080 which means your implementation should work for these commands:
-
-curl r500.gateway:30080/desktop
-curl r500.gateway:30080/mobile
-curl r500.gateway:30080/auto -H "User-Agent: mobile"
-curl r500.gateway:30080/auto
-
-
-=======================================
-14
-Certificate Management with kubeadm
-
-Solve this question on: ssh cka9412
-
-Perform some tasks on cluster certificates:
-
-    Check how long the kube-apiserver server certificate is valid using openssl or cfssl. Write the expiration date into /course/14/expiration. Run the kubeadm command to list the expiration dates and confirm both methods show the same one
-    Write the kubeadm command that would renew the kube-apiserver certificate into /course/14/kubeadm-renew-certs.sh
-
-========================================
-15
-Network Policies Declare Network Policy
-
-Solve this question on: ssh cka7968
-
-There was a security incident where an intruder was able to access the whole cluster from a single hacked backend Pod.
-
-To prevent this create a NetworkPolicy called np-backend in Namespace project-snake. It should allow the backend-* Pods only to:
-
-    Connect to db1-* Pods on port 1111
-    Connect to db2-* Pods on port 2222
-
-Use the app Pod labels in your policy.
-
-    ℹ️ All Pods in the Namespace run plain Nginx images. This allows simple connectivity tests like: k -n project-snake exec POD_NAME -- curl POD_IP:PORT
-
-    ℹ️ For example, connections from backend-* Pods to vault-* Pods on port 3333 should no longer work
-=======================================
-16
-Customizing DNS Service DNS for Services and Pods
-
-Solve this question on: ssh cka5774
-
-The CoreDNS configuration in the cluster needs to be updated:
-
-    Make a backup of the existing configuration YAML and store it at /course/16/coredns_backup.yaml. You should be able to fast recover from the backup
-    Update the CoreDNS configuration in the cluster so that SERVICE.NAMESPACE.custom-domain resolves the same as SERVICE.NAMESPACE.cluster.local (in addition to it)
-
-Test your configuration for example from a Pod with busybox:1 image. These commands should result in an IP address:
-
-nslookup kubernetes.default.svc.cluster.local
-nslookup kubernetes.default.svc.custom-domain
-=================================================
-17
-Debug with crictl
-
-Solve this question on: ssh cka2556
-
-In Namespace project-tiger create a Pod named tigers-reunite of image httpd:2-alpine with labels pod=container and container=pod. Find out on which node the Pod is scheduled. Ssh into that node and find the containerd container belonging to that Pod.
-
-Using command crictl:
-
-    Write the ID of the container and the info.runtimeType into /course/17/pod-container.txt
-
-    Write the logs of the container into /course/17/pod-container.log
-
-    ℹ️ You can connect to a worker node using ssh cka2556-node1 or ssh cka2556-node2 from cka2556
+```
