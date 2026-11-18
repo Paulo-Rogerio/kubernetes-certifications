@@ -1,4 +1,5 @@
 ```text
+01)
 Solve this question on instance: ssh ckad9999
 Namespace: storage-task
 Concepts: storage, persistent-volumes, pods
@@ -47,11 +48,9 @@ spec:
 
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims
 
-```
-========================================================================================
-```
 
 ```text
+02)
 Solve this question on instance: ssh ckad9999
 Namespace: storage-class
 Concepts: storage, storage-classes
@@ -86,11 +85,9 @@ volumeBindingMode: WaitForFirstConsumer
 https://kubernetes.io/docs/concepts/storage/storage-classes/#storageclass-objects
 https://kubernetes.io/docs/tasks/administer-cluster/change-default-storage-class/
 
-```
-========================================================================================
-```
 
-
+```text
+03)
 Doc em Volumes
 
 Solve this question on instance: ssh ckad9999
@@ -106,7 +103,7 @@ Create a PersistentVolume named manual-pv with the following specifications:
 Then create a PersistentVolumeClaim named manual-pvc that binds to this PV.
 
 Finally, create a Pod named manual-pod using the busybox image that mounts this PVC at /data and runs the command sleep 3600.
-
+```
 
 apiVersion: v1
 kind: PersistentVolume
