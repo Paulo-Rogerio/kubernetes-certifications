@@ -1297,7 +1297,7 @@ kubectl rollout undo deployment/app-v1 -n upgrade
 ========================================================================================
 
 ```text
-20)
+19)
 Solve this question on instance: ssh ckad9999
 Namespace: scheduling
 Concepts: scheduling, priority, anti-affinity
@@ -1379,7 +1379,7 @@ spec:
 ========================================================================================
 
 ```text
-21)
+20)
 Solve this question on instance: ssh ckad9999
 Namespace: troubleshoot
 Concepts: troubleshooting, debugging, deployment-configuration
