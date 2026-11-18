@@ -36,3 +36,5 @@
 - [Questions CKA - To Reinforce Content](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/learning/questions-cka-reforce-content.md)
 
 ## 🚀 Simulated
+
+- [Questions CKA - To Reinforce Content](https://github.com/Paulo-Rogerio/kubernetes-certifications/blob/main/CKA/simulated/simulated-01.md)
