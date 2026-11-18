@@ -47,8 +47,11 @@ spec:
 
 https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims
 
+```
 ========================================================================================
+```
 
+```text
 Solve this question on instance: ssh ckad9999
 Namespace: storage-class
 Concepts: storage, storage-classes
@@ -59,12 +62,16 @@ Create a new StorageClass named fast-local with the following specifications:
 - Set it as the default StorageClass
 
 Note: Ensure any existing default StorageClass is no longer marked as default.
+```
 
-k get sc standard -o yaml > 02-storage.yml
+```bash
+kubectl get sc standard -o yaml > 02-storage.yml
 
 kubectl patch storageclass default-test -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "false"}}}'
 kubectl patch storageclass local-path -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "false"}}}'
+```
 
+```yml
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -74,11 +81,15 @@ metadata:
 provisioner: rancher.io/local-path
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
+```
 
 https://kubernetes.io/docs/concepts/storage/storage-classes/#storageclass-objects
 https://kubernetes.io/docs/tasks/administer-cluster/change-default-storage-class/
 
+```
 ========================================================================================
+```
+
 
 Doc em Volumes
 
