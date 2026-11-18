@@ -222,7 +222,9 @@ kubectl autoscale deployment -n scaling scaling-app --cpu=70% --min=2 --max=5
 ```
 
 https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#creating-a-deployment
+
 https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#scaling-a-deployment
+
 https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 
 
@@ -276,7 +278,9 @@ spec:
 ```
 
 https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+
 https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#built-in-node-labels
+
 https://kubernetes.io/docs/tasks/configure-pod-container/assign-pods-nodes/#add-a-label-to-a-node
 
 ```text
@@ -338,13 +342,18 @@ spec:
     emptyDir: {}
 ```
 
+#### Link ( Pod Security levels => Security Context )
+
 https://kubernetes.io/docs/concepts/security/pod-security-admission/
-Link ( Pod Security levels => Security Context )
 
 https://kubernetes.io/docs/concepts/security/pod-security-standards/
+
 https://kubernetes.io/docs/concepts/workloads/pods/#pod-security
+
 https://kubernetes.io/docs/tasks/configure-pod-container/enforce-standards-namespace-labels/
+
 https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+
 https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
 
 
@@ -766,8 +775,6 @@ kubectl get configmaps -n kustomize
 kubectl get pods -n kustomize
 ```
 
-========================================================================================
-
 ```text
 13)
 Solve this question on instance: ssh ckad9999
@@ -880,8 +887,6 @@ spec:
     targetPort: 80
 ```
 
-========================================================================================
-
 ```text
 14)
 Solve this question on instance: ssh ckad9999
@@ -952,8 +957,6 @@ spec:
         image: nginx
 ```
 
-========================================================================================
-
 ```text
 15)
 Solve this question on instance: ssh ckad9999
@@ -1017,8 +1020,6 @@ spec:
   maxReplicas: 6
   targetCPUUtilizationPercentage: 50
 ```
-
-========================================================================================
 
 ```text
 16)
@@ -1100,8 +1101,6 @@ spec:
           expirationSeconds: 3600
           audience: kubernetes.default.svc
 ```
-
-========================================================================================
 
 ```text
 17)
@@ -1238,8 +1237,6 @@ spec:
           app: api
 ```
 
-========================================================================================
-
 ```text
 18)
 Solve this question on instance: ssh ckad9999
@@ -1296,8 +1293,6 @@ kubectl rollout history deployment app-v1 -n upgrade > /tmp/exam/rollout-history
 # Rollback
 kubectl rollout undo deployment/app-v1 -n upgrade
 ```
-
-========================================================================================
 
 ```text
 19)
@@ -1379,7 +1374,6 @@ spec:
         topologyKey: kubernetes.io/hostname
 ```
 
-========================================================================================
 
 ```text
 20)
