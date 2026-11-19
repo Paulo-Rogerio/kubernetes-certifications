@@ -1,3 +1,6 @@
+https://kubernetes.io/docs/reference/kubectl/quick-reference/
+
+
 ```text
 01)
 Solve this question on instance: ssh ckad9999
@@ -418,6 +421,10 @@ spec:
         image: nginx
 ```
 
+https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+
+
+
 ```text
 08)
 Solve this question on instance: ssh ckad9999
@@ -482,6 +489,9 @@ spec:
         requests:
           storage: 1Gi
 ```
+
+https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
+
 
 ```text
 09)
@@ -561,6 +571,11 @@ data:
     search dns-debug.svc.cluster.local svc.cluster.local cluster.local
 ```
 
+https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-dns-config
+
+https://kubernetes.io/docs/concepts/configuration/configmap/
+
+
 ```text
 10)
 Solve this question on instance: ssh ckad9999
@@ -638,7 +653,6 @@ spec:
 kubectl exec -n dns-config dns-tester -- cat /tmp/dns-test.txt
 ```
 
-
 ```bash
 # Verify deployment is running
 kubectl get deployment -n dns-config dns-app
@@ -648,6 +662,11 @@ kubectl get deployment -n dns-config dns-app
 # Check service endpoints
 kubectl get endpoints -n dns-config dns-svc
 ```
+
+https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+
+https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services
+
 
 ```text
 11)
